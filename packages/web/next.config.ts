@@ -2,14 +2,18 @@ import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
   // Transpile workspace packages (source imports)
+  // NOTE: @upstream/claude-credentials removed — it imports @daytonaio/sdk which
+  // pulls in @opentelemetry/@grpc with Node-only modules. Client code only needs
+  // the string constants, which webpack can tree-shake when not transpiled.
   transpilePackages: [
     "background-agents",
     "@upstream/agent-configuration",
     "@upstream/common",
-    "@upstream/claude-credentials",
   ],
-  // Exclude Node-only packages from client bundles
-  serverExternalPackages: ["@grpc/grpc-js", "@opentelemetry/sdk-node", "@opentelemetry/exporter-trace-otlp-grpc", "@opentelemetry/exporter-metrics-otlp-grpc", "@opentelemetry/exporter-logs-otlp-grpc", "@opentelemetry/otlp-grpc-exporter-base"],
+  // Keep @daytonaio/sdk on the server side
+  serverExternalPackages: ["@daytonaio/sdk"],
+  // Silences turbopack warning since we're using webpack
+  turbopack: {},
 }
 
 export default nextConfig

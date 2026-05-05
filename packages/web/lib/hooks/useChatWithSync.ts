@@ -1119,6 +1119,7 @@ export function useChatWithSync() {
     setOnConflictStateChange,
     // Daily limit reached
     limitReachedState,
+    setLimitReachedState,
     dismissLimitReached,
     retryWithOpenCode,
   }

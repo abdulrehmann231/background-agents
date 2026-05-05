@@ -14,7 +14,7 @@ import {
   hasCredentialsForModel,
   type Agent,
 } from "@upstream/common"
-import { getEffectiveCredentialFlags } from "@/lib/credentials"
+import { getEffectiveCredentialFlags } from "@/lib/server/credential-flags"
 
 // =============================================================================
 // Types

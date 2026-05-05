@@ -51,7 +51,7 @@ export async function GET(): Promise<Response> {
       select: { settings: true },
     })
 
-    const effective = await (await import("@/lib/credentials")).getEffectiveCredentialFlags(userId)
+    const effective = await (await import("@/lib/server/credential-flags")).getEffectiveCredentialFlags(userId)
 
     const response: SettingsResponse = {
       settings: readSettings(user?.settings),
@@ -124,7 +124,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     })
 
     // After updating credentials, recompute effective flags
-    const effective = await (await import("@/lib/credentials")).getEffectiveCredentialFlags(userId)
+    const effective = await (await import("@/lib/server/credential-flags")).getEffectiveCredentialFlags(userId)
 
     const response: SettingsResponse = {
       settings: newSettings,
