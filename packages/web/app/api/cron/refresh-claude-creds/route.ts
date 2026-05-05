@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/db/prisma"
 import {
-  CLAUDE_COOKIES_KEY,
-  CLAUDE_CREDS_KEY,
   generateClaudeCredentials,
-} from "@/lib/claude-credentials"
+  CLAUDE_CREDS_KEY,
+  CLAUDE_COOKIES_KEY,
+} from "@upstream/claude-credentials"
 
 // Skip refresh while the live credential still has at least this much life.
 // Anthropic OAuth access tokens are 8h-lived, so 2h leaves us 6 hours of cron

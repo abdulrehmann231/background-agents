@@ -108,6 +108,7 @@ export default function HomePage() {
     updateDraftChatConfig,
     setOnConflictStateChange,
     limitReachedState,
+    setLimitReachedState,
     dismissLimitReached,
     retryWithOpenCode,
   } = useChatWithSync()

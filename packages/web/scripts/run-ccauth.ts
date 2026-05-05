@@ -16,11 +16,7 @@
 
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import {
-  CLAUDE_COOKIES_KEY,
-  CLAUDE_CREDS_KEY,
-  generateClaudeCredentials,
-} from "../lib/claude-credentials"
+import { generateClaudeCredentials, CLAUDE_CREDS_KEY, CLAUDE_COOKIES_KEY } from "@upstream/claude-credentials"
 
 async function main() {
   const args = process.argv.slice(2)
