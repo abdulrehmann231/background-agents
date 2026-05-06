@@ -650,7 +650,7 @@ export function Sidebar({
       </div>
 
       {/* New Chat Button */}
-      <div className={cn("pb-1", collapsed ? "px-0 flex justify-center" : "px-2")}>
+      <div className={cn(collapsed ? "px-0 flex justify-center pb-2" : "px-2 pb-1")}>
         <button
           onClick={onNewChat}
           className={cn(
@@ -664,7 +664,7 @@ export function Sidebar({
       </div>
 
       {/* Search Chats Button */}
-      <div className={cn("pb-1", collapsed ? "px-0 flex justify-center" : "px-2")}>
+      <div className={cn(collapsed ? "px-0 flex justify-center pb-2" : "px-2 pb-1")}>
         <button
           onClick={openSearch}
           className={cn(
@@ -678,7 +678,7 @@ export function Sidebar({
       </div>
 
       {/* Scheduled Jobs Button */}
-      <div className={cn(collapsed ? "px-0 flex justify-center" : "px-2")}>
+      <div className={cn(collapsed ? "px-0 flex justify-center pb-2" : "px-2")}>
         <button
           onClick={() => {
             if (onOpenScheduledJobs) {
