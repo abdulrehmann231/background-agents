@@ -489,12 +489,12 @@ export function Sidebar({
               {isLoadingChats ? (
                 /* Chat list skeleton while loading */
                 <div className="space-y-1 animate-pulse">
-                  {[...Array(5)].map((_, i) => (
+                  {[75, 60, 85, 55, 70].map((width, i) => (
                     <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-lg">
                       <div className="h-4 w-4 rounded bg-muted flex-shrink-0" />
                       <div className="flex-1 space-y-1.5">
-                        <div className="h-4 rounded bg-muted" style={{ width: `${60 + Math.random() * 30}%` }} />
-                        <div className="h-3 rounded bg-muted" style={{ width: `${40 + Math.random() * 40}%` }} />
+                        <div className="h-4 rounded bg-muted" style={{ width: `${width}%` }} />
+                        <div className="h-3 rounded bg-muted" style={{ width: `${width - 20}%` }} />
                       </div>
                     </div>
                   ))}
@@ -768,12 +768,12 @@ export function Sidebar({
               {isLoadingChats ? (
                 /* Chat list skeleton while loading */
                 <div className="space-y-0.5 animate-pulse">
-                  {[...Array(6)].map((_, i) => (
+                  {[70, 55, 80, 60, 75, 50].map((width, i) => (
                     <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-md">
                       <div className="h-3.5 w-3.5 rounded bg-muted flex-shrink-0" />
                       <div className="flex-1 space-y-1">
-                        <div className="h-3.5 rounded bg-muted" style={{ width: `${55 + Math.random() * 35}%` }} />
-                        <div className="h-2.5 rounded bg-muted" style={{ width: `${35 + Math.random() * 45}%` }} />
+                        <div className="h-3.5 rounded bg-muted" style={{ width: `${width}%` }} />
+                        <div className="h-2.5 rounded bg-muted" style={{ width: `${width - 15}%` }} />
                       </div>
                     </div>
                   ))}
