@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useRef, useCallback, useMemo, useState } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, FolderGit2, GitBranchPlus, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
-import { filterSlashCommands, filterSlashCommandsWithConflict, type SlashCommand } from "@upstream/common"
+import { filterSlashCommandsWithConflict, type SlashCommand } from "@upstream/common"
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   GitMerge,
@@ -137,87 +137,3 @@ export function SlashCommandMenu({
   )
 }
 
-/**
- * Hook to manage slash command menu state and keyboard navigation
- */
-export function useSlashCommandMenu(input: string, inConflict: boolean = false) {
-  const [open, setOpen] = useState(false)
-  const [selectedIndex, setSelectedIndex] = useState(0)
-
-  // Open menu when "/" is the first character
-  useEffect(() => {
-    if (input.startsWith("/")) {
-      setOpen(true)
-    } else {
-      setOpen(false)
-      setSelectedIndex(0)
-    }
-  }, [input])
-
-  const filteredCommands = useMemo(
-    () => filterSlashCommandsWithConflict(input, inConflict),
-    [input, inConflict]
-  )
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, onSelect: (command: SlashCommandType) => void, onClear: () => void) => {
-      if (!open || filteredCommands.length === 0) return false
-
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault()
-          setSelectedIndex((prev) =>
-            prev < filteredCommands.length - 1 ? prev + 1 : 0
-          )
-          return true
-        case "ArrowUp":
-          e.preventDefault()
-          setSelectedIndex((prev) =>
-            prev > 0 ? prev - 1 : filteredCommands.length - 1
-          )
-          return true
-        case "Enter":
-          e.preventDefault()
-          if (filteredCommands[selectedIndex]) {
-            onSelect(filteredCommands[selectedIndex].name as SlashCommandType)
-            onClear()
-            setOpen(false)
-            setSelectedIndex(0)
-          }
-          return true
-        case "Tab":
-          e.preventDefault()
-          if (filteredCommands[selectedIndex]) {
-            onSelect(filteredCommands[selectedIndex].name as SlashCommandType)
-            onClear()
-            setOpen(false)
-            setSelectedIndex(0)
-          }
-          return true
-        case "Escape":
-          e.preventDefault()
-          setOpen(false)
-          setSelectedIndex(0)
-          onClear()
-          return true
-        default:
-          return false
-      }
-    },
-    [open, filteredCommands, selectedIndex]
-  )
-
-  const close = useCallback(() => {
-    setOpen(false)
-    setSelectedIndex(0)
-  }, [])
-
-  return {
-    open,
-    selectedIndex,
-    setSelectedIndex,
-    handleKeyDown,
-    close,
-    filteredCommands,
-  }
-}
