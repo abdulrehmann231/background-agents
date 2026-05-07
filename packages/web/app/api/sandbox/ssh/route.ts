@@ -1,4 +1,5 @@
 import { Daytona } from "@daytonaio/sdk"
+import { ensureSandboxStarted } from "@/lib/sandbox"
 
 export const maxDuration = 30
 
@@ -28,9 +29,7 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
     }
-    if (sandbox.state !== "started") {
-      await sandbox.start(120)
-    }
+    await ensureSandboxStarted(sandbox)
     const sshAccess = await sandbox.createSshAccess(60)
     return Response.json({ sshCommand: sshAccess.sshCommand })
   } catch (error) {

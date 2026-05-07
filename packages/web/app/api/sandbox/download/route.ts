@@ -1,5 +1,6 @@
 import { Daytona } from "@daytonaio/sdk"
 import { PATHS } from "@upstream/common"
+import { ensureSandboxStarted } from "@/lib/sandbox"
 
 export const maxDuration = 60
 
@@ -35,9 +36,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
     }
 
-    if (sandbox.state !== "started") {
-      await sandbox.start(120)
-    }
+    await ensureSandboxStarted(sandbox)
 
     // Create zip file in /tmp, excluding .git and node_modules
     const zipCmd = `cd "${PATHS.PROJECT_DIR}" && zip -r "${tempZipPath}" . -x ".git/*" -x "node_modules/*" -x ".git" -x "node_modules"`

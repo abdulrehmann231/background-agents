@@ -25,6 +25,7 @@ import { decrypt } from "@/lib/db/encryption"
 import {
   createSandboxForChat,
   deleteSandboxQuietly,
+  ensureSandboxStarted,
   uploadFilesToSandbox,
 } from "@/lib/sandbox"
 
@@ -336,9 +337,7 @@ export async function POST(
       }
     }
 
-    if (sandbox.state !== "started") {
-      await sandbox.start(120)
-    }
+    await ensureSandboxStarted(sandbox)
 
     const repoPath = `${PATHS.SANDBOX_HOME}/project`
 
