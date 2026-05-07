@@ -99,6 +99,17 @@ async function writeMCPSettings(
 }
 
 /**
+ * Minimal sandbox interface for MCP configuration.
+ * Only requires executeCommand capability.
+ */
+export interface MCPConfigSandbox {
+  executeCommand: (
+    command: string,
+    timeout?: number
+  ) => Promise<string | { exitCode: number; output: string }>
+}
+
+/**
  * Configure MCP servers for a Claude agent session
  *
  * Call this before starting an agent session to enable MCP integrations.
@@ -114,14 +125,24 @@ async function writeMCPSettings(
  *   github: { smitheryApiKey: process.env.SMITHERY_API_KEY },
  * })
  *
+ * // Works with any sandbox that has executeCommand
  * await configureMCPServers(sandbox, mcpServers)
  * ```
  */
 export async function configureMCPServers(
-  sandbox: CodeAgentSandbox,
+  sandbox: MCPConfigSandbox,
   mcpServers: Record<string, MCPServerSpec>
 ): Promise<void> {
-  await writeMCPSettings(sandbox, mcpServers)
+  if (Object.keys(mcpServers).length === 0) return
+
+  const settingsJson = buildMCPSettingsJson(mcpServers)
+  const safeSettings = settingsJson.replace(/'/g, "'\\''")
+
+  // Create directory and write settings file
+  await sandbox.executeCommand(
+    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeSettings}' > '${CLAUDE_MCP_SETTINGS_FILE}' && chmod 600 '${CLAUDE_MCP_SETTINGS_FILE}'`,
+    30
+  )
 }
 
 /**

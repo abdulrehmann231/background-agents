@@ -172,4 +172,4 @@ export {
 } from "./mcp/index"
 
 // Claude-specific MCP configuration
-export { configureMCPServers } from "./agents/claude/index"
+export { configureMCPServers, type MCPConfigSandbox } from "./agents/claude/index"

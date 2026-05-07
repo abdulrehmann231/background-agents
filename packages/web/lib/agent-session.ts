@@ -8,6 +8,9 @@ import {
   getSession,
   type Event,
   type EndEvent,
+  buildMCPConfig,
+  configureMCPServers,
+  type MCPPermission,
 } from "background-agents"
 import {
   buildSystemPrompt,
@@ -60,6 +63,20 @@ export function formatAgentError(err: unknown): string {
 // Types
 // =============================================================================
 
+/**
+ * MCP (Model Context Protocol) options for per-chat integrations
+ */
+export interface MCPOptions {
+  /** Permissions granted to this chat (e.g., ["github"]) */
+  permissions: MCPPermission[]
+  /** Restrict GitHub access to specific repositories */
+  allowedRepos?: string[]
+  /** Smithery API key for hosted MCP servers */
+  smitheryApiKey?: string
+  /** Direct GitHub token (alternative to Smithery) */
+  githubToken?: string
+}
+
 export interface AgentSessionOptions {
   repoPath: string
   previewUrlPattern?: string
@@ -69,6 +86,8 @@ export interface AgentSessionOptions {
   env?: Record<string, string>
   /** When true, agent should plan before acting */
   planMode?: boolean
+  /** MCP integration options */
+  mcp?: MCPOptions
 }
 
 // =============================================================================
@@ -127,6 +146,34 @@ Your plan should include:
     await setupClaudeHooks(sandbox)
   } else if (agent === "codex") {
     await setupCodexRules(sandbox)
+  }
+
+  // Configure MCP servers if the chat has permissions
+  // Currently only Claude Code supports MCP
+  if (options.mcp && options.mcp.permissions.length > 0 && agent === "claude-code") {
+    const mcpServers = buildMCPConfig({
+      permissions: options.mcp.permissions,
+      github: {
+        smitheryApiKey: options.mcp.smitheryApiKey,
+        githubToken: options.mcp.githubToken,
+        allowedRepos: options.mcp.allowedRepos,
+      },
+    })
+
+    if (Object.keys(mcpServers).length > 0) {
+      // Create sandbox adapter for MCP configuration
+      // Note: Daytona executeCommand doesn't support timeout parameter
+      const sandboxAdapter = {
+        executeCommand: async (cmd: string) => {
+          const result = await sandbox.process.executeCommand(cmd)
+          return result.result ?? ""
+        },
+      }
+      await configureMCPServers(sandboxAdapter, mcpServers)
+      console.log(
+        `[createBackgroundAgentSession] Configured MCP servers: ${Object.keys(mcpServers).join(", ")}`
+      )
+    }
   }
 
   // For OpenCode, inject permission rules via environment variable

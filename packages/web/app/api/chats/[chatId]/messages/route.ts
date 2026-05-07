@@ -18,7 +18,8 @@ import {
 } from "@/lib/db/api-helpers"
 import { logActivityAsync } from "@/lib/db/activity-log"
 import { checkSharedClaudeUsage } from "@/lib/db/usage-limit"
-import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
+import { createBackgroundAgentSession, type Agent, type MCPOptions } from "@/lib/agent-session"
+import type { MCPPermission } from "background-agents"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
 import { getEnvForModel } from "@upstream/common"
 import { decrypt } from "@/lib/db/encryption"
@@ -481,6 +482,26 @@ export async function POST(
     // Merge: system env vars first, then user env vars (user takes precedence)
     const env = { ...systemEnv, ...userEnv }
 
+    // Build MCP options if the chat has MCP permissions enabled
+    let mcpOptions: MCPOptions | undefined
+    if (chat.mcpPermissions && chat.mcpPermissions.length > 0) {
+      const smitheryApiKey = process.env.SMITHERY_API_KEY
+      if (smitheryApiKey) {
+        mcpOptions = {
+          permissions: chat.mcpPermissions as MCPPermission[],
+          allowedRepos: chat.mcpAllowedRepos?.length ? chat.mcpAllowedRepos : undefined,
+          smitheryApiKey,
+        }
+        console.log(
+          `[chats/messages] MCP enabled for chat ${chatId}: permissions=${chat.mcpPermissions.join(",")}`
+        )
+      } else {
+        console.warn(
+          `[chats/messages] Chat ${chatId} has MCP permissions but SMITHERY_API_KEY is not set`
+        )
+      }
+    }
+
     const bgSession = await createBackgroundAgentSession(sandbox, {
       repoPath,
       previewUrlPattern: previewUrlPattern ?? undefined,
@@ -490,6 +511,7 @@ export async function POST(
       model: payload.model,
       env: Object.keys(env).length > 0 ? env : undefined,
       planMode: payload.planMode,
+      mcp: mcpOptions,
     })
 
     // ── Stage 5: persist messages + chat status (transactional) ────────────
