@@ -11,6 +11,7 @@ import { randomUUID } from "crypto"
 import { createSandboxGit } from "@upstream/daytona-git"
 import { PATHS, SANDBOX_CONFIG } from "@/lib/constants"
 import { NEW_REPOSITORY } from "@/lib/types"
+import { prisma } from "@/lib/db/prisma"
 
 /**
  * Ensure a sandbox is in the "started" state, handling the race condition
@@ -280,3 +281,62 @@ export async function deleteSandboxQuietly(
     console.error("[sandbox] Failed to delete sandbox:", sandboxId, err)
   }
 }
+
+/**
+ * Install all repo-scoped skills into a sandbox.
+ *
+ * Called during sandbox creation/restoration to ensure skills are present
+ * before the agent starts. Best-effort — individual skill install failures
+ * are logged but don't abort the overall sandbox setup.
+ */
+export async function installSkillsForRepo(
+  sandbox: Awaited<ReturnType<Daytona["get"]>>,
+  userId: string,
+  repo: string
+): Promise<{ installed: number; total: number }> {
+  const skills = await prisma.skill.findMany({
+    where: { userId, repo },
+    orderBy: { createdAt: "asc" },
+  })
+
+  if (skills.length === 0) return { installed: 0, total: 0 }
+
+  const repoPath = `${PATHS.SANDBOX_HOME}/project`
+  let installed = 0
+
+  for (const skill of skills) {
+    try {
+      // fullHandle is "owner/repo/skillId" — extract parts for install command
+      // Must use --agent '*' -y for non-interactive sandbox environments
+      const parts = skill.fullHandle.split("/")
+      const source = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : skill.fullHandle
+      const skillFlag = parts.length >= 3 ? ` --skill ${parts.slice(2).join("/")}` : ""
+      const installCmd = `npx -y skills add ${source}${skillFlag} --agent '*' -y`
+      const cmd = await sandbox.process.executeCommand(
+        `cd ${repoPath} && ${installCmd} 2>&1`
+      )
+      if (cmd.exitCode === 0) {
+        installed++
+      } else {
+        console.error(
+          `[sandbox] Failed to install skill ${skill.fullHandle}:`,
+          cmd.result?.trim()
+        )
+      }
+    } catch (err) {
+      console.error(
+        `[sandbox] Error installing skill ${skill.fullHandle}:`,
+        err
+      )
+    }
+  }
+
+  if (installed > 0) {
+    console.log(
+      `[sandbox] Installed ${installed}/${skills.length} skills for ${repo}`
+    )
+  }
+
+  return { installed, total: skills.length }
+}
+
