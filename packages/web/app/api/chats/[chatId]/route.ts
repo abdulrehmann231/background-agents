@@ -50,6 +50,9 @@ interface ChatWithMessagesResponse {
   lastActiveAt: number
   messages: MessageResponse[]
   messageCount: number
+  // MCP permissions for this chat
+  mcpPermissions: string[]
+  mcpAllowedRepos: string[]
 }
 
 // =============================================================================
@@ -145,6 +148,8 @@ export async function GET(
       updatedAt: chat.updatedAt.getTime(),
       lastActiveAt: chat.lastActiveAt.getTime(),
       messageCount,
+      mcpPermissions: chat.mcpPermissions ?? [],
+      mcpAllowedRepos: chat.mcpAllowedRepos ?? [],
       messages: messages.map((m) => ({
         id: m.id,
         role: m.role,

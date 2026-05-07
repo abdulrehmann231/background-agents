@@ -129,6 +129,15 @@ model Chat {
   // { "KEY1": "encrypted_value1", ... }
   environmentVariables Json?
 
+  // MCP (Model Context Protocol) server permissions for this chat
+  // Controls which external integrations (GitHub, Sentry, etc.) the agent can access
+  // Array of permission strings: ["github", "sentry", etc.]
+  mcpPermissions String[] @default([])
+
+  // Optional: restrict GitHub MCP to specific repositories
+  // Array of "owner/repo" strings. Empty = all repos the user has access to
+  mcpAllowedRepos String[] @default([])
+
   // Relations
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages Message[]

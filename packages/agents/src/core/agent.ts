@@ -35,6 +35,18 @@ export interface ParseContext {
 }
 
 /**
+ * MCP server configuration for agent command
+ */
+export interface MCPServerSpec {
+  /** Command to run the MCP server */
+  command: string
+  /** Arguments for the command */
+  args: string[]
+  /** Environment variables for the MCP server */
+  env: Record<string, string>
+}
+
+/**
  * Run options passed to buildCommand()
  */
 export interface RunOptions {
@@ -48,6 +60,8 @@ export interface RunOptions {
   cwd?: string
   /** When true, agent should use extended thinking / plan mode */
   planMode?: boolean
+  /** MCP servers to configure for this agent session */
+  mcpServers?: Record<string, MCPServerSpec>
 }
 
 /**
@@ -58,6 +72,8 @@ export interface AgentCapabilities {
   supportsSystemPrompt?: boolean
   /** Agent supports session resumption */
   supportsResume?: boolean
+  /** Agent supports MCP (Model Context Protocol) servers */
+  supportsMCP?: boolean
   /** Agent requires special setup (e.g., login) */
   setup?: (sandbox: CodeAgentSandbox, env: Record<string, string>) => Promise<void>
 }

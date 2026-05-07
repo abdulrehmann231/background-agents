@@ -2,7 +2,7 @@
  * Claude Code CLI Agent Definition
  */
 
-import type { AgentDefinition, CommandSpec, ParseContext, RunOptions } from "../../core/agent"
+import type { AgentDefinition, CommandSpec, MCPServerSpec, ParseContext, RunOptions } from "../../core/agent"
 import type { CodeAgentSandbox } from "../../types/provider"
 import type { Event } from "../../types/events"
 import { parseClaudeLine } from "./parser"
@@ -12,34 +12,116 @@ import { CLAUDE_TOOL_MAPPINGS } from "./tools"
 const CLAUDE_CREDENTIALS_DIR = "/home/daytona/.claude"
 /** Claude credentials file */
 const CLAUDE_CREDENTIALS_FILE = "/home/daytona/.claude/.credentials.json"
+/** Claude MCP settings file */
+const CLAUDE_MCP_SETTINGS_FILE = "/home/daytona/.claude/settings.json"
 /** Environment variable name for Claude Code credentials */
 const CLAUDE_CODE_CREDENTIALS_ENV = "CLAUDE_CODE_CREDENTIALS"
 
 /**
- * Claude agent-specific setup: write credentials from environment variable.
+ * Build MCP settings JSON for Claude Code
+ *
+ * Claude Code reads MCP server configuration from ~/.claude/settings.json
+ * Format: { "mcpServers": { "serverName": { "command": "...", "args": [...], "env": {...} } } }
+ */
+function buildMCPSettingsJson(mcpServers: Record<string, MCPServerSpec>): string {
+  const settings = {
+    mcpServers: Object.fromEntries(
+      Object.entries(mcpServers).map(([name, config]) => [
+        name,
+        {
+          command: config.command,
+          args: config.args,
+          env: config.env,
+        },
+      ])
+    ),
+  }
+  return JSON.stringify(settings, null, 2)
+}
+
+/**
+ * Claude agent-specific setup: write credentials and MCP configuration.
  *
  * When CLAUDE_CODE_CREDENTIALS environment variable is set, this function
  * writes its contents to ~/.claude/.credentials.json. This allows credentials
  * to be passed via environment variable instead of writing the file manually.
  *
- * The value should be the JSON content of the credentials file, e.g.:
+ * When MCP servers are configured, it writes the configuration to
+ * ~/.claude/settings.json for Claude Code to use.
+ *
+ * The credentials value should be the JSON content of the credentials file, e.g.:
  * {"claudeAiOauth":{"accessToken":"sk-ant-oa..."}}
  */
 async function claudeSetup(
   sandbox: CodeAgentSandbox,
   env: Record<string, string>
 ): Promise<void> {
-  const credentialsJson = env[CLAUDE_CODE_CREDENTIALS_ENV]
-  if (!credentialsJson || !sandbox.executeCommand) return
+  if (!sandbox.executeCommand) return
 
-  // Escape single quotes for shell command
-  const safeCredentials = credentialsJson.replace(/'/g, "'\\''")
-
-  // Create directory and write credentials file with secure permissions
+  // Create directory first
   await sandbox.executeCommand(
-    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeCredentials}' > '${CLAUDE_CREDENTIALS_FILE}' && chmod 600 '${CLAUDE_CREDENTIALS_FILE}'`,
+    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}'`,
     30
   )
+
+  // Write credentials if provided
+  const credentialsJson = env[CLAUDE_CODE_CREDENTIALS_ENV]
+  if (credentialsJson) {
+    // Escape single quotes for shell command
+    const safeCredentials = credentialsJson.replace(/'/g, "'\\''")
+    await sandbox.executeCommand(
+      `echo '${safeCredentials}' > '${CLAUDE_CREDENTIALS_FILE}' && chmod 600 '${CLAUDE_CREDENTIALS_FILE}'`,
+      30
+    )
+  }
+}
+
+/**
+ * Write MCP server configuration to Claude settings file
+ *
+ * This is called separately from setup() because MCP servers are passed
+ * via RunOptions, not environment variables.
+ */
+async function writeMCPSettings(
+  sandbox: CodeAgentSandbox,
+  mcpServers: Record<string, MCPServerSpec>
+): Promise<void> {
+  if (!sandbox.executeCommand || Object.keys(mcpServers).length === 0) return
+
+  const settingsJson = buildMCPSettingsJson(mcpServers)
+  const safeSettings = settingsJson.replace(/'/g, "'\\''")
+
+  // Create directory and write settings file
+  await sandbox.executeCommand(
+    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeSettings}' > '${CLAUDE_MCP_SETTINGS_FILE}' && chmod 600 '${CLAUDE_MCP_SETTINGS_FILE}'`,
+    30
+  )
+}
+
+/**
+ * Configure MCP servers for a Claude agent session
+ *
+ * Call this before starting an agent session to enable MCP integrations.
+ * This writes the MCP configuration to ~/.claude/settings.json
+ *
+ * @example
+ * ```typescript
+ * import { configureMCPServers } from "background-agents/agents/claude"
+ * import { buildMCPConfig } from "background-agents/mcp"
+ *
+ * const mcpServers = buildMCPConfig({
+ *   permissions: ["github"],
+ *   github: { smitheryApiKey: process.env.SMITHERY_API_KEY },
+ * })
+ *
+ * await configureMCPServers(sandbox, mcpServers)
+ * ```
+ */
+export async function configureMCPServers(
+  sandbox: CodeAgentSandbox,
+  mcpServers: Record<string, MCPServerSpec>
+): Promise<void> {
+  await writeMCPSettings(sandbox, mcpServers)
 }
 
 /**
@@ -55,6 +137,7 @@ export const claudeAgent: AgentDefinition = {
   capabilities: {
     supportsSystemPrompt: true,
     supportsResume: true,
+    supportsMCP: true,
     setup: claudeSetup,
   },
 

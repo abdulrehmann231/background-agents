@@ -68,6 +68,7 @@ export type {
   CommandSpec,
   ParseContext,
   RunOptions,
+  MCPServerSpec,
 } from "./core/agent"
 
 export type { CanonicalToolName } from "./core/tools"
@@ -155,3 +156,20 @@ export {
 
 // Debug (enable with CODING_AGENTS_DEBUG=1)
 export { isDebugEnabled, debugLog } from "./debug"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP (Model Context Protocol) Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+export {
+  buildMCPConfig,
+  hasMCPPermission,
+  validateMCPPermissions,
+  GITHUB_MCP_TOOLS,
+  type MCPServerConfig,
+  type MCPPermission,
+  type GitHubMCPOptions,
+} from "./mcp/index"
+
+// Claude-specific MCP configuration
+export { configureMCPServers } from "./agents/claude/index"
