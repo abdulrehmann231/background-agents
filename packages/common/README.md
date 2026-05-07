@@ -59,6 +59,8 @@ import {
   type GitHubBranch,
   type GitHubCompareResult,
   type GitHubPullRequest,
+  type GitHubWebhookConfig,
+  type GitHubWebhook,
   // Core helpers
   githubFetch,
   isGitHubApiError,
@@ -72,6 +74,11 @@ import {
   createPullRequest,
   createFileCommit,
   forkRepo,
+  // Webhook management
+  createWebhook,
+  deleteWebhook,
+  listWebhooks,
+  hasWebhookPermission,
 } from "@upstream/common"
 ```
 

@@ -157,7 +157,7 @@ Messages are JSON-encoded:
 { type: 'data', payload: '...' }
 
 // Connection ready
-{ type: 'ready', pid: 12345, shell: 'bash', cwd: '/home/daytona' }
+{ type: 'ready', pid: 12345 }
 
 // Process exited
 { type: 'exit', exitCode: 0, signal: null }
