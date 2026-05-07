@@ -230,6 +230,7 @@ export async function GET(request: NextRequest) {
     `,
 
     // Daily messages by agent+model in selected range
+    // Only count assistant messages that are actual chat messages (not git-operations or user messages)
     prisma.$queryRaw<Array<{ date: Date; agent: string | null; model: string | null; count: bigint }>>`
       SELECT
         DATE("createdAt") as date,
@@ -238,6 +239,8 @@ export async function GET(request: NextRequest) {
         COUNT(*)::bigint as count
       FROM "Message"
       WHERE "createdAt" >= NOW() - ${interval}::interval
+        AND role = 'assistant'
+        AND (("messageType" IS NULL) OR ("messageType" != 'git-operation'))
       GROUP BY date, agent, model
       ORDER BY date ASC
     `,
@@ -308,8 +311,9 @@ export async function GET(request: NextRequest) {
 
     for (const row of rawData) {
       const dateStr = row.date.toISOString().split("T")[0]
-      const agentName = row.agent || "unknown"
-      const modelName = row.model || "unknown"
+      // Label null agents/models as "legacy" (pre-migration data) instead of "unknown"
+      const agentName = row.agent || "legacy"
+      const modelName = row.model || "legacy"
       const count = Number(row.count)
 
       allAgents.add(agentName)
