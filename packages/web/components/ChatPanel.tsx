@@ -2,15 +2,13 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react"
 import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, GitBranch, Key, X, Paperclip, HelpCircle, Loader2, Plus, Clock, Command, Brain, Cpu } from "lucide-react"
-import { ErrorBanner, FilePreviewModal, PendingFilesDisplay, ChatHeader, MobileConflictBar } from "./chat"
+import { ErrorBanner, FilePreviewModal, PendingFilesDisplay, ChatHeader, MobileConflictBar, AgentModelSelector } from "./chat"
 import { cn } from "@/lib/utils"
 import { useModals, useGit } from "@/lib/contexts"
-import type { Chat, Settings, Agent, ModelOption, CredentialFlags, PendingFile } from "@/lib/types"
+import type { Chat, Settings, Agent, CredentialFlags, PendingFile } from "@/lib/types"
 import { NEW_REPOSITORY, agentModels, agentLabels, getModelLabel, hasCredentialsForModel, getDefaultAgent, getDefaultModelForAgent } from "@/lib/types"
 import { filterSlashCommandsWithConflict, type RebaseConflictState } from "@upstream/common"
 import { MessageBubble } from "./MessageBubble"
-import { AgentIcon } from "./icons/agent-icons"
-import { MobileSelect } from "./ui/MobileBottomSheet"
 import { SlashCommandMenu, type SlashCommandType } from "./SlashCommandMenu"
 import { useFileUpload } from "@/lib/hooks/useFileUpload"
 
@@ -58,11 +56,6 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
     onDraftChange?.(value)
   }, [onDraftChange])
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false)
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
-  // Mobile bottom sheet states
-  const [showAgentSheet, setShowAgentSheet] = useState(false)
-  const [showModelSheet, setShowModelSheet] = useState(false)
   // Slash command menu state
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0)
@@ -187,20 +180,6 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
 
     return () => cancelAnimationFrame(rafId)
   }, [input, isMobile])
-
-  // Close dropdowns when clicking outside (desktop only)
-  useEffect(() => {
-    if (isMobile) return
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (!target.closest('[data-dropdown]')) {
-        setShowAgentDropdown(false)
-        setShowModelDropdown(false)
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [isMobile])
 
   // Update slash menu visibility based on input.
   const hasLinkedRepo = !!(chat?.repo && chat.repo !== NEW_REPOSITORY)
@@ -337,52 +316,6 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
     }
   }
 
-  const handleAgentChange = (agent: Agent) => {
-    setShowAgentDropdown(false)
-    setShowAgentSheet(false)
-
-    // Block switching to claude-code if daily limit is exceeded
-    if (agent === "claude-code" && credentialFlags.CLAUDE_DAILY_LIMIT_EXCEEDED) {
-      showClaudeLimitDialog()
-      return
-    }
-
-    // Update chat's agent if possible
-    if (chat && onUpdateChat) {
-      const models = agentModels[agent] ?? []
-      const newModel = models[0]?.value || currentModel
-      onUpdateChat({ agent, model: newModel })
-
-      // Check if the new model requires credentials we don't have
-      const newModelConfig = models.find(m => m.value === newModel)
-      if (newModelConfig && !hasCredentialsForModel(newModelConfig, credentialFlags, agent)) {
-        // Open settings with the required key highlighted
-        const requiredKey = newModelConfig.requiresKey
-        if (requiredKey && requiredKey !== "none") {
-          modals.openSettings(requiredKey as HighlightKey)
-        }
-      }
-    }
-  }
-
-  const handleModelChange = (model: string) => {
-    setShowModelDropdown(false)
-    setShowModelSheet(false)
-    if (chat && onUpdateChat) {
-      onUpdateChat({ model })
-
-      // Check if the new model requires credentials we don't have
-      const newModelConfig = availableModels.find(m => m.value === model)
-      if (newModelConfig && !hasCredentialsForModel(newModelConfig, credentialFlags, currentAgent)) {
-        // Open settings with the required key highlighted
-        const requiredKey = newModelConfig.requiresKey
-        if (requiredKey && requiredKey !== "none") {
-          modals.openSettings(requiredKey as HighlightKey)
-        }
-      }
-    }
-  }
-
   // No chat selected - show a skeleton while the first chat is being created.
   if (!chat) {
     return (
@@ -428,27 +361,6 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
   const showRepoButton = canSelectRepo || canCreateRepo
   // Only show welcome screen if no messages AND not loading messages AND not a child chat
   const isNewChat = chat.messages.length === 0 && !chat.parentChatId && !isLoadingMessages
-
-  const agents: Agent[] = ["claude-code", "opencode", "codex", "gemini", "goose", "pi", "eliza"]
-
-  // Prepare agent options for mobile bottom sheet
-  const agentOptions = agents.map(agent => ({
-    value: agent,
-    label: agentLabels[agent],
-    icon: <AgentIcon agent={agent} className="h-5 w-5" />,
-  }))
-
-  // Prepare model options for mobile bottom sheet
-  const modelOptions = availableModels.map((model: ModelOption) => {
-    const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
-    const needsKey = model.requiresKey !== "none" && !modelHasCredentials
-    return {
-      value: model.value,
-      label: model.label,
-      description: needsKey ? "Requires API key" : undefined,
-      icon: needsKey ? <Key className="h-5 w-5 text-red-500" /> : undefined,
-    }
-  })
 
   // Chat input component - responsive design
   const chatInput = (
@@ -734,139 +646,20 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
               <span className={cn("text-sm", isMobile ? "hidden @[18rem]/row2:inline" : "hidden @[32rem]:inline")}>Plan</span>
             </button>
 
-            {/* Agent selector */}
-          {isMobile ? (
-            // Mobile: Use bottom sheet
-            <button
-              onClick={() => setShowAgentSheet(true)}
-              className="flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer"
-              title={agentLabels[currentAgent]}
-            >
-              <AgentIcon agent={currentAgent} className="h-4 w-4" />
-              <span className="hidden @[18rem]/row2:inline">{agentLabels[currentAgent]}</span>
-              <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
-            </button>
-          ) : (
-            // Desktop: Use dropdown
-            <div className="relative" data-dropdown>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowAgentDropdown(!showAgentDropdown)
-                  setShowModelDropdown(false)
-                }}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer"
-                title={agentLabels[currentAgent]}
-              >
-                <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
-                <span className="hidden @[32rem]:inline">{agentLabels[currentAgent]}</span>
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {showAgentDropdown && (
-                <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40">
-                  {agents.map((agent) => (
-                    <button
-                      key={agent}
-                      onClick={() => handleAgentChange(agent)}
-                      className={cn(
-                        "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
-                        agent === currentAgent && "bg-accent"
-                      )}
-                    >
-                      <AgentIcon agent={agent} className="h-3.5 w-3.5" />
-                      {agentLabels[agent]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Model selector */}
-          {isMobile ? (
-            // Mobile: Use bottom sheet
-            <button
-              onClick={() => setShowModelSheet(true)}
-              className={cn(
-                "flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 transition-colors cursor-pointer",
-                !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
-              )}
-              title={getModelLabel(currentAgent, currentModel)}
-            >
-              {!hasRequiredCredentials && <Key className="h-4 w-4" />}
-              <Cpu className="h-4 w-4 @[18rem]/row2:hidden" />
-              <span className="hidden @[18rem]/row2:inline">{getModelLabel(currentAgent, currentModel)}</span>
-              <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
-            </button>
-          ) : (
-            // Desktop: Use dropdown
-            <div className="relative" data-dropdown>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowModelDropdown(!showModelDropdown)
-                  setShowAgentDropdown(false)
-                }}
-                className={cn(
-                  "flex items-center gap-1 text-sm transition-colors cursor-pointer",
-                  !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
-                )}
-                title={getModelLabel(currentAgent, currentModel)}
-              >
-                {!hasRequiredCredentials && <Key className="h-3.5 w-3.5" />}
-                <Cpu className="h-3.5 w-3.5 @[32rem]:hidden" />
-                <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel)}</span>
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {showModelDropdown && (
-                <div className="absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52">
-                  {availableModels.map((model: ModelOption) => {
-                    const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
-                    const needsKey = model.requiresKey !== "none" && !modelHasCredentials
-                    return (
-                      <button
-                        key={model.value}
-                        onClick={() => handleModelChange(model.value)}
-                        className={cn(
-                          "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer",
-                          model.value === currentModel && "bg-accent"
-                        )}
-                      >
-                        <span>{model.label}</span>
-                        {needsKey && <Key className="h-3.5 w-3.5 text-red-500 shrink-0" />}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+            {/* Agent and Model selectors */}
+            <AgentModelSelector
+              chat={chat}
+              credentialFlags={credentialFlags}
+              currentAgent={currentAgent}
+              currentModel={currentModel}
+              onUpdateChat={onUpdateChat}
+              showClaudeLimitDialog={showClaudeLimitDialog}
+              isMobile={isMobile}
+            />
           </div>
 
         </div>
       </div>
-
-      {/* Mobile Bottom Sheets */}
-      {isMobile && (
-        <>
-          <MobileSelect
-            open={showAgentSheet}
-            onClose={() => setShowAgentSheet(false)}
-            title="Select Agent"
-            options={agentOptions}
-            value={currentAgent}
-            onChange={(value) => handleAgentChange(value as Agent)}
-          />
-          <MobileSelect
-            open={showModelSheet}
-            onClose={() => setShowModelSheet(false)}
-            title="Select Model"
-            options={modelOptions}
-            value={currentModel}
-            onChange={handleModelChange}
-          />
-        </>
-      )}
     </div>
   )
 
