@@ -27,6 +27,8 @@ import { PaletteProvider, usePalette } from "@/components/search-palette"
 import { useChatWithSync } from "@/lib/hooks/useChatWithSync"
 import { useMobile } from "@/lib/hooks/useMobile"
 import { useGitHubTokenCheck } from "@/lib/hooks/useGitHubTokenCheck"
+import { usePreview } from "@/lib/hooks/usePreview"
+import { useModalState } from "@/lib/hooks/useModalState"
 import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent, type Agent, type Message, type Chat } from "@/lib/types"
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import { PATHS } from "@upstream/common"
@@ -115,43 +117,34 @@ export default function HomePage() {
     retryWithOpenCode,
   } = useChatWithSync()
 
-  const [repoSelectOpen, setRepoSelectOpen] = useState(false)
-  const [repoCreateOpen, setRepoCreateOpen] = useState(false)
-  const [branchSelectOpen, setBranchSelectOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsHighlightKey, setSettingsHighlightKey] = useState<HighlightKey>(null)
-  const [settingsDefaultSection, setSettingsDefaultSection] = useState<SectionKey>("general")
+  // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [signInModalOpen, setSignInModalOpen] = useState(false)
-  const [helpOpen, setHelpOpen] = useState(false)
-  const [deleteConfirmChatId, setDeleteConfirmChatId] = useState<string | null>(null)
-  const [mobileCommandsOpen, setMobileCommandsOpen] = useState(false)
-  const [mobileTitleMenuOpen, setMobileTitleMenuOpen] = useState(false)
   const mobileTitleMenuRef = useRef<HTMLDivElement>(null)
-  const [mobileRenameChat, setMobileRenameChat] = useState<{ id: string; name: string } | null>(null)
-  const [isDownloading, setIsDownloading] = useState(false)
-  const [envVarsModalOpen, setEnvVarsModalOpen] = useState(false)
+
+  // Modal state from hook
+  const modals = useModalState({
+    isMobile,
+    onMobileSidebarClose: () => setMobileSidebarOpen(false),
+  })
+
+  // Additional state not in modal hook
   const [envVarsChatEnvVars, setEnvVarsChatEnvVars] = useState<Record<string, string>>({})
   const [envVarsRepoEnvVars, setEnvVarsRepoEnvVars] = useState<Record<string, string>>({})
-  const [scheduledJobFormOpen, setScheduledJobFormOpen] = useState(false)
   const [scheduledJobsRefreshKey, setScheduledJobsRefreshKey] = useState(0)
   const [selectedScheduledJob, setSelectedScheduledJob] = useState<{ id: string; name: string } | null>(null)
   const [viewMode, setViewMode] = useState<"chat" | "scheduled-jobs">("chat")
   // Track when a message send is initiated (for instant UI feedback before server responds)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [collapsedChatIds, setCollapsedChatIds] = useState<Set<string>>(new Set())
-  const [previewWidth, setPreviewWidth] = useState(() => {
-    if (typeof window === "undefined") return 520
-    const stored = Number(window.localStorage.getItem("simple-chat-preview-width"))
-    return Number.isFinite(stored) && stored >= 320 ? stored : 520
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  // Preview state from hook
+  const preview = usePreview({
+    currentChat,
+    updateCurrentChat,
   })
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    window.localStorage.setItem("simple-chat-preview-width", String(Math.round(previewWidth)))
-  }, [previewWidth])
-  const [isResizingPreview, setIsResizingPreview] = useState(false)
 
   // Track ports we've already auto-opened in each sandbox so the preview pane
   // only pops open the *first* time a new server appears — not every poll.
@@ -163,127 +156,7 @@ export default function HomePage() {
     currentChat?.previewUrlPattern
   )
   const availableServers = serversQuery.data ?? []
-  // Preview state lives on each Chat, not globally — switching chats shows
-  // whatever that chat last had open (or hides the pane if none).
-  // Multiple preview items can be open and user can switch between them.
-  const previewItems = (currentChat?.previewItems ?? []) as PreviewItem[]
-  const activePreviewIndex = currentChat?.activePreviewIndex ?? 0
-  const previewItem = previewItems[activePreviewIndex] ?? null
-  const previewPaneHidden = currentChat?.previewPaneHidden ?? false
-  const previewOpen = previewItems.length > 0 && !previewPaneHidden
 
-  /** Get a unique key for a preview item */
-  const getPreviewItemKey = useCallback((item: PreviewItem): string => {
-    switch (item.type) {
-      case "file": return `file:${item.filePath}`
-      case "terminal": return `terminal:${item.id}`
-      case "server": return `server:${item.port}`
-      case "plan": return `plan:${item.messageId}`
-    }
-  }, [])
-
-  /** Open a preview item - adds to list if not already present, switches to it if present */
-  const openPreview = useCallback((next: PreviewItem) => {
-    const existingIndex = previewItems.findIndex(
-      (item) => getPreviewItemKey(item) === getPreviewItemKey(next)
-    )
-    if (existingIndex >= 0) {
-      // Item already exists, just switch to it and unhide the pane
-      updateCurrentChat({ activePreviewIndex: existingIndex, previewPaneHidden: false })
-    } else {
-      // Add new item, switch to it, and unhide the pane
-      const newItems = [...previewItems, next]
-      updateCurrentChat({
-        previewItems: newItems,
-        activePreviewIndex: newItems.length - 1,
-        previewPaneHidden: false,
-      })
-    }
-  }, [previewItems, getPreviewItemKey, updateCurrentChat])
-
-  /** Select a specific preview item from the list */
-  const selectPreviewItem = useCallback((item: PreviewItem) => {
-    const index = previewItems.findIndex(
-      (i) => getPreviewItemKey(i) === getPreviewItemKey(item)
-    )
-    if (index >= 0) {
-      updateCurrentChat({ activePreviewIndex: index })
-    }
-  }, [previewItems, getPreviewItemKey, updateCurrentChat])
-
-  /** Close a specific preview item from the list */
-  const closePreviewItem = useCallback((item: PreviewItem) => {
-    const index = previewItems.findIndex(
-      (i) => getPreviewItemKey(i) === getPreviewItemKey(item)
-    )
-    if (index < 0) return
-
-    const newItems = previewItems.filter((_, i) => i !== index)
-    let newActiveIndex = activePreviewIndex
-
-    if (newItems.length === 0) {
-      // No items left, close the preview pane
-      updateCurrentChat({
-        previewItems: undefined,
-        activePreviewIndex: undefined,
-      })
-    } else {
-      // Adjust active index if needed
-      if (index < activePreviewIndex) {
-        newActiveIndex = activePreviewIndex - 1
-      } else if (index === activePreviewIndex) {
-        // If we closed the active item, select the previous one (or first if at start)
-        newActiveIndex = Math.max(0, index - 1)
-      }
-      updateCurrentChat({
-        previewItems: newItems,
-        activePreviewIndex: newActiveIndex,
-      })
-    }
-  }, [previewItems, activePreviewIndex, getPreviewItemKey, updateCurrentChat])
-
-  /** Hide the preview pane (items are preserved, persisted to localStorage) */
-  const closePreview = useCallback(() => {
-    updateCurrentChat({ previewPaneHidden: true })
-  }, [updateCurrentChat])
-
-  /** Show the preview pane (unhide it, persisted to localStorage) */
-  const showPreview = useCallback(() => {
-    updateCurrentChat({ previewPaneHidden: false })
-  }, [updateCurrentChat])
-  const resizingPreview = useRef(false)
-  const startPreviewResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    resizingPreview.current = true
-    setIsResizingPreview(true)
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-  }, [])
-  useEffect(() => {
-    const move = (e: MouseEvent) => {
-      if (!resizingPreview.current) return
-      const nextWidth = window.innerWidth - e.clientX
-      // Clamp: keep the preview at least 320px wide, but also leave enough
-      // room for the chat column on the left.
-      const MIN_PREVIEW = 320
-      const MIN_CHAT = 600
-      const maxPreview = Math.max(MIN_PREVIEW, window.innerWidth - MIN_CHAT)
-      setPreviewWidth(Math.max(MIN_PREVIEW, Math.min(maxPreview, nextWidth)))
-    }
-    const up = () => {
-      if (!resizingPreview.current) return
-      resizingPreview.current = false
-      setIsResizingPreview(false)
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-    }
-    window.addEventListener("mousemove", move)
-    window.addEventListener("mouseup", up)
-    return () => {
-      window.removeEventListener("mousemove", move)
-      window.removeEventListener("mouseup", up)
-    }
-  }, [])
   const toggleChatCollapsed = useCallback((id: string) => {
     setCollapsedChatIds((prev) => {
       const next = new Set(prev)
@@ -349,10 +222,10 @@ export default function HomePage() {
     if (newServer) {
       availableServers.forEach((s) => seen!.add(s.port))
       if (chatId === currentChat?.id) {
-        openPreview({ type: "server", port: newServer.port, url: newServer.url })
+        preview.openPreview({ type: "server", port: newServer.port, url: newServer.url })
       }
     }
-  }, [availableServers, currentChat?.sandboxId, currentChat?.id, openPreview])
+  }, [availableServers, currentChat?.sandboxId, currentChat?.id, preview.openPreview])
 
   // Handler for adding messages to current chat
   const handleAddMessage = useCallback((message: Message) => {
@@ -432,33 +305,6 @@ export default function HomePage() {
   }, [isMobile, isHydrated, currentChatId, chats, selectChat])
 
 
-  // Handler for opening settings (optionally with a highlighted API key field)
-  const handleOpenSettings = (highlightKey?: HighlightKey) => {
-    setSettingsHighlightKey(highlightKey ?? null)
-    setSettingsDefaultSection("general")
-    setSettingsOpen(true)
-    // Close mobile sidebar when opening settings
-    if (isMobile) {
-      setMobileSidebarOpen(false)
-    }
-  }
-
-  // Handler for opening settings to a specific section (used by command palette)
-  const handleOpenSettingsSection = (section?: SectionKey) => {
-    setSettingsHighlightKey(null)
-    setSettingsDefaultSection(section ?? "general")
-    setSettingsOpen(true)
-    if (isMobile) {
-      setMobileSidebarOpen(false)
-    }
-  }
-
-  // Handler for closing settings
-  const handleCloseSettings = () => {
-    setSettingsOpen(false)
-    setSettingsHighlightKey(null)
-  }
-
   // Handler for opening environment variables modal
   const handleOpenEnvVars = useCallback(async () => {
     if (!currentChatId || isDraftChatId(currentChatId)) return
@@ -477,11 +323,11 @@ export default function HomePage() {
 
       setEnvVarsChatEnvVars(chatData.environmentVariables || {})
       setEnvVarsRepoEnvVars(repoName && repoData.repoEnvironmentVariables?.[repoName] || {})
-      setEnvVarsModalOpen(true)
+      modals.setEnvVarsModalOpen(true)
     } catch (error) {
       console.error("Failed to fetch environment variables:", error)
     }
-  }, [currentChatId, isDraftChatId, chats])
+  }, [currentChatId, isDraftChatId, chats, modals])
 
   // Handler for saving environment variables
   const handleSaveEnvVars = useCallback(async (chatEnvVars: Record<string, string>, repoEnvVars: Record<string, string>) => {
@@ -600,7 +446,7 @@ export default function HomePage() {
   // Handler for new chat - uses current chat's repo/branch if available, otherwise repo filter
   const handleNewChat = () => {
     if (!session) {
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
     // Switch to chat view
@@ -634,7 +480,7 @@ export default function HomePage() {
     setViewMode("scheduled-jobs")
     setSelectedScheduledJob(null) // Clear selected job to show list view
     selectChat(null as unknown as string) // Deselect current chat
-    // Preview pane is automatically hidden when no chat is selected (previewItems will be empty)
+    // Preview pane is automatically hidden when no chat is selected (preview.preview.previewItems will be empty)
   }
 
   // Handler for scheduled job selection (memoized to prevent infinite loops)
@@ -648,15 +494,15 @@ export default function HomePage() {
   // are independent — neither links to the other.
   const handleChangeRepo = () => {
     if (!session) {
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
     // Can select repo if chat has no messages and no sandbox (includes drafts)
     const canSelect = !!displayCurrentChat && displayCurrentChat.messages.length === 0 && !displayCurrentChat.sandboxId
     if (canSelect) {
-      setRepoSelectOpen(true)
+      modals.setRepoSelectOpen(true)
     } else {
-      setRepoCreateOpen(true)
+      modals.setRepoCreateOpen(true)
     }
   }
 
@@ -664,20 +510,20 @@ export default function HomePage() {
   // Opens branch selection modal for the currently selected repository.
   const handleChangeBranch = () => {
     if (!session) {
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
     if (!displayCurrentChat || displayCurrentChat.repo === NEW_REPOSITORY) return
-    setBranchSelectOpen(true)
+    modals.setBranchSelectOpen(true)
   }
 
   // Handler for the Create Repository palette/slash command.
   const handleCreateRepo = () => {
     if (!session) {
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
-    setRepoCreateOpen(true)
+    modals.setRepoCreateOpen(true)
   }
 
   // Handler for repo selection - updates the current chat's repo
@@ -727,7 +573,7 @@ export default function HomePage() {
       // Store the pending message in sessionStorage (persists across OAuth redirect)
       // Note: files cannot be persisted, so we warn the user if they have attachments
       savePendingMessage({ message, agent, model })
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
 
@@ -767,7 +613,7 @@ export default function HomePage() {
     if (!pending) return
 
     pendingMessageProcessed.current = true
-    setSignInModalOpen(false)
+    modals.setSignInModalOpen(false)
 
     void (async () => {
       let chatId = currentChatId
@@ -800,15 +646,15 @@ export default function HomePage() {
 
   // Close mobile title menu on outside click
   useEffect(() => {
-    if (!mobileTitleMenuOpen) return
+    if (!modals.mobileTitleMenuOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (mobileTitleMenuRef.current && !mobileTitleMenuRef.current.contains(e.target as Node)) {
-        setMobileTitleMenuOpen(false)
+        modals.setMobileTitleMenuOpen(false)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [mobileTitleMenuOpen])
+  }, [modals.mobileTitleMenuOpen])
 
   // Handler for slash commands - open the corresponding git dialog
   // Start a new chat off the current chat's branch. Defined before
@@ -819,7 +665,7 @@ export default function HomePage() {
   const handleBranchChat = useCallback(() => {
     if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
     if (!session) {
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
     startNewChat(currentChat.repo, branchForNewChat, currentChat.id)
@@ -831,7 +677,7 @@ export default function HomePage() {
     if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
     if (!session) {
       savePendingMessage({ message, agent, model })
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
     // Create new chat in "pending" state without switching to it
@@ -847,7 +693,7 @@ export default function HomePage() {
   const handleBranchQueuedMessage = useCallback(async (id: string, message: string, agent?: string, model?: string) => {
     if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
     if (!session) {
-      setSignInModalOpen(true)
+      modals.setSignInModalOpen(true)
       return
     }
     // Remove from queue first
@@ -1134,34 +980,34 @@ export default function HomePage() {
       onCreateRepo={currentChat?.repo === NEW_REPOSITORY ? handleCreateRepo : undefined}
       showGitCommands={!!currentChat && currentChat.repo !== NEW_REPOSITORY}
       onOpenInGitHub={githubBranchUrl ? handleOpenInGitHub : undefined}
-      onOpenSettings={handleOpenSettingsSection}
+      onOpenSettings={modals.openSettingsSection}
       onToggleSidebar={!isMobile ? () => setSidebarCollapsed((v) => !v) : undefined}
       onSignIn={!session ? () => signIn("github") : undefined}
       onSignOut={session ? () => {
             clearAllStorage()
             signOut()
           } : undefined}
-      onDeleteChat={displayCurrentChatId ? () => setDeleteConfirmChatId(displayCurrentChatId) : undefined}
+      onDeleteChat={displayCurrentChatId ? () => modals.setDeleteConfirmChatId(displayCurrentChatId) : undefined}
       onOpenInVSCode={currentChat?.sandboxId ? handleOpenInVSCode : undefined}
       onOpenTerminal={
         currentChat?.sandboxId
           ? () => {
               // Generate a unique terminal ID by finding the next available number
-              const existingTerminals = previewItems.filter((i) => i.type === "terminal")
+              const existingTerminals = preview.preview.previewItems.filter((i) => i.type === "terminal")
               const terminalNumbers = existingTerminals.map((t) => {
                 if (t.type !== "terminal") return 0
                 const match = t.id.match(/-(\d+)$/)
                 return match ? parseInt(match[1], 10) : 1
               })
               const nextNumber = terminalNumbers.length === 0 ? 1 : Math.max(...terminalNumbers) + 1
-              openPreview({ type: "terminal", id: `${currentChat.sandboxId}-${nextNumber}` })
+              preview.openPreview({ type: "terminal", id: `${currentChat.sandboxId}-${nextNumber}` })
             }
           : undefined
       }
       servers={availableServers}
-      onOpenServer={(port, url) => openPreview({ type: "server", port, url })}
-      onClosePreview={previewOpen ? closePreview : undefined}
-      onShowPreview={previewPaneHidden && previewItems.length > 0 ? showPreview : undefined}
+      onOpenServer={(port, url) => preview.openPreview({ type: "server", port, url })}
+      onClosePreview={preview.previewOpen ? preview.closePreview : undefined}
+      onShowPreview={preview.previewPaneHidden && preview.preview.previewItems.length > 0 ? preview.showPreview : undefined}
       onDownloadProject={currentChat?.sandboxId ? handleDownloadProject : undefined}
       isDownloading={isDownloading}
       onCopyCloneCommand={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? handleCopyCloneCommand : undefined}
@@ -1184,12 +1030,12 @@ export default function HomePage() {
           onNewChat={handleNewChat}
           onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
           onRenameChat={renameChat}
-          onOpenSettings={() => handleOpenSettings()}
+          onOpenSettings={() => modals.openSettings()}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
-          onOpenHelp={() => setHelpOpen(true)}
+          onOpenHelp={() => modals.setHelpOpen(true)}
           isMobile={false}
           repoFilter={repoFilter}
           onRepoFilterChange={setRepoFilter}
@@ -1215,12 +1061,12 @@ export default function HomePage() {
           onNewChat={handleNewChat}
           onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
           onRenameChat={renameChat}
-          onOpenSettings={() => handleOpenSettings()}
+          onOpenSettings={() => modals.openSettings()}
           collapsed={false}
           onToggleCollapse={() => {}}
           width={280}
           onWidthChange={() => {}}
-          onOpenHelp={() => setHelpOpen(true)}
+          onOpenHelp={() => modals.setHelpOpen(true)}
           isMobile={true}
           mobileOpen={mobileSidebarOpen}
           onMobileClose={() => setMobileSidebarOpen(false)}
@@ -1230,7 +1076,7 @@ export default function HomePage() {
           onToggleChatCollapsed={toggleChatCollapsed}
           onRequestMergeChats={handleRequestMergeChats}
           onRequestRebaseChat={handleRequestRebaseChat}
-          onMobileRename={(chatId, name) => setMobileRenameChat({ id: chatId, name })}
+          onMobileRename={(chatId, name) => modals.setMobileRenameChat({ id: chatId, name })}
           onOpenScheduledJobs={() => {
             handleOpenScheduledJobs()
             setMobileSidebarOpen(false)
@@ -1262,18 +1108,18 @@ export default function HomePage() {
             ) : (
               <div className="relative flex-1 min-w-0" ref={mobileTitleMenuRef}>
                 <button
-                  onClick={() => displayCurrentChat && setMobileTitleMenuOpen((v) => !v)}
+                  onClick={() => displayCurrentChat && modals.setMobileTitleMenuOpen((v) => !v)}
                   className="flex items-center gap-1 text-base font-semibold truncate max-w-full hover:bg-accent active:bg-accent rounded-md px-2 py-1 -ml-2 transition-colors"
                 >
                   <span className="truncate">{displayCurrentChat?.displayName || "Background Agents"}</span>
                   {displayCurrentChat && <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
                 </button>
-                {mobileTitleMenuOpen && displayCurrentChat && (
+                {modals.mobileTitleMenuOpen && displayCurrentChat && (
                   <div className="absolute left-0 top-full mt-1 min-w-[210px] rounded-md border border-border bg-popover shadow-md py-1 z-50">
                     <button
                       onClick={() => {
-                        setMobileTitleMenuOpen(false)
-                        setMobileRenameChat({ id: displayCurrentChat.id, name: displayCurrentChat.displayName || "Untitled" })
+                        modals.setMobileTitleMenuOpen(false)
+                        modals.setMobileRenameChat({ id: displayCurrentChat.id, name: displayCurrentChat.displayName || "Untitled" })
                       }}
                       className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent text-left cursor-pointer"
                     >
@@ -1283,7 +1129,7 @@ export default function HomePage() {
                     {githubBranchUrl && (
                       <button
                         onClick={() => {
-                          setMobileTitleMenuOpen(false)
+                          modals.setMobileTitleMenuOpen(false)
                           handleOpenInGitHub()
                         }}
                         className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent text-left cursor-pointer"
@@ -1294,7 +1140,7 @@ export default function HomePage() {
                     )}
                     <button
                       onClick={() => {
-                        setMobileTitleMenuOpen(false)
+                        modals.setMobileTitleMenuOpen(false)
                         handleOpenEnvVars()
                       }}
                       className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent text-left cursor-pointer"
@@ -1305,8 +1151,8 @@ export default function HomePage() {
                     <div className="my-1 border-t border-border" />
                     <button
                       onClick={() => {
-                        setMobileTitleMenuOpen(false)
-                        setDeleteConfirmChatId(displayCurrentChat.id)
+                        modals.setMobileTitleMenuOpen(false)
+                        modals.setDeleteConfirmChatId(displayCurrentChat.id)
                       }}
                       className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent text-left text-destructive cursor-pointer"
                     >
@@ -1320,7 +1166,7 @@ export default function HomePage() {
             {/* Commands menu - only show for chat view */}
             {viewMode === "chat" && (
               <button
-                onClick={() => setMobileCommandsOpen(true)}
+                onClick={() => modals.setMobileCommandsOpen(true)}
                 className="p-2 -mr-2 rounded-lg hover:bg-accent active:bg-accent text-foreground transition-colors touch-target"
                 aria-label="Commands"
               >
@@ -1334,7 +1180,7 @@ export default function HomePage() {
             <div className="flex-1 flex flex-col min-w-0">
               {viewMode === "scheduled-jobs" ? (
                 <ScheduledJobsView
-                  onOpenForm={() => setScheduledJobFormOpen(true)}
+                  onOpenForm={() => modals.setScheduledJobFormOpen(true)}
                   refreshKey={scheduledJobsRefreshKey}
                   onJobSelect={handleJobSelect}
                   showList={selectedScheduledJob === null}
@@ -1358,14 +1204,14 @@ export default function HomePage() {
                   onChangeRepo={handleChangeRepo}
                   onChangeBranch={handleChangeBranch}
                   onUpdateChat={handleUpdateChatProp}
-                  onOpenSettings={handleOpenSettings}
+                  onOpenSettings={modals.openSettings}
                   onSlashCommand={handleSlashCommand}
-                  onRequireSignIn={!session ? () => setSignInModalOpen(true) : undefined}
+                  onRequireSignIn={!session ? () => modals.setSignInModalOpen(true) : undefined}
                   onDeleteChat={displayCurrentChatId ? () => removeChat(displayCurrentChatId, getNextChatId) : undefined}
-                  onOpenHelp={() => setHelpOpen(true)}
+                  onOpenHelp={() => modals.setHelpOpen(true)}
                   onOpenFile={(filePath) => {
                     const filename = filePath.split("/").pop() || filePath
-                    openPreview({ type: "file", filePath, filename })
+                    preview.openPreview({ type: "file", filePath, filename })
                   }}
                   onForcePush={() => gitDialogs.setForcePushOpen(true)}
                   onOpenEnvVars={handleOpenEnvVars}
@@ -1379,18 +1225,18 @@ export default function HomePage() {
                   isLoadingMessages={isLoadingMessages}
                   draft={currentDraft}
                   onDraftChange={handleDraftChange}
-                  onCreateScheduledJob={() => setScheduledJobFormOpen(true)}
+                  onCreateScheduledJob={() => modals.setScheduledJobFormOpen(true)}
                   isSending={isSendingMessage}
-                  onOpenPlan={(messageId) => openPreview({ type: "plan", messageId, content: "" })}
+                  onOpenPlan={(messageId) => preview.openPreview({ type: "plan", messageId, content: "" })}
                   hasMoreMessages={hasMoreMessages}
                   onLoadOlderMessages={currentChat ? () => loadOlderMessages(currentChat.id) : undefined}
                 />
               )}
             </div>
-            {!isMobile && previewOpen && (
+            {!isMobile && preview.previewOpen && (
               <>
                 <div
-                  onMouseDown={startPreviewResize}
+                  onMouseDown={preview.startPreviewResize}
                   className="group flex-shrink-0 w-1 cursor-col-resize relative"
                   aria-label="Resize preview"
                   role="separator"
@@ -1398,16 +1244,16 @@ export default function HomePage() {
                   <span className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
                 </div>
                 <PreviewView
-                  style={{ width: previewWidth }}
+                  style={{ width: preview.previewWidth }}
                   className="flex-shrink-0"
-                  item={previewItem}
+                  item={preview.previewItem}
                   sandboxId={currentChat?.sandboxId ?? null}
                   repo={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? currentChat.repo : null}
                   branch={currentChat?.branch ?? currentChat?.baseBranch ?? null}
-                  onClose={closePreview}
-                  allItems={previewItems}
-                  onSelectItem={selectPreviewItem}
-                  onCloseItem={closePreviewItem}
+                  onClose={preview.closePreview}
+                  allItems={preview.preview.previewItems}
+                  onSelectItem={preview.selectPreviewItem}
+                  onCloseItem={preview.preview.closePreviewItem}
                   messages={currentChat?.messages}
                 />
               </>
@@ -1417,22 +1263,22 @@ export default function HomePage() {
 
       {/* Transparent full-screen shield during split drag so the cursor isn't
           swallowed by iframes or other child elements. */}
-      {isResizingPreview && (
+      {preview.isResizingPreview && (
         <div className="fixed inset-0 z-[999] cursor-col-resize" />
       )}
 
       <RepoPickerModal
-        open={repoSelectOpen}
-        onClose={() => setRepoSelectOpen(false)}
+        open={modals.repoSelectOpen}
+        onClose={() => modals.setRepoSelectOpen(false)}
         onSelect={handleRepoSelect}
         isMobile={isMobile}
         mode="select"
-        onRequestCreate={() => setRepoCreateOpen(true)}
+        onRequestCreate={() => modals.setRepoCreateOpen(true)}
       />
 
       <RepoPickerModal
-        open={repoCreateOpen}
-        onClose={() => setRepoCreateOpen(false)}
+        open={modals.repoCreateOpen}
+        onClose={() => modals.setRepoCreateOpen(false)}
         onSelect={handleRepoSelect}
         isMobile={isMobile}
         mode="create"
@@ -1440,13 +1286,13 @@ export default function HomePage() {
       />
 
       <BranchPickerModal
-        open={branchSelectOpen}
-        onClose={() => setBranchSelectOpen(false)}
+        open={modals.branchSelectOpen}
+        onClose={() => modals.setBranchSelectOpen(false)}
         onSelect={async (branch) => {
           // For draft chats, update draftChatConfig
           if (isDraftMode) {
             updateDraftChatConfig({ baseBranch: branch })
-            setBranchSelectOpen(false)
+            modals.setBranchSelectOpen(false)
             return
           }
           // For real chats
@@ -1457,7 +1303,7 @@ export default function HomePage() {
             const chatId = await startNewChat(displayCurrentChat.repo, branch)
             if (chatId) selectChat(chatId)
           }
-          setBranchSelectOpen(false)
+          modals.setBranchSelectOpen(false)
         }}
         repo={displayCurrentChat?.repo?.split("/")[1] || ""}
         owner={displayCurrentChat?.repo?.split("/")[0] || ""}
@@ -1466,18 +1312,18 @@ export default function HomePage() {
       />
 
         <SettingsModal
-          open={settingsOpen}
-          onClose={handleCloseSettings}
+          open={modals.settingsOpen}
+          onClose={modals.closeSettings}
           settings={settings}
           credentialFlags={credentialFlags}
           onSave={updateSettings}
-          highlightKey={settingsHighlightKey}
-          defaultSection={settingsDefaultSection}
+          highlightKey={modals.settingsHighlightKey}
+          defaultSection={modals.settingsDefaultSection}
           isMobile={isMobile}
         />
 
         <EnvironmentVariablesModal
-          open={envVarsModalOpen}
+          open={modals.envVarsModalOpen}
           onClose={() => setEnvVarsModalOpen(false)}
           chatId={displayCurrentChatId || ""}
           repoName={displayCurrentChat?.repo !== NEW_REPOSITORY ? displayCurrentChat?.repo : undefined}
@@ -1526,8 +1372,8 @@ export default function HomePage() {
 
       {/* Sign In Modal - shown when user tries to send message without being signed in */}
       <SignInModal
-        open={signInModalOpen}
-        onClose={() => setSignInModalOpen(false)}
+        open={modals.signInModalOpen}
+        onClose={() => modals.setSignInModalOpen(false)}
         isMobile={isMobile}
       />
 
@@ -1539,17 +1385,17 @@ export default function HomePage() {
       />
 
       <HelpModal
-        open={helpOpen}
-        onClose={() => setHelpOpen(false)}
+        open={modals.helpOpen}
+        onClose={() => modals.setHelpOpen(false)}
         isMobile={isMobile}
       />
 
       {/* Scheduled Job Form */}
-      {scheduledJobFormOpen && (
+      {modals.scheduledJobFormOpen && (
         <ScheduledJobForm
-          onClose={() => setScheduledJobFormOpen(false)}
+          onClose={() => modals.setScheduledJobFormOpen(false)}
           onSuccess={() => {
-            setScheduledJobFormOpen(false)
+            modals.setScheduledJobFormOpen(false)
             setScheduledJobsRefreshKey((k) => k + 1)
           }}
         />
@@ -1558,8 +1404,8 @@ export default function HomePage() {
       {/* Mobile Commands Menu */}
       {isMobile && (
         <MobileCommandsMenu
-          open={mobileCommandsOpen}
-          onClose={() => setMobileCommandsOpen(false)}
+          open={modals.mobileCommandsOpen}
+          onClose={() => modals.setMobileCommandsOpen(false)}
           onSlashCommand={handleSlashCommand}
           hasLinkedRepo={!!(currentChat && currentChat.repo !== NEW_REPOSITORY)}
           inConflict={!!(gitDialogs.rebaseConflict?.inRebase || gitDialogs.rebaseConflict?.inMerge)}
@@ -1567,17 +1413,17 @@ export default function HomePage() {
       )}
 
       <ConfirmDialog
-        open={deleteConfirmChatId !== null}
-        onClose={() => setDeleteConfirmChatId(null)}
+        open={modals.deleteConfirmChatId !== null}
+        onClose={() => modals.setDeleteConfirmChatId(null)}
         onConfirm={() => {
-          if (deleteConfirmChatId) removeChat(deleteConfirmChatId, getNextChatId)
+          if (modals.deleteConfirmChatId) removeChat(modals.deleteConfirmChatId, getNextChatId)
         }}
         title="Delete chat"
         description={
           <>
             Delete{" "}
             <span className="font-medium text-foreground">
-              {chats.find((c) => c.id === deleteConfirmChatId)?.displayName || "this chat"}
+              {chats.find((c) => c.id === modals.deleteConfirmChatId)?.displayName || "this chat"}
             </span>
             ? This cannot be undone.
           </>
@@ -1589,13 +1435,13 @@ export default function HomePage() {
 
       {/* Mobile Rename Modal */}
       <MobileRenameModal
-        open={mobileRenameChat !== null}
-        onClose={() => setMobileRenameChat(null)}
+        open={modals.mobileRenameChat !== null}
+        onClose={() => modals.setMobileRenameChat(null)}
         title="Rename Chat"
-        initialValue={mobileRenameChat?.name ?? ""}
+        initialValue={modals.mobileRenameChat?.name ?? ""}
         onSave={(newName) => {
-          if (mobileRenameChat) {
-            renameChat(mobileRenameChat.id, newName)
+          if (modals.mobileRenameChat) {
+            renameChat(modals.mobileRenameChat.id, newName)
           }
         }}
         placeholder="Chat name"
@@ -1608,7 +1454,7 @@ export default function HomePage() {
         onContinueWithOpenCode={retryWithOpenCode}
         onAddApiKey={() => {
           dismissLimitReached()
-          handleOpenSettings("anthropic")
+          modals.openSettings("anthropic")
         }}
         onUpgradeToPro={() => {
           dismissLimitReached()
