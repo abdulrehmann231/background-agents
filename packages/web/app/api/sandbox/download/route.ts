@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
     }
 
-    await ensureSandboxStarted(sandbox, daytona)
+    await ensureSandboxStarted(sandbox)
 
     // Create zip file in /tmp, excluding .git and node_modules
     const zipCmd = `cd "${PATHS.PROJECT_DIR}" && zip -r "${tempZipPath}" . -x ".git/*" -x "node_modules/*" -x ".git" -x "node_modules"`

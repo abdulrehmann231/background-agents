@@ -337,7 +337,7 @@ export async function POST(
       }
     }
 
-    await ensureSandboxStarted(sandbox, daytona)
+    await ensureSandboxStarted(sandbox)
 
     const repoPath = `${PATHS.SANDBOX_HOME}/project`
 

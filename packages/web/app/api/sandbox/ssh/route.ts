@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
     }
-    await ensureSandboxStarted(sandbox, daytona)
+    await ensureSandboxStarted(sandbox)
     const sshAccess = await sandbox.createSshAccess(60)
     return Response.json({ sshCommand: sshAccess.sshCommand })
   } catch (error) {

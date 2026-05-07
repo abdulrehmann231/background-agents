@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
     }
-    await ensureSandboxStarted(sandbox, daytona)
+    await ensureSandboxStarted(sandbox)
 
     switch (action) {
       case "status": {
