@@ -149,8 +149,7 @@ Your plan should include:
   }
 
   // Configure MCP servers if the chat has permissions
-  // Currently only Claude Code supports MCP
-  if (options.mcp && options.mcp.permissions.length > 0 && agent === "claude-code") {
+  if (options.mcp && options.mcp.permissions.length > 0) {
     const mcpServers = buildMCPConfig({
       permissions: options.mcp.permissions,
       github: {
@@ -169,10 +168,38 @@ Your plan should include:
           return result.result ?? ""
         },
       }
-      await configureMCPServers(sandboxAdapter, mcpServers)
-      console.log(
-        `[createBackgroundAgentSession] Configured MCP servers: ${Object.keys(mcpServers).join(", ")}`
-      )
+
+      if (agent === "claude-code") {
+        // Claude Code uses ~/.claude/settings.json
+        await configureMCPServers(sandboxAdapter, mcpServers)
+        console.log(
+          `[createBackgroundAgentSession] Configured MCP servers for Claude: ${Object.keys(mcpServers).join(", ")}`
+        )
+      } else if (agent === "opencode") {
+        // OpenCode uses opencode.json in the project root or ~/.config/opencode/opencode.json
+        // Format: { "mcp": { "serverName": { "type": "local", "command": "...", "args": [...], "environment": {...} } } }
+        const opencodeMcpConfig: Record<string, unknown> = {}
+        for (const [name, config] of Object.entries(mcpServers)) {
+          opencodeMcpConfig[name] = {
+            type: "local",
+            command: config.command,
+            args: config.args,
+            environment: config.env,
+            enabled: true,
+          }
+        }
+        const opencodeConfig = { mcp: opencodeMcpConfig }
+        const configJson = JSON.stringify(opencodeConfig, null, 2)
+        const safeConfig = configJson.replace(/'/g, "'\\''")
+
+        // Write to project root (higher precedence than global)
+        await sandboxAdapter.executeCommand(
+          `echo '${safeConfig}' > '${options.repoPath}/opencode.json'`
+        )
+        console.log(
+          `[createBackgroundAgentSession] Configured MCP servers for OpenCode: ${Object.keys(mcpServers).join(", ")}`
+        )
+      }
     }
   }
 
