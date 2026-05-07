@@ -17,6 +17,7 @@ import { LimitReachedDialog } from "@/components/modals/LimitReachedDialog"
 import { BranchPickerModal } from "@/components/modals/BranchPickerModal"
 import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, ForcePushDialog, useGitDialogs } from "@/components/modals/GitDialogs"
 import { EnvironmentVariablesModal } from "@/components/modals/EnvironmentVariablesModal"
+import { MCPIntegrationsModal } from "@/components/modals/MCPIntegrationsModal"
 import { MobileCommandsMenu } from "@/components/MobileCommandsMenu"
 import { MobileRenameModal } from "@/components/ui/MobileBottomSheet"
 import { ScheduledJobForm } from "@/components/scheduled-jobs/ScheduledJobForm"
@@ -135,6 +136,9 @@ export default function HomePage() {
   const [envVarsModalOpen, setEnvVarsModalOpen] = useState(false)
   const [envVarsChatEnvVars, setEnvVarsChatEnvVars] = useState<Record<string, string>>({})
   const [envVarsRepoEnvVars, setEnvVarsRepoEnvVars] = useState<Record<string, string>>({})
+  const [integrationsModalOpen, setIntegrationsModalOpen] = useState(false)
+  const [integrationsMcpPermissions, setIntegrationsMcpPermissions] = useState<string[]>([])
+  const [integrationsMcpAllowedRepos, setIntegrationsMcpAllowedRepos] = useState<string[]>([])
   const [scheduledJobFormOpen, setScheduledJobFormOpen] = useState(false)
   const [scheduledJobsRefreshKey, setScheduledJobsRefreshKey] = useState(0)
   const [selectedScheduledJob, setSelectedScheduledJob] = useState<{ id: string; name: string } | null>(null)
@@ -506,6 +510,34 @@ export default function HomePage() {
       })
     }
   }, [currentChatId, isDraftChatId, chats])
+
+  // Handler for opening integrations modal
+  const handleOpenIntegrations = useCallback(async () => {
+    if (!currentChatId || isDraftChatId(currentChatId)) return
+
+    try {
+      // Fetch MCP permissions for this chat
+      const res = await fetch(`/api/chats/${currentChatId}/mcp`)
+      const data = res.ok ? await res.json() : { mcpPermissions: [], mcpAllowedRepos: [] }
+
+      setIntegrationsMcpPermissions(data.mcpPermissions || [])
+      setIntegrationsMcpAllowedRepos(data.mcpAllowedRepos || [])
+      setIntegrationsModalOpen(true)
+    } catch (error) {
+      console.error("Failed to fetch MCP permissions:", error)
+    }
+  }, [currentChatId, isDraftChatId])
+
+  // Handler for saving integrations
+  const handleSaveIntegrations = useCallback(async (mcpPermissions: string[], mcpAllowedRepos: string[]) => {
+    if (!currentChatId || isDraftChatId(currentChatId)) return
+
+    await fetch(`/api/chats/${currentChatId}/mcp`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mcpPermissions, mcpAllowedRepos }),
+    })
+  }, [currentChatId, isDraftChatId])
 
   // Auto-enter draft mode if user is authenticated but has no chat selected.
   // This replaces the old auto-create behavior - now we just enter draft mode
@@ -1167,6 +1199,7 @@ export default function HomePage() {
       onCopyCloneCommand={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? handleCopyCloneCommand : undefined}
       onCopyCheckoutCommand={currentChat?.branch ? handleCopyCheckoutCommand : undefined}
       onOpenEnvVars={currentChat ? handleOpenEnvVars : undefined}
+      onOpenIntegrations={currentChat ? handleOpenIntegrations : undefined}
       chatIds={displayChats.map((c) => c.id)}
       onNavigateChat={handleNavigateChat}
       currentChatId={displayCurrentChatId}
@@ -1482,6 +1515,16 @@ export default function HomePage() {
           onSave={handleSaveEnvVars}
           initialChatEnvVars={envVarsChatEnvVars}
           initialRepoEnvVars={envVarsRepoEnvVars}
+          isMobile={isMobile}
+        />
+
+        <MCPIntegrationsModal
+          open={integrationsModalOpen}
+          onClose={() => setIntegrationsModalOpen(false)}
+          chatId={displayCurrentChatId || ""}
+          onSave={handleSaveIntegrations}
+          initialMcpPermissions={integrationsMcpPermissions}
+          initialMcpAllowedRepos={integrationsMcpAllowedRepos}
           isMobile={isMobile}
         />
 

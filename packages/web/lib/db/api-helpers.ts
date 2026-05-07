@@ -268,6 +268,8 @@ export async function getChatWithAuth(
   parentChatId: string | null
   needsSync: boolean
   environmentVariables: unknown
+  mcpPermissions: string[]
+  mcpAllowedRepos: string[]
   createdAt: Date
   updatedAt: Date
   lastActiveAt: Date
