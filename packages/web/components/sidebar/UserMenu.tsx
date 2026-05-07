@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { signOut } from "next-auth/react"
 import { Settings, LogOut, HelpCircle, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { clearAllStorage } from "@/lib/storage"
+import { useClickOutside } from "@/lib/hooks/useClickOutside"
+import { useModals } from "@/lib/contexts"
 
 interface UserMenuProps {
   user: {
@@ -13,26 +15,15 @@ interface UserMenuProps {
     image?: string | null
     isAdmin?: boolean
   }
-  onOpenSettings: () => void
-  onOpenHelp?: () => void
   collapsed: boolean
 }
 
-export function UserMenu({ user, onOpenSettings, onOpenHelp, collapsed }: UserMenuProps) {
+export function UserMenu({ user, collapsed }: UserMenuProps) {
+  const modals = useModals()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    if (menuOpen) {
-      document.addEventListener("mousedown", handleClickOutside)
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [menuOpen])
+  useClickOutside(menuRef, () => setMenuOpen(false), menuOpen)
 
   const avatar = user.image ? (
     <img
@@ -90,7 +81,7 @@ export function UserMenu({ user, onOpenSettings, onOpenHelp, collapsed }: UserMe
           )}
           <button
             onClick={() => {
-              onOpenSettings()
+              modals.openSettings()
               setMenuOpen(false)
             }}
             className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
@@ -98,18 +89,16 @@ export function UserMenu({ user, onOpenSettings, onOpenHelp, collapsed }: UserMe
             <Settings className="h-4 w-4" />
             Settings
           </button>
-          {onOpenHelp && (
-            <button
-              onClick={() => {
-                onOpenHelp()
-                setMenuOpen(false)
-              }}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
-            >
-              <HelpCircle className="h-4 w-4" />
-              Help
-            </button>
-          )}
+          <button
+            onClick={() => {
+              modals.setHelpOpen(true)
+              setMenuOpen(false)
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help
+          </button>
           <button
             onClick={() => {
               clearAllStorage()

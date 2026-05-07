@@ -29,6 +29,7 @@ import { useMobile } from "@/lib/hooks/useMobile"
 import { useGitHubTokenCheck } from "@/lib/hooks/useGitHubTokenCheck"
 import { usePreview } from "@/lib/hooks/usePreview"
 import { useModalState } from "@/lib/hooks/useModalState"
+import { ChatProvider, ModalProvider, GitProvider, type ChatContextValue, type GitContextValue } from "@/lib/contexts"
 import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent, type Agent, type Message, type Chat } from "@/lib/types"
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import { PATHS } from "@upstream/common"
@@ -966,6 +967,58 @@ export default function HomePage() {
     updateDraft(currentChatId, draft)
   }, [isDraftMode, currentChatId, updateDraft])
 
+  // Build context values for child components
+  const chatContextValue: ChatContextValue = useMemo(() => ({
+    currentChat: displayCurrentChat,
+    currentChatId: displayCurrentChatId,
+    chats: displayChats,
+    settings,
+    credentialFlags,
+    isHydrated,
+    isLoadingMessages,
+    isSending: isSendingMessage,
+    selectChat: handleSelectChat,
+    startNewChat,
+    removeChat,
+    renameChat,
+    updateCurrentChat: handleUpdateChatProp,
+    updateChatById,
+    sendMessage: handleSendMessage,
+    stopAgent,
+    addMessage: handleAddMessage,
+    enqueueMessage,
+    removeQueuedMessage,
+    resumeQueue,
+    drafts,
+    updateDraft,
+    clearDraft,
+    isDraftChatId,
+    draftChatConfig,
+    updateDraftChatConfig,
+    hasMoreMessages,
+    loadOlderMessages: currentChat ? () => loadOlderMessages(currentChat.id) : async () => false,
+    refetchMessages,
+    deletingChatIds,
+    unseenChatIds,
+    updateChatRepo,
+  }), [
+    displayCurrentChat, displayCurrentChatId, displayChats, settings, credentialFlags,
+    isHydrated, isLoadingMessages, isSendingMessage, handleSelectChat, startNewChat,
+    removeChat, renameChat, handleUpdateChatProp, updateChatById, handleSendMessage,
+    stopAgent, handleAddMessage, enqueueMessage, removeQueuedMessage, resumeQueue,
+    drafts, updateDraft, clearDraft, isDraftChatId, draftChatConfig, updateDraftChatConfig,
+    hasMoreMessages, loadOlderMessages, currentChat, refetchMessages, deletingChatIds,
+    unseenChatIds, updateChatRepo,
+  ])
+
+  const gitContextValue: GitContextValue = useMemo(() => ({
+    ...gitDialogs,
+    canBranch,
+    handleBranchChat,
+    handleBranchWithMessage,
+    handleBranchQueuedMessage,
+  }), [gitDialogs, canBranch, handleBranchChat, handleBranchWithMessage, handleBranchQueuedMessage])
+
   return (
     <PaletteProvider
       repos={repos}
@@ -993,7 +1046,7 @@ export default function HomePage() {
         currentChat?.sandboxId
           ? () => {
               // Generate a unique terminal ID by finding the next available number
-              const existingTerminals = preview.preview.previewItems.filter((i) => i.type === "terminal")
+              const existingTerminals = preview.previewItems.filter((i) => i.type === "terminal")
               const terminalNumbers = existingTerminals.map((t) => {
                 if (t.type !== "terminal") return 0
                 const match = t.id.match(/-(\d+)$/)
@@ -1018,6 +1071,9 @@ export default function HomePage() {
       currentChatId={displayCurrentChatId}
       onSelectChat={handleSelectChat}
     >
+    <ModalProvider isMobile={isMobile} onMobileSidebarClose={() => setMobileSidebarOpen(false)}>
+    <ChatProvider value={chatContextValue}>
+    <GitProvider value={gitContextValue}>
     <div className={`flex overflow-hidden ${isMobile ? 'h-screen-mobile' : 'h-screen'}`}>
       {/* Desktop Sidebar */}
       {!isMobile && (
@@ -1030,12 +1086,10 @@ export default function HomePage() {
           onNewChat={handleNewChat}
           onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
           onRenameChat={renameChat}
-          onOpenSettings={() => modals.openSettings()}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
-          onOpenHelp={() => modals.setHelpOpen(true)}
           isMobile={false}
           repoFilter={repoFilter}
           onRepoFilterChange={setRepoFilter}
@@ -1061,12 +1115,10 @@ export default function HomePage() {
           onNewChat={handleNewChat}
           onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
           onRenameChat={renameChat}
-          onOpenSettings={() => modals.openSettings()}
           collapsed={false}
           onToggleCollapse={() => {}}
           width={280}
           onWidthChange={() => {}}
-          onOpenHelp={() => modals.setHelpOpen(true)}
           isMobile={true}
           mobileOpen={mobileSidebarOpen}
           onMobileClose={() => setMobileSidebarOpen(false)}
@@ -1076,7 +1128,6 @@ export default function HomePage() {
           onToggleChatCollapsed={toggleChatCollapsed}
           onRequestMergeChats={handleRequestMergeChats}
           onRequestRebaseChat={handleRequestRebaseChat}
-          onMobileRename={(chatId, name) => modals.setMobileRenameChat({ id: chatId, name })}
           onOpenScheduledJobs={() => {
             handleOpenScheduledJobs()
             setMobileSidebarOpen(false)
@@ -1108,7 +1159,7 @@ export default function HomePage() {
             ) : (
               <div className="relative flex-1 min-w-0" ref={mobileTitleMenuRef}>
                 <button
-                  onClick={() => displayCurrentChat && modals.setMobileTitleMenuOpen((v) => !v)}
+                  onClick={() => displayCurrentChat && modals.setMobileTitleMenuOpen(!modals.mobileTitleMenuOpen)}
                   className="flex items-center gap-1 text-base font-semibold truncate max-w-full hover:bg-accent active:bg-accent rounded-md px-2 py-1 -ml-2 transition-colors"
                 >
                   <span className="truncate">{displayCurrentChat?.displayName || "Background Agents"}</span>
@@ -1204,28 +1255,16 @@ export default function HomePage() {
                   onChangeRepo={handleChangeRepo}
                   onChangeBranch={handleChangeBranch}
                   onUpdateChat={handleUpdateChatProp}
-                  onOpenSettings={modals.openSettings}
                   onSlashCommand={handleSlashCommand}
-                  onRequireSignIn={!session ? () => modals.setSignInModalOpen(true) : undefined}
-                  onDeleteChat={displayCurrentChatId ? () => removeChat(displayCurrentChatId, getNextChatId) : undefined}
-                  onOpenHelp={() => modals.setHelpOpen(true)}
                   onOpenFile={(filePath) => {
                     const filename = filePath.split("/").pop() || filePath
                     preview.openPreview({ type: "file", filePath, filename })
                   }}
-                  onForcePush={() => gitDialogs.setForcePushOpen(true)}
                   onOpenEnvVars={handleOpenEnvVars}
                   isMobile={isMobile}
-                  rebaseConflict={gitDialogs.rebaseConflict}
-                  onAbortConflict={gitDialogs.handleAbortConflict}
-                  conflictActionLoading={gitDialogs.actionLoading}
-                  onBranchWithMessage={handleBranchWithMessage}
-                  onBranchQueuedMessage={handleBranchQueuedMessage}
-                  canBranch={canBranch}
                   isLoadingMessages={isLoadingMessages}
                   draft={currentDraft}
                   onDraftChange={handleDraftChange}
-                  onCreateScheduledJob={() => modals.setScheduledJobFormOpen(true)}
                   isSending={isSendingMessage}
                   onOpenPlan={(messageId) => preview.openPreview({ type: "plan", messageId, content: "" })}
                   hasMoreMessages={hasMoreMessages}
@@ -1251,9 +1290,9 @@ export default function HomePage() {
                   repo={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? currentChat.repo : null}
                   branch={currentChat?.branch ?? currentChat?.baseBranch ?? null}
                   onClose={preview.closePreview}
-                  allItems={preview.preview.previewItems}
+                  allItems={preview.previewItems}
                   onSelectItem={preview.selectPreviewItem}
-                  onCloseItem={preview.preview.closePreviewItem}
+                  onCloseItem={preview.closePreviewItem}
                   messages={currentChat?.messages}
                 />
               </>
@@ -1324,7 +1363,7 @@ export default function HomePage() {
 
         <EnvironmentVariablesModal
           open={modals.envVarsModalOpen}
-          onClose={() => setEnvVarsModalOpen(false)}
+          onClose={() => modals.setEnvVarsModalOpen(false)}
           chatId={displayCurrentChatId || ""}
           repoName={displayCurrentChat?.repo !== NEW_REPOSITORY ? displayCurrentChat?.repo : undefined}
           onSave={handleSaveEnvVars}
@@ -1464,6 +1503,9 @@ export default function HomePage() {
         isMobile={isMobile}
       />
     </div>
+    </GitProvider>
+    </ChatProvider>
+    </ModalProvider>
     </PaletteProvider>
   )
 }
