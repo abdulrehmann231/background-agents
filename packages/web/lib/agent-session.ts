@@ -197,9 +197,17 @@ Your plan should include:
         const safeConfig = configJson.replace(/'/g, "'\\''")
 
         // Write to project root (higher precedence than global)
+        const configPath = `${options.repoPath}/opencode.json`
         await sandboxAdapter.executeCommand(
-          `echo '${safeConfig}' > '${options.repoPath}/opencode.json'`
+          `echo '${safeConfig}' > '${configPath}'`
         )
+
+        // Debug: Verify file was written and log its content
+        const verifyResult = await sandboxAdapter.executeCommand(
+          `cat '${configPath}' 2>&1`
+        )
+        console.log(`[createBackgroundAgentSession] OpenCode config written to: ${configPath}`)
+        console.log(`[createBackgroundAgentSession] OpenCode config content:\n${verifyResult}`)
         console.log(
           `[createBackgroundAgentSession] Configured MCP servers for OpenCode: ${Object.keys(mcpServers).join(", ")}`
         )
