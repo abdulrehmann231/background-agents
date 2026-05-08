@@ -486,18 +486,22 @@ export async function POST(
     let mcpOptions: MCPOptions | undefined
     if (chat.mcpPermissions && chat.mcpPermissions.length > 0) {
       const smitheryApiKey = process.env.SMITHERY_API_KEY
-      if (smitheryApiKey) {
+      // Use the user's GitHub token for MCP - this is preferred over Smithery
+      // because Smithery requires interactive OAuth which doesn't work in headless sandboxes
+      if (githubToken || smitheryApiKey) {
         mcpOptions = {
           permissions: chat.mcpPermissions as MCPPermission[],
           allowedRepos: chat.mcpAllowedRepos?.length ? chat.mcpAllowedRepos : undefined,
+          githubToken: githubToken ?? undefined,
           smitheryApiKey,
         }
         console.log(
-          `[chats/messages] MCP enabled for chat ${chatId}: permissions=${chat.mcpPermissions.join(",")}`
+          `[chats/messages] MCP enabled for chat ${chatId}: permissions=${chat.mcpPermissions.join(",")}, ` +
+          `auth=${githubToken ? "github-token" : "smithery"}`
         )
       } else {
         console.warn(
-          `[chats/messages] Chat ${chatId} has MCP permissions but SMITHERY_API_KEY is not set`
+          `[chats/messages] Chat ${chatId} has MCP permissions but no GitHub token or SMITHERY_API_KEY available`
         )
       }
     }
