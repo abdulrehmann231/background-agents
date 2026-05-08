@@ -18,28 +18,6 @@ const CLAUDE_MCP_SETTINGS_FILE = "/home/daytona/.claude/settings.json"
 const CLAUDE_CODE_CREDENTIALS_ENV = "CLAUDE_CODE_CREDENTIALS"
 
 /**
- * Build MCP settings JSON for Claude Code
- *
- * Claude Code reads MCP server configuration from ~/.claude/settings.json
- * Format: { "mcpServers": { "serverName": { "command": "...", "args": [...], "env": {...} } } }
- */
-function buildMCPSettingsJson(mcpServers: Record<string, MCPServerSpec>): string {
-  const settings = {
-    mcpServers: Object.fromEntries(
-      Object.entries(mcpServers).map(([name, config]) => [
-        name,
-        {
-          command: config.command,
-          args: config.args,
-          env: config.env,
-        },
-      ])
-    ),
-  }
-  return JSON.stringify(settings, null, 2)
-}
-
-/**
  * Claude agent-specific setup: write credentials and MCP configuration.
  *
  * When CLAUDE_CODE_CREDENTIALS environment variable is set, this function
@@ -77,28 +55,6 @@ async function claudeSetup(
 }
 
 /**
- * Write MCP server configuration to Claude settings file
- *
- * This is called separately from setup() because MCP servers are passed
- * via RunOptions, not environment variables.
- */
-async function writeMCPSettings(
-  sandbox: CodeAgentSandbox,
-  mcpServers: Record<string, MCPServerSpec>
-): Promise<void> {
-  if (!sandbox.executeCommand || Object.keys(mcpServers).length === 0) return
-
-  const settingsJson = buildMCPSettingsJson(mcpServers)
-  const safeSettings = settingsJson.replace(/'/g, "'\\''")
-
-  // Create directory and write settings file
-  await sandbox.executeCommand(
-    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeSettings}' > '${CLAUDE_MCP_SETTINGS_FILE}' && chmod 600 '${CLAUDE_MCP_SETTINGS_FILE}'`,
-    30
-  )
-}
-
-/**
  * Minimal sandbox interface for MCP configuration.
  * Only requires executeCommand capability.
  */
@@ -113,7 +69,8 @@ export interface MCPConfigSandbox {
  * Configure MCP servers for a Claude agent session
  *
  * Call this before starting an agent session to enable MCP integrations.
- * This writes the MCP configuration to ~/.claude/settings.json
+ * This merges the MCP configuration into ~/.claude/settings.json, preserving
+ * any existing settings like hooks.
  *
  * @example
  * ```typescript
@@ -135,12 +92,55 @@ export async function configureMCPServers(
 ): Promise<void> {
   if (Object.keys(mcpServers).length === 0) return
 
-  const settingsJson = buildMCPSettingsJson(mcpServers)
+  // Create directory first
+  await sandbox.executeCommand(
+    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}'`,
+    30
+  )
+
+  // Read existing settings to preserve hooks and other config
+  const existingResult = await sandbox.executeCommand(
+    `cat '${CLAUDE_MCP_SETTINGS_FILE}' 2>/dev/null || echo '{}'`,
+    30
+  )
+  const existingJson = typeof existingResult === 'string'
+    ? existingResult
+    : existingResult.output
+
+  let existing: Record<string, unknown> = {}
+  try {
+    existing = JSON.parse(existingJson.trim() || '{}')
+  } catch {
+    existing = {}
+  }
+
+  // Build new MCP servers config
+  const newMcpServers = Object.fromEntries(
+    Object.entries(mcpServers).map(([name, config]) => [
+      name,
+      {
+        command: config.command,
+        args: config.args,
+        env: config.env,
+      },
+    ])
+  )
+
+  // Merge MCP servers into existing settings (preserves hooks, etc.)
+  const merged = {
+    ...existing,
+    mcpServers: {
+      ...(existing.mcpServers as Record<string, unknown> || {}),
+      ...newMcpServers,
+    },
+  }
+
+  const settingsJson = JSON.stringify(merged, null, 2)
   const safeSettings = settingsJson.replace(/'/g, "'\\''")
 
-  // Create directory and write settings file
+  // Write merged settings file
   await sandbox.executeCommand(
-    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeSettings}' > '${CLAUDE_MCP_SETTINGS_FILE}' && chmod 600 '${CLAUDE_MCP_SETTINGS_FILE}'`,
+    `echo '${safeSettings}' > '${CLAUDE_MCP_SETTINGS_FILE}' && chmod 600 '${CLAUDE_MCP_SETTINGS_FILE}'`,
     30
   )
 }
