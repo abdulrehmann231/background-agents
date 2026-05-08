@@ -2,13 +2,14 @@
  * GitHub MCP Server Configuration
  *
  * Supports two authentication methods:
- * 1. Smithery (recommended) - Handles OAuth flow, token management
- * 2. Direct GitHub Token - For self-managed authentication
+ * 1. Direct GitHub Token (recommended for headless/sandbox environments)
+ *    - Works immediately without user interaction
+ *    - Uses @modelcontextprotocol/server-github
  *
- * The Smithery approach is preferred as it:
- * - Handles OAuth flow for you
- * - Manages token refresh automatically
- * - Never exposes credentials to the agent directly
+ * 2. Smithery - Handles OAuth flow, token management
+ *    - NOTE: Requires interactive OAuth authentication with GitHub
+ *    - Will NOT work in headless environments without pre-authentication
+ *    - User must have already connected GitHub via Smithery dashboard
  */
 
 import type { MCPServerConfig } from "./config"
@@ -83,14 +84,15 @@ export const GITHUB_MCP_TOOLS = {
 export function buildGitHubMCPConfig(
   options: GitHubMCPOptions
 ): MCPServerConfig | null {
-  // Prefer Smithery if API key is provided
-  if (options.smitheryApiKey) {
-    return buildSmitheryGitHubConfig(options)
-  }
-
-  // Fall back to direct GitHub token
+  // Prefer direct GitHub token for headless/sandbox environments
+  // Smithery requires interactive OAuth which doesn't work headless
   if (options.githubToken) {
     return buildDirectGitHubConfig(options)
+  }
+
+  // Fall back to Smithery if no direct token (requires pre-auth)
+  if (options.smitheryApiKey) {
+    return buildSmitheryGitHubConfig(options)
   }
 
   // No valid authentication method
@@ -99,6 +101,10 @@ export function buildGitHubMCPConfig(
 
 /**
  * Build configuration for Smithery-hosted GitHub MCP server
+ *
+ * NOTE: This requires the user to have pre-authenticated with GitHub via Smithery.
+ * The Smithery CLI will attempt OAuth which requires a browser - this will fail
+ * in headless environments unless the user has already authenticated.
  */
 function buildSmitheryGitHubConfig(options: GitHubMCPOptions): MCPServerConfig {
   const env: Record<string, string> = {
@@ -110,9 +116,11 @@ function buildSmitheryGitHubConfig(options: GitHubMCPOptions): MCPServerConfig {
     env.MCP_ALLOWED_REPOS = options.allowedRepos.join(",")
   }
 
+  // Use 'github' as the server name (the official Smithery GitHub MCP server)
+  // The API key is passed via environment variable, not --key flag
   return {
     command: "npx",
-    args: ["-y", "@smithery/cli@latest", "run", "@smithery-ai/github", "--key", options.smitheryApiKey!],
+    args: ["-y", "@smithery/cli@latest", "run", "github"],
     env,
   }
 }
