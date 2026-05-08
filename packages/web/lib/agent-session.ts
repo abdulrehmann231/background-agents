@@ -177,18 +177,22 @@ Your plan should include:
         )
       } else if (agent === "opencode") {
         // OpenCode uses opencode.json in the project root or ~/.config/opencode/opencode.json
-        // Format: { "mcp": { "serverName": { "type": "local", "command": "...", "args": [...], "environment": {...} } } }
+        // Format: { "mcp": { "serverName": { "type": "local", "command": ["cmd", "arg1", ...], "environment": {...} } } }
         const opencodeMcpConfig: Record<string, unknown> = {}
         for (const [name, config] of Object.entries(mcpServers)) {
+          // OpenCode expects command as an array: ["npx", "-y", "@smithery/cli", ...]
+          const commandArray = [config.command, ...config.args]
           opencodeMcpConfig[name] = {
             type: "local",
-            command: config.command,
-            args: config.args,
+            command: commandArray,
             environment: config.env,
             enabled: true,
           }
         }
-        const opencodeConfig = { mcp: opencodeMcpConfig }
+        const opencodeConfig = {
+          $schema: "https://opencode.ai/config.json",
+          mcp: opencodeMcpConfig,
+        }
         const configJson = JSON.stringify(opencodeConfig, null, 2)
         const safeConfig = configJson.replace(/'/g, "'\\''")
 
