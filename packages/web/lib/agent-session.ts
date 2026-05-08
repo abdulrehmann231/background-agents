@@ -172,6 +172,12 @@ Your plan should include:
       if (agent === "claude-code") {
         // Claude Code uses ~/.claude/settings.json
         await configureMCPServers(sandboxAdapter, mcpServers)
+
+        // Debug: Verify the settings file contains both hooks and mcpServers
+        const settingsResult = await sandboxAdapter.executeCommand(
+          `cat /home/daytona/.claude/settings.json 2>&1`
+        )
+        console.log(`[createBackgroundAgentSession] Claude settings.json content:\n${settingsResult}`)
         console.log(
           `[createBackgroundAgentSession] Configured MCP servers for Claude: ${Object.keys(mcpServers).join(", ")}`
         )
@@ -202,15 +208,33 @@ Your plan should include:
           `echo '${safeConfig}' > '${configPath}'`
         )
 
+        // Also write to global config location as fallback
+        const globalConfigDir = "/home/daytona/.config/opencode"
+        const globalConfigPath = `${globalConfigDir}/config.json`
+        await sandboxAdapter.executeCommand(
+          `mkdir -p '${globalConfigDir}' && echo '${safeConfig}' > '${globalConfigPath}'`
+        )
+
         // Debug: Verify file was written and log its content
         const verifyResult = await sandboxAdapter.executeCommand(
           `cat '${configPath}' 2>&1`
         )
         console.log(`[createBackgroundAgentSession] OpenCode config written to: ${configPath}`)
+        console.log(`[createBackgroundAgentSession] OpenCode global config written to: ${globalConfigPath}`)
         console.log(`[createBackgroundAgentSession] OpenCode config content:\n${verifyResult}`)
         console.log(
           `[createBackgroundAgentSession] Configured MCP servers for OpenCode: ${Object.keys(mcpServers).join(", ")}`
         )
+
+        // Test if MCP server can be reached by running opencode mcp list
+        try {
+          const mcpListResult = await sandboxAdapter.executeCommand(
+            `cd '${options.repoPath}' && opencode mcp list 2>&1 | head -20`
+          )
+          console.log(`[createBackgroundAgentSession] OpenCode MCP list output:\n${mcpListResult}`)
+        } catch (err) {
+          console.error(`[createBackgroundAgentSession] Failed to list MCP servers:`, err)
+        }
       }
     }
   }

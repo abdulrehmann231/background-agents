@@ -33,6 +33,7 @@ export const opencodeAgent: AgentDefinition = {
   capabilities: {
     supportsSystemPrompt: false,
     supportsResume: true,
+    supportsMCP: true,
   },
 
   buildCommand(options: RunOptions): CommandSpec {
