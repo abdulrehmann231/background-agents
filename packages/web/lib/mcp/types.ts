@@ -16,13 +16,14 @@ export interface McpToolsConfig {
 }
 
 /**
- * Smithery MCP server URLs
+ * Smithery MCP server URLs (*.run.tools format)
+ * These are the actual MCP endpoints that accept GitHub tokens directly
  */
 export const SMITHERY_MCP_SERVERS: Record<keyof McpToolsConfig, string> = {
-  github: "https://server.smithery.ai/@smithery-ai/github",
-  jira: "https://server.smithery.ai/@smithery-ai/jira",
-  slack: "https://server.smithery.ai/@smithery-ai/slack",
-  linear: "https://server.smithery.ai/@smithery-ai/linear",
+  github: "https://github.run.tools",
+  jira: "https://jira.run.tools", // Coming soon
+  slack: "https://slack.run.tools", // Coming soon
+  linear: "https://linear.run.tools", // Coming soon
 }
 
 /**
