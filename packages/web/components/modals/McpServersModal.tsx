@@ -49,7 +49,6 @@ interface RegistryServer {
   url: string | null
   verified: boolean
   useCount: number
-  isDeployed: boolean
 }
 
 type TabKey = "connected" | "browse"

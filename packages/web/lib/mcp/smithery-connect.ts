@@ -100,7 +100,7 @@ export function getSmitheryConnectionId(
 }
 
 /** Per-connection MCP endpoint the agent will call. */
-export function getSmitheryMcpEndpoint(
+function getSmitheryMcpEndpoint(
   namespace: string,
   connectionId: string
 ): string {

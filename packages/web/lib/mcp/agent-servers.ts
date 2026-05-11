@@ -10,10 +10,7 @@ import type { AgentMcpServer } from "@upstream/agent-configuration/mcp"
 
 /** Sanitize Smithery's slugs into a name acceptable to every agent CLI. */
 function safeServerName(qualifiedName: string): string {
-  return qualifiedName
-    .replace(/\//g, "-")
-    .replace(/[^a-zA-Z0-9_-]/g, "-")
-    .toLowerCase()
+  return qualifiedName.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase()
 }
 
 export async function loadChatMcpServers(

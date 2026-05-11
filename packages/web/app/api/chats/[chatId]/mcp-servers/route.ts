@@ -103,85 +103,51 @@ export async function POST(
   }
 
   try {
-    // Upsert by (chatId, qualifiedName). Re-clicking Connect on an existing
-    // row is fine — Smithery's PUT is idempotent.
-    const existing = await prisma.chatMcpServer.findUnique({
-      where: { chatId_qualifiedName: { chatId, qualifiedName: slug } },
-    })
-
+    // Smithery's PUT is idempotent; safe to call before we touch our DB.
     const connectionId = getSmitheryConnectionId(chatId, slug)
-
-    let serverId: string
-    if (existing) {
-      serverId = existing.id
-      await prisma.chatMcpServer.update({
-        where: { id: existing.id },
-        data: {
-          displayName: name,
-          iconUrl: iconUrl ?? null,
-          status: "pending",
-          lastError: null,
-        },
-      })
-    } else {
-      const created = await prisma.chatMcpServer.create({
-        data: {
-          chatId,
-          qualifiedName: slug,
-          displayName: name,
-          iconUrl: iconUrl ?? null,
-          smitheryConnectionId: connectionId,
-          smitheryNamespace: "", // populated by createSmitheryConnection
-          mcpUrl: url, // placeholder; replaced with Smithery endpoint on success
-          status: "pending",
-        },
-      })
-      serverId = created.id
-    }
-
     const result = await createSmitheryConnection(url, connectionId, name, apiKey)
 
-    if (result.status === "auth_required" && result.authorizationUrl) {
-      // Persist namespace + endpoint URL now so the finalize call has them.
-      await prisma.chatMcpServer.update({
-        where: { id: serverId },
-        data: {
-          smitheryNamespace: result.namespace,
-          mcpUrl: result.mcpEndpoint,
-        },
-      })
-      return Response.json({
-        connected: false,
-        serverId,
-        authUrl: result.authorizationUrl,
-      })
+    if (result.status === "error") {
+      return Response.json(
+        { error: result.error ?? "Smithery connection failed" },
+        { status: 502 }
+      )
     }
 
-    if (result.status === "connected") {
-      await prisma.chatMcpServer.update({
-        where: { id: serverId },
-        data: {
-          smitheryNamespace: result.namespace,
-          mcpUrl: result.mcpEndpoint,
-          encryptedApiKey: encrypt(apiKey),
-          status: "connected",
-          lastError: null,
-        },
-      })
+    const isConnected = result.status === "connected"
+    const row = {
+      smitheryConnectionId: connectionId,
+      smitheryNamespace: result.namespace,
+      mcpUrl: result.mcpEndpoint,
+      status: isConnected ? "connected" : "pending",
+      encryptedApiKey: isConnected ? encrypt(apiKey) : null,
+      lastError: null,
+    }
+    const { id: serverId } = await prisma.chatMcpServer.upsert({
+      where: { chatId_qualifiedName: { chatId, qualifiedName: slug } },
+      create: {
+        chatId,
+        qualifiedName: slug,
+        displayName: name,
+        iconUrl: iconUrl ?? null,
+        ...row,
+      },
+      update: {
+        displayName: name,
+        iconUrl: iconUrl ?? null,
+        ...row,
+      },
+      select: { id: true },
+    })
+
+    if (isConnected) {
       return Response.json({ connected: true, serverId })
     }
-
-    await prisma.chatMcpServer.update({
-      where: { id: serverId },
-      data: {
-        status: "error",
-        lastError: result.error ?? "Smithery connection failed",
-      },
+    return Response.json({
+      connected: false,
+      serverId,
+      authUrl: result.authorizationUrl,
     })
-    return Response.json(
-      { error: result.error ?? "Smithery connection failed" },
-      { status: 502 }
-    )
   } catch (err) {
     return internalError(err)
   }

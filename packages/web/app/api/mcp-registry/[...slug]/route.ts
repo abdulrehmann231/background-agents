@@ -58,9 +58,6 @@ export async function GET(
       description: data.description || "",
       iconUrl: data.iconUrl || null,
       url: data.connectionUrl || data.url || null,
-      tools: data.tools || [],
-      verified: data.verified || false,
-      useCount: data.useCount || 0,
     })
   } catch (err) {
     console.error("[MCP-registry/detail] Error:", err)

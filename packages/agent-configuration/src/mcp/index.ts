@@ -27,15 +27,14 @@ export interface AgentMcpServer {
   bearerToken: string
 }
 
-export interface McpConfigFile {
+interface McpConfigFile {
   filePath: string
   content: string
   /** JSON → use the merging path; YAML/TOML overwrite. */
   format: "json" | "toml" | "yaml"
 }
 
-/** Agents we know how to write configs for. */
-export const MCP_SUPPORTED_AGENTS = [
+const MCP_SUPPORTED_AGENTS = [
   "claude-code",
   "codex",
   "gemini",
@@ -43,9 +42,9 @@ export const MCP_SUPPORTED_AGENTS = [
   "goose",
 ] as const
 
-export type McpSupportedAgent = (typeof MCP_SUPPORTED_AGENTS)[number]
+type McpSupportedAgent = (typeof MCP_SUPPORTED_AGENTS)[number]
 
-export function agentSupportsMcp(agent: string): agent is McpSupportedAgent {
+function agentSupportsMcp(agent: string): agent is McpSupportedAgent {
   return MCP_SUPPORTED_AGENTS.includes(agent as McpSupportedAgent)
 }
 
@@ -151,10 +150,6 @@ function generateGooseConfig(servers: AgentMcpServer[]): McpConfigFile {
     lines.push(`    name: ${s.name}`)
     lines.push(`    uri: "${s.url}"`)
     lines.push(`    enabled: true`)
-    lines.push(`    envs:`)
-    // Goose passes envs to the MCP client; not used for headers, but doesn't
-    // hurt to keep them aligned for future debugging.
-    lines.push(`      MCP_AUTH: "Bearer ${s.bearerToken}"`)
     lines.push(`    headers:`)
     lines.push(`      Authorization: "Bearer ${s.bearerToken}"`)
   }
@@ -165,8 +160,7 @@ function generateGooseConfig(servers: AgentMcpServer[]): McpConfigFile {
   }
 }
 
-/** Dispatch to the right generator for this agent. */
-export function generateMcpConfigForAgent(
+function generateMcpConfigForAgent(
   agent: string,
   servers: AgentMcpServer[]
 ): McpConfigFile | null {

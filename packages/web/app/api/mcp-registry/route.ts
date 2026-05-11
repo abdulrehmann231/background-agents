@@ -51,7 +51,6 @@ function transformServer(server: SmitheryServer) {
     url,
     verified: server.verified,
     useCount: server.useCount,
-    isDeployed: server.isDeployed,
   }
 }
 
