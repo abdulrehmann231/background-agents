@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Eye, EyeOff, Key, Sun, Moon, Monitor, Bot, Settings as SettingsIcon, Copy, Check } from "lucide-react"
+import { X, Eye, EyeOff, Key, Sun, Moon, Monitor, Bot, Settings as SettingsIcon, Copy, Check, GitBranch, FlaskConical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -27,7 +27,7 @@ import {
 /** Which provider's API key field to highlight */
 export type HighlightKey = ProviderId | null
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "appearance"
+export type SectionKey = "general" | "api-keys" | "git" | "appearance" | "experimental"
 
 interface SettingsModalProps {
   open: boolean
@@ -55,7 +55,9 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 const sections: { key: SectionKey; label: string; icon: typeof Bot }[] = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "api-keys", label: "API Keys", icon: Key },
+  { key: "git", label: "Git", icon: GitBranch },
   { key: "appearance", label: "Appearance", icon: Sun },
+  { key: "experimental", label: "Experimental", icon: FlaskConical },
 ]
 
 const MASK = "***"
@@ -406,28 +408,17 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
           </SelectContent>
         </Select>
       </SettingsRow>
-      <SettingsRow
-        label="Rapid fire mode"
-        description="Send tasks without switching to them. The input clears so you can quickly delegate multiple tasks."
-      >
-        <button
-          type="button"
-          role="switch"
-          aria-checked={rapidFireMode}
-          onClick={() => setRapidFireMode(!rapidFireMode)}
-          className={cn(
-            "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            rapidFireMode ? "bg-primary" : "bg-input"
-          )}
-        >
-          <span
-            className={cn(
-              "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ease-in-out",
-              rapidFireMode ? "translate-x-4" : "translate-x-0"
-            )}
-          />
-        </button>
-      </SettingsRow>
+    </div>
+  )
+
+  const gitSection = (
+    <div>
+      {isMobile && (
+        <h3 className="flex items-center gap-2 font-semibold text-base mb-2">
+          <GitBranch className="h-5 w-5" />
+          Git
+        </h3>
+      )}
       <SettingsRow
         label="Disable pre-push checks"
         description="Allow agents to run git push and other normally blocked commands."
@@ -446,6 +437,39 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             className={cn(
               "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ease-in-out",
               disablePrepushChecks ? "translate-x-4" : "translate-x-0"
+            )}
+          />
+        </button>
+      </SettingsRow>
+    </div>
+  )
+
+  const experimentalSection = (
+    <div>
+      {isMobile && (
+        <h3 className="flex items-center gap-2 font-semibold text-base mb-2">
+          <FlaskConical className="h-5 w-5" />
+          Experimental
+        </h3>
+      )}
+      <SettingsRow
+        label="Rapid fire mode"
+        description="Send tasks without switching to them. The input clears so you can quickly delegate multiple tasks."
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={rapidFireMode}
+          onClick={() => setRapidFireMode(!rapidFireMode)}
+          className={cn(
+            "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            rapidFireMode ? "bg-primary" : "bg-input"
+          )}
+        >
+          <span
+            className={cn(
+              "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ease-in-out",
+              rapidFireMode ? "translate-x-4" : "translate-x-0"
             )}
           />
         </button>
@@ -610,7 +634,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
               >
                 {generalSection}
                 {apiKeysSection}
+                {gitSection}
                 {appearanceSection}
+                {experimentalSection}
               </div>
 
               {/* Footer */}
@@ -680,7 +706,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
                   </Dialog.Title>
                   {activeSection === "general" && generalSection}
                   {activeSection === "api-keys" && apiKeysSection}
+                  {activeSection === "git" && gitSection}
                   {activeSection === "appearance" && appearanceSection}
+                  {activeSection === "experimental" && experimentalSection}
                 </div>
 
                 <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-3">
