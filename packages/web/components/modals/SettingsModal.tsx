@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Eye, EyeOff, Key, Sun, Moon, Monitor, Bot, Settings as SettingsIcon, Copy, Check } from "lucide-react"
+import { X, Eye, EyeOff, Key, Sun, Moon, Monitor, Bot, Settings as SettingsIcon, Copy, Check, GitBranch, FlaskConical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -27,7 +27,7 @@ import {
 /** Which provider's API key field to highlight */
 export type HighlightKey = ProviderId | null
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "appearance"
+export type SectionKey = "general" | "api-keys" | "git" | "appearance" | "experimental"
 
 interface SettingsModalProps {
   open: boolean
@@ -55,7 +55,9 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 const sections: { key: SectionKey; label: string; icon: typeof Bot }[] = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "api-keys", label: "API Keys", icon: Key },
+  { key: "git", label: "Git", icon: GitBranch },
   { key: "appearance", label: "Appearance", icon: Sun },
+  { key: "experimental", label: "Experimental", icon: FlaskConical },
 ]
 
 const MASK = "***"
@@ -204,6 +206,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   const [defaultModel, setDefaultModel] = useState(initialDefaultModel)
   const [selectedTheme, setSelectedTheme] = useState<Theme>(settings.theme)
   const [rapidFireMode, setRapidFireMode] = useState(settings.rapidFireMode)
+  const [enablePrepushHooks, setEnablePrepushHooks] = useState(settings.enablePrepushHooks)
   const [activeSection, setActiveSection] = useState<SectionKey>(defaultSection)
 
   // Drag to dismiss (mobile only)
@@ -235,6 +238,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
       setDefaultModel(initialDefaultModel)
       setSelectedTheme(settings.theme)
       setRapidFireMode(settings.rapidFireMode)
+      setEnablePrepushHooks(settings.enablePrepushHooks)
       setActiveSection(defaultSection)
     }
   }, [open, settings, credentialFlags, initialDefaultAgent, initialDefaultModel, defaultSection])
@@ -299,7 +303,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     defaultAgent !== initialDefaultAgent ||
     defaultModel !== initialDefaultModel ||
     selectedTheme !== settings.theme ||
-    rapidFireMode !== settings.rapidFireMode
+    rapidFireMode !== settings.rapidFireMode ||
+    enablePrepushHooks !== settings.enablePrepushHooks
 
   const hasChanges = credChanged || settingsChanged
 
@@ -311,6 +316,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     if (defaultModel !== initialDefaultModel) settingsPatch.defaultModel = defaultModel
     if (selectedTheme !== settings.theme) settingsPatch.theme = selectedTheme
     if (rapidFireMode !== settings.rapidFireMode) settingsPatch.rapidFireMode = rapidFireMode
+    if (enablePrepushHooks !== settings.enablePrepushHooks) settingsPatch.enablePrepushHooks = enablePrepushHooks
 
     // Only send credential fields the user actually changed. Sending the
     // mask back ("***") would otherwise overwrite the real key.
@@ -402,6 +408,50 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
           </SelectContent>
         </Select>
       </SettingsRow>
+    </div>
+  )
+
+  const gitSection = (
+    <div>
+      {isMobile && (
+        <h3 className="flex items-center gap-2 font-semibold text-base mb-2">
+          <GitBranch className="h-5 w-5" />
+          Git
+        </h3>
+      )}
+      <SettingsRow
+        label="Enable pre-push hooks"
+        description="Run pre-push hooks during autopush. When disabled, autopush uses --no-verify."
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enablePrepushHooks}
+          onClick={() => setEnablePrepushHooks(!enablePrepushHooks)}
+          className={cn(
+            "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            enablePrepushHooks ? "bg-primary" : "bg-input"
+          )}
+        >
+          <span
+            className={cn(
+              "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ease-in-out",
+              enablePrepushHooks ? "translate-x-4" : "translate-x-0"
+            )}
+          />
+        </button>
+      </SettingsRow>
+    </div>
+  )
+
+  const experimentalSection = (
+    <div>
+      {isMobile && (
+        <h3 className="flex items-center gap-2 font-semibold text-base mb-2">
+          <FlaskConical className="h-5 w-5" />
+          Experimental
+        </h3>
+      )}
       <SettingsRow
         label="Rapid fire mode"
         description="Send tasks without switching to them. The input clears so you can quickly delegate multiple tasks."
@@ -584,7 +634,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
               >
                 {generalSection}
                 {apiKeysSection}
+                {gitSection}
                 {appearanceSection}
+                {experimentalSection}
               </div>
 
               {/* Footer */}
@@ -654,7 +706,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
                   </Dialog.Title>
                   {activeSection === "general" && generalSection}
                   {activeSection === "api-keys" && apiKeysSection}
+                  {activeSection === "git" && gitSection}
                   {activeSection === "appearance" && appearanceSection}
+                  {activeSection === "experimental" && experimentalSection}
                 </div>
 
                 <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-3">
