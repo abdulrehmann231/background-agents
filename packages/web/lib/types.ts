@@ -212,6 +212,8 @@ export interface Settings {
   defaultModel: string | null
   theme: Theme
   rapidFireMode: boolean
+  /** When true, agents are allowed to run git push and other normally blocked commands */
+  disablePrepushChecks: boolean
 }
 
 export type { CredentialId, Credentials, CredentialFlags } from "./credentials"

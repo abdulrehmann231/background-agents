@@ -34,6 +34,7 @@ function readSettings(raw: unknown): Settings {
     defaultModel: s.defaultModel ?? null,
     theme: s.theme ?? DEFAULT_SETTINGS.theme,
     rapidFireMode: s.rapidFireMode ?? DEFAULT_SETTINGS.rapidFireMode,
+    disablePrepushChecks: s.disablePrepushChecks ?? DEFAULT_SETTINGS.disablePrepushChecks,
   }
 }
 
