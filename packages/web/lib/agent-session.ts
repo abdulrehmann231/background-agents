@@ -139,9 +139,12 @@ Your plan should include:
     await setupCodexRules(sandbox)
   }
 
-  // Write per-agent MCP config files for the connected Smithery servers.
+  // Write per-agent MCP config files for the connected MCP servers.
   // Must run before createSession() so the CLI loads them on spawn.
-  if (options.mcpServers && options.mcpServers.length > 0) {
+  // Always call — even with an empty list — so that disconnecting the last
+  // server overwrites the previous on-disk config in a reused sandbox. Skipping
+  // the call here would leave stale entries the agent CLI still loads.
+  if (options.mcpServers) {
     try {
       await setupMcpForAgent(sandbox, {
         agent,

@@ -16,16 +16,25 @@
 import * as Dialog from "@radix-ui/react-dialog"
 import {
   BadgeCheck,
+  ExternalLink,
+  Github,
   Loader2,
   Plug,
   Plus,
   Search,
+  Settings,
   Trash2,
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { focusChatPrompt } from "@/components/ui/modal-header"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 // =============================================================================
@@ -59,6 +68,9 @@ interface McpServersModalProps {
   chatId: string
 }
 
+/** Sentinel used by the server-side ChatMcpServer row for the GitHub MCP. */
+const GITHUB_QUALIFIED_NAME = "github/github"
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -85,6 +97,11 @@ export function McpServersModal({
   const [connectingSlug, setConnectingSlug] = useState<string | null>(null)
 
   const popupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // GitHub App install state (user-level)
+  const [githubInstalled, setGithubInstalled] = useState<boolean | null>(null)
+  const [githubInstallationId, setGithubInstallationId] = useState<string | null>(null)
+  const [githubBusy, setGithubBusy] = useState(false)
 
   // Reset state when the modal opens.
   useEffect(() => {
@@ -138,10 +155,30 @@ export function McpServersModal({
     []
   )
 
-  // Load connected list every time the modal opens.
+  const loadGithubStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/mcp/connect/github")
+      if (res.ok) {
+        const data = await res.json()
+        setGithubInstalled(!!data.connected)
+        setGithubInstallationId(data.installationId ?? null)
+      } else {
+        setGithubInstalled(false)
+        setGithubInstallationId(null)
+      }
+    } catch {
+      setGithubInstalled(false)
+      setGithubInstallationId(null)
+    }
+  }, [])
+
+  // Load connected list + GitHub status every time the modal opens.
   useEffect(() => {
-    if (open) loadConnected()
-  }, [open, loadConnected])
+    if (open) {
+      loadConnected()
+      loadGithubStatus()
+    }
+  }, [open, loadConnected, loadGithubStatus])
 
   // Load registry when entering Browse, then re-load on debounced search.
   useEffect(() => {
@@ -175,6 +212,94 @@ export function McpServersModal({
       }
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  /** Add the GitHub MCP sentinel row to this chat. */
+  async function addGithubToChat() {
+    const res = await fetch(`/api/chats/${chatId}/mcp-servers/github`, {
+      method: "POST",
+    })
+    if (res.ok) await loadConnected()
+  }
+
+  /**
+   * Install the GitHub App if needed, then add the GitHub MCP row to the chat.
+   * Status check tells us which path we're on.
+   */
+  async function handleConnectGithub() {
+    if (githubBusy) return
+    setGithubBusy(true)
+    try {
+      const statusRes = await fetch("/api/mcp/connect/github")
+      if (!statusRes.ok) throw new Error("Failed to check GitHub status")
+      const status = await statusRes.json()
+
+      if (status.connected) {
+        await addGithubToChat()
+        return
+      }
+
+      // Open install popup and wait for the callback to postMessage success.
+      const popup = window.open(
+        status.installUrl,
+        "github-app-install",
+        "width=600,height=700,scrollbars=yes"
+      )
+      if (!popup || popup.closed) return
+
+      await new Promise<void>((resolve) => {
+        function onMessage(e: MessageEvent) {
+          const data = e.data as { source?: string; ok?: boolean } | null
+          if (data?.source === "github-app-install") {
+            window.removeEventListener("message", onMessage)
+            resolve()
+          }
+        }
+        window.addEventListener("message", onMessage)
+
+        // Also resolve when the popup closes — postMessage can be blocked by
+        // some browsers / CSPs, but a closed popup is a reliable signal.
+        const t = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(t)
+            window.removeEventListener("message", onMessage)
+            resolve()
+          }
+        }, 500)
+      })
+
+      // Re-fetch status: if it's now connected, add the row.
+      const after = await fetch("/api/mcp/connect/github")
+      const afterData = after.ok ? await after.json() : { connected: false }
+      setGithubInstalled(!!afterData.connected)
+      if (afterData.connected) await addGithubToChat()
+    } catch (err) {
+      console.error("[McpServersModal] handleConnectGithub failed:", err)
+    } finally {
+      setGithubBusy(false)
+    }
+  }
+
+  /**
+   * Hard disconnect: clear installationId on the user and drop every GitHub
+   * row across this user's chats. The actual App stays installed on
+   * github.com until the user removes it there — we just lose access.
+   */
+  async function handleUninstallGithubApp() {
+    if (!confirm("Uninstall the GitHub App for your account? This removes GitHub MCP from every chat.")) {
+      return
+    }
+    setGithubBusy(true)
+    try {
+      const res = await fetch("/api/mcp/connect/github", { method: "DELETE" })
+      if (res.ok) {
+        setGithubInstalled(false)
+        setGithubInstallationId(null)
+        await loadConnected()
+      }
+    } finally {
+      setGithubBusy(false)
     }
   }
 
@@ -318,6 +443,9 @@ export function McpServersModal({
                 deletingId={deletingId}
                 onDisconnect={handleDisconnect}
                 onBrowse={() => setTab("browse")}
+                githubInstallationId={githubInstallationId}
+                onUninstallGithub={handleUninstallGithubApp}
+                githubBusy={githubBusy}
               />
             )}
             {tab === "browse" && (
@@ -336,6 +464,11 @@ export function McpServersModal({
                   setPage(next)
                   loadRegistry(search, next, true)
                 }}
+                githubConnected={connected.some(
+                  (s) => s.qualifiedName === GITHUB_QUALIFIED_NAME
+                )}
+                githubBusy={githubBusy}
+                onConnectGithub={handleConnectGithub}
               />
             )}
           </div>
@@ -355,12 +488,18 @@ function ConnectedView({
   deletingId,
   onDisconnect,
   onBrowse,
+  githubInstallationId,
+  onUninstallGithub,
+  githubBusy,
 }: {
   servers: ConnectedServer[]
   loading: boolean
   deletingId: string | null
   onDisconnect: (id: string) => void
   onBrowse: () => void
+  githubInstallationId: string | null
+  onUninstallGithub: () => void
+  githubBusy: boolean
 }) {
   if (loading) {
     return (
@@ -387,51 +526,91 @@ function ConnectedView({
   }
   return (
     <div className="space-y-2">
-      {servers.map((s) => (
-        <div
-          key={s.id}
-          className="flex items-center gap-3 rounded-lg border border-border p-3"
-        >
-          {s.iconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={s.iconUrl}
-              alt=""
-              className="h-8 w-8 rounded shrink-0"
-            />
-          ) : (
-            <div className="h-8 w-8 rounded bg-muted shrink-0 flex items-center justify-center">
-              <Plug className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{s.displayName}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {s.qualifiedName}
-            </p>
-            {s.status === "error" && s.lastError && (
-              <p className="text-xs text-destructive mt-0.5">{s.lastError}</p>
-            )}
-            {s.status === "pending" && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Awaiting authorization…
-              </p>
-            )}
-          </div>
-          <button
-            onClick={() => onDisconnect(s.id)}
-            disabled={deletingId === s.id}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-50"
-            aria-label="Disconnect"
+      {servers.map((s) => {
+        const isGithub = s.qualifiedName === GITHUB_QUALIFIED_NAME
+        return (
+          <div
+            key={s.id}
+            className="flex items-center gap-3 rounded-lg border border-border p-3"
           >
-            {deletingId === s.id ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {isGithub ? (
+              <div className="h-8 w-8 rounded bg-muted shrink-0 flex items-center justify-center">
+                <Github className="h-4 w-4 text-muted-foreground" />
+              </div>
+            ) : s.iconUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={s.iconUrl}
+                alt=""
+                className="h-8 w-8 rounded shrink-0"
+              />
             ) : (
-              <Trash2 className="h-4 w-4" />
+              <div className="h-8 w-8 rounded bg-muted shrink-0 flex items-center justify-center">
+                <Plug className="h-4 w-4 text-muted-foreground" />
+              </div>
             )}
-          </button>
-        </div>
-      ))}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{s.displayName}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {s.qualifiedName}
+              </p>
+              {s.status === "error" && s.lastError && (
+                <p className="text-xs text-destructive mt-0.5">{s.lastError}</p>
+              )}
+              {s.status === "pending" && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Awaiting authorization…
+                </p>
+              )}
+            </div>
+            {isGithub && githubInstallationId && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
+                    disabled={githubBusy}
+                    aria-label="GitHub settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={`https://github.com/settings/installations/${githubInstallationId}`}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Manage repositories
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={onUninstallGithub}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Uninstall app entirely
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <button
+              onClick={() => onDisconnect(s.id)}
+              disabled={deletingId === s.id}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer disabled:opacity-50"
+              aria-label="Disconnect"
+            >
+              {deletingId === s.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -447,6 +626,9 @@ function BrowseView({
   onConnect,
   hasMore,
   onLoadMore,
+  githubConnected,
+  githubBusy,
+  onConnectGithub,
 }: {
   servers: RegistryServer[]
   connectedSlugs: Set<string>
@@ -458,6 +640,9 @@ function BrowseView({
   onConnect: (s: RegistryServer) => void
   hasMore: boolean
   onLoadMore: () => void
+  githubConnected: boolean
+  githubBusy: boolean
+  onConnectGithub: () => void
 }) {
   return (
     <div>
@@ -466,11 +651,49 @@ function BrowseView({
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search MCP servers (e.g. exa, github, postgres)"
+          placeholder="Search MCP servers (e.g. exa, postgres, notion)"
           className="pl-8 text-sm"
           autoComplete="off"
           spellCheck={false}
         />
+      </div>
+
+      {/* Featured: our GitHub App entry. Always shown above the registry
+          search results, regardless of the search query. */}
+      <div className="mb-3">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70 mb-1.5 px-1">
+          Featured
+        </p>
+        <div className="flex items-center gap-3 rounded-lg border border-border p-3 bg-muted/30">
+          <div className="h-8 w-8 rounded bg-muted shrink-0 flex items-center justify-center">
+            <Github className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">GitHub · via our app</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              Issues, PRs, code search, and repo access via a scoped GitHub App
+              installation.
+            </p>
+          </div>
+          {githubConnected ? (
+            <span className="text-xs text-muted-foreground px-2">
+              Connected
+            </span>
+          ) : (
+            <button
+              onClick={onConnectGithub}
+              disabled={githubBusy}
+              className="rounded bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center gap-1"
+            >
+              {githubBusy ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3" />
+              )}
+              Connect
+            </button>
+          )}
+        </div>
       </div>
       {loading ? (
         <div className="flex justify-center py-8 text-muted-foreground">
