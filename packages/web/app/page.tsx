@@ -1086,7 +1086,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       onCopyCloneCommand={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? handleCopyCloneCommand : undefined}
       onCopyCheckoutCommand={currentChat?.branch ? handleCopyCheckoutCommand : undefined}
       onOpenEnvVars={currentChat ? handleOpenEnvVars : undefined}
-      onOpenMcpServers={currentChat ? () => modals.setMcpServersModalOpen(true) : undefined}
+      onOpenMcpServers={displayCurrentChatId ? () => modals.setMcpServersModalOpen(true) : undefined}
       onOpenSkills={
         currentChat?.sandboxId && currentChat.repo !== NEW_REPOSITORY
           ? () => setSkillsModalOpen(true)
