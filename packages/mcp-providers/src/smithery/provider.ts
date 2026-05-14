@@ -45,6 +45,20 @@ export function createSmitheryProvider(
   return new SmitheryProvider(config)
 }
 
+/**
+ * Deterministic connection id per (chat, qualifiedName) — safe to recreate.
+ * Standalone function that doesn't require a provider instance.
+ */
+export function getSmitheryConnectionId(
+  chatId: string,
+  qualifiedName: string
+): string {
+  // Slashes in qualifiedName (e.g. "exa/exa-search") would be parsed as path
+  // segments by Smithery, so flatten them.
+  const safeName = qualifiedName.replace(/\//g, "-")
+  return `chat-${chatId}-${safeName}`
+}
+
 export class SmitheryProvider implements IConnectionProvider {
   readonly qualifiedName = "smithery"
   readonly displayName = "Smithery"
@@ -122,10 +136,7 @@ export class SmitheryProvider implements IConnectionProvider {
    * Deterministic connection id per (chat, qualifiedName) — safe to recreate.
    */
   getConnectionId(chatId: string, serverQualifiedName: string): string {
-    // Slashes in qualifiedName (e.g. "exa/exa-search") would be parsed as path
-    // segments by Smithery, so flatten them.
-    const safeName = serverQualifiedName.replace(/\//g, "-")
-    return `chat-${chatId}-${safeName}`
+    return getSmitheryConnectionId(chatId, serverQualifiedName)
   }
 
   /**

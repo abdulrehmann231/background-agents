@@ -59,6 +59,7 @@ export {
 export {
   createSmitheryProvider,
   SmitheryProvider,
+  getSmitheryConnectionId,
   type SmitheryConfig,
   SMITHERY_API_BASE,
   isSmitheryServer,

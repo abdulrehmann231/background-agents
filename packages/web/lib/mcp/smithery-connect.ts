@@ -9,6 +9,7 @@
 import {
   createSmitheryProvider,
   isSmitheryServer,
+  getSmitheryConnectionId,
   type ConnectionResult,
 } from "@upstream/mcp-providers"
 import { encrypt } from "@/lib/db/encryption"
@@ -16,7 +17,7 @@ import { prisma } from "@/lib/db/prisma"
 
 // Re-export types and utilities from mcp-providers
 export type { ConnectionResult as SmitheryConnectionResult }
-export { isSmitheryServer }
+export { isSmitheryServer, getSmitheryConnectionId }
 
 // Lazily-initialized provider instance using env vars
 let provider: ReturnType<typeof createSmitheryProvider> | null = null
@@ -38,17 +39,6 @@ function getProvider(apiKey: string) {
   }
 
   return newProvider
-}
-
-/** Deterministic connection id per (chat, qualifiedName) — safe to recreate. */
-export function getSmitheryConnectionId(
-  chatId: string,
-  qualifiedName: string
-): string {
-  // Slashes in qualifiedName (e.g. "exa/exa-search") would be parsed as path
-  // segments by Smithery, so flatten them.
-  const safeName = qualifiedName.replace(/\//g, "-")
-  return `chat-${chatId}-${safeName}`
 }
 
 /**
