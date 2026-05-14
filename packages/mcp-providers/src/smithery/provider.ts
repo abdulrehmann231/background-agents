@@ -133,23 +133,6 @@ export class SmitheryProvider implements IConnectionProvider {
   }
 
   /**
-   * Deterministic connection id per (chat, qualifiedName) — safe to recreate.
-   */
-  getConnectionId(chatId: string, serverQualifiedName: string): string {
-    return getSmitheryConnectionId(chatId, serverQualifiedName)
-  }
-
-  /**
-   * Get the MCP endpoint URL for a specific connection.
-   */
-  getMcpEndpoint(connectionId: string): string {
-    if (!this.resolvedNamespace) {
-      throw new Error("Namespace not resolved. Call getNamespace() first.")
-    }
-    return `${SMITHERY_API_BASE}/connect/${this.resolvedNamespace}/${connectionId}/mcp`
-  }
-
-  /**
    * Get the MCP endpoint URL using an explicit namespace.
    */
   getMcpEndpointWithNamespace(

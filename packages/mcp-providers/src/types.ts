@@ -84,9 +84,9 @@ export interface IConnectionProvider extends IMcpProvider {
   getServerConfig(connectionId: string): Promise<McpServerConfig>
 
   /**
-   * Get the MCP endpoint URL for a specific connection.
+   * Get the MCP endpoint URL for a specific connection with explicit namespace.
    */
-  getMcpEndpoint(connectionId: string): string
+  getMcpEndpointWithNamespace(namespace: string, connectionId: string): string
 }
 
 /**
