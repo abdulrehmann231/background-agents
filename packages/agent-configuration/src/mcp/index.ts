@@ -164,7 +164,9 @@ function generateMcpConfigForAgent(
   agent: string,
   servers: AgentMcpServer[]
 ): McpConfigFile | null {
-  if (!agentSupportsMcp(agent) || servers.length === 0) return null
+  if (!agentSupportsMcp(agent)) return null
+  // NOTE: empty `servers` is intentional — we still write the config so
+  // previously-connected servers are removed from the file.
   switch (agent) {
     case "claude-code":
       return generateClaudeConfig(servers)
@@ -199,8 +201,10 @@ export async function setupMcpForAgent(
   { agent, servers }: SetupMcpOptions
 ): Promise<void> {
   if (!agentSupportsMcp(agent)) return
-  if (servers.length === 0) return
 
+  // Always write — even with no servers — so removing the last connection
+  // clears the previous file instead of leaving stale entries the agent CLI
+  // would still try to load.
   const config = generateMcpConfigForAgent(agent, servers)
   if (!config) return
 
@@ -240,13 +244,15 @@ async function mergeJsonConfig(
 
   const incoming = JSON.parse(newContent) as Record<string, unknown>
 
-  if (incoming.mcpServers) {
-    const prev = (existing.mcpServers as Record<string, unknown>) || {}
-    existing.mcpServers = { ...prev, ...(incoming.mcpServers as object) }
+  // Replace the MCP section wholesale — we are the source of truth for which
+  // servers should be present. A shallow merge would leak removed servers
+  // (e.g. user disconnects GitHub but the entry survives on disk).
+  // Top-level keys outside these sections are preserved by `existing` itself.
+  if (incoming.mcpServers !== undefined) {
+    existing.mcpServers = incoming.mcpServers
   }
-  if (incoming.mcp) {
-    const prev = (existing.mcp as Record<string, unknown>) || {}
-    existing.mcp = { ...prev, ...(incoming.mcp as object) }
+  if (incoming.mcp !== undefined) {
+    existing.mcp = incoming.mcp
   }
   if (incoming.$schema && !existing.$schema) {
     existing.$schema = incoming.$schema

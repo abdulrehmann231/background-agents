@@ -96,8 +96,14 @@ export async function GET(req: Request): Promise<Response> {
     }
 
     const data: SmitheryResponse = await response.json()
+    // We expose GitHub through our own App connection (pinned in the modal),
+    // so suppress every Smithery server with "github" in its qualifiedName
+    // to avoid duplicate / confusing entries in the user's search results.
+    const servers = data.servers
+      .filter((s) => !/github/i.test(s.qualifiedName))
+      .map(transformServer)
     return NextResponse.json({
-      servers: data.servers.map(transformServer),
+      servers,
       page: data.pagination.currentPage,
       pageSize: data.pagination.pageSize,
       totalPages: data.pagination.totalPages,
