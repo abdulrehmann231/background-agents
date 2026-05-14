@@ -2,8 +2,7 @@
  * Smithery Connect — connection lifecycle helpers.
  *
  * This file maintains backwards compatibility for existing imports while
- * delegating to the shared mcp-providers package. Database operations remain
- * here since they're web-app specific.
+ * delegating to the shared mcp-providers package.
  */
 
 import {
@@ -12,8 +11,6 @@ import {
   getSmitheryConnectionId,
   type ConnectionResult,
 } from "@upstream/mcp-providers"
-import { encrypt } from "@/lib/db/encryption"
-import { prisma } from "@/lib/db/prisma"
 
 // Re-export types and utilities from mcp-providers
 export type { ConnectionResult as SmitheryConnectionResult }
@@ -53,49 +50,6 @@ export async function createSmitheryConnection(
 ): Promise<ConnectionResult> {
   const smithery = getProvider(apiKey)
   return smithery.createConnection(mcpUrl, connectionId, name)
-}
-
-/**
- * After the OAuth popup closes, ping Smithery to verify the connection is now
- * `connected`. On success, persist the endpoint + encrypted API key on the
- * ChatMcpServer row so agent runs can use it.
- */
-export async function finalizeSmitheryConnection(
-  serverId: string,
-  connectionId: string,
-  apiKey: string
-): Promise<boolean> {
-  try {
-    const smithery = getProvider(apiKey)
-    const status = await smithery.getConnectionStatus(connectionId)
-
-    if (status.state === "connected") {
-      const namespace = await smithery.getNamespace()
-      if (!namespace) return false
-
-      const mcpEndpoint = smithery.getMcpEndpointWithNamespace(
-        namespace,
-        connectionId
-      )
-
-      await prisma.chatMcpServer.update({
-        where: { id: serverId },
-        data: {
-          mcpUrl: mcpEndpoint,
-          smitheryNamespace: namespace,
-          encryptedApiKey: encrypt(apiKey),
-          status: "connected",
-          lastError: null,
-        },
-      })
-      return true
-    }
-
-    return false
-  } catch (err) {
-    console.error("[Smithery Connect] Finalize error:", err)
-    return false
-  }
 }
 
 /** Delete the Smithery connection (best-effort) when a row is removed. */
