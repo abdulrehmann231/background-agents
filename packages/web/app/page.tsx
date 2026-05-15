@@ -155,6 +155,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     draftChatConfig,
     isDraftChatId,
     updateDraftChatConfig,
+    materializeDraft,
     setOnConflictStateChange,
     limitReachedState,
     setLimitReachedState,
@@ -362,6 +363,16 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       })
     }
   }, [currentChatId, isDraftChatId, chats])
+
+  // Materialize the draft chat when the MCP modal needs to commit a change.
+  // Returns the real chatId, or null if materialization failed.
+  const handleMaterializeDraftForMcp = useCallback(
+    async (draftId: string): Promise<string | null> => {
+      const materialized = await materializeDraft(draftId)
+      return materialized?.id ?? null
+    },
+    [materializeDraft]
+  )
 
   // Auto-enter draft mode if user is authenticated but has no chat selected.
   // This replaces the old auto-create behavior - now we just enter draft mode
@@ -1056,7 +1067,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       onCopyCloneCommand={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? handleCopyCloneCommand : undefined}
       onCopyCheckoutCommand={currentChat?.branch ? handleCopyCheckoutCommand : undefined}
       onOpenEnvVars={currentChat ? handleOpenEnvVars : undefined}
-      onOpenMcpServers={currentChat ? () => modals.setMcpServersModalOpen(true) : undefined}
+      onOpenMcpServers={displayCurrentChatId && session ? () => modals.setMcpServersModalOpen(true) : undefined}
       onOpenSkills={
         currentChat?.sandboxId && currentChat.repo !== NEW_REPOSITORY
           ? () => setSkillsModalOpen(true)
@@ -1263,6 +1274,8 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
             open={modals.mcpServersModalOpen}
             onClose={() => modals.setMcpServersModalOpen(false)}
             chatId={displayCurrentChatId}
+            isDraftChat={isDraftChatId(displayCurrentChatId)}
+            onMaterializeDraft={handleMaterializeDraftForMcp}
           />
         )}
 

@@ -968,6 +968,7 @@ export function useChatWithSync() {
     draftChatConfig,
     isDraftChatId,
     updateDraftChatConfig,
+    materializeDraft,
     // Conflict state callback
     setOnConflictStateChange,
     // Daily limit reached
