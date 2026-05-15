@@ -467,19 +467,21 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               </label>
             </div>
 
-            {/* Continue from last run */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="continueFromLastRun"
-                checked={continueFromLastRun}
-                onChange={(e) => setContinueFromLastRun(e.target.checked)}
-                className="h-4 w-4 rounded border-border"
-              />
-              <label htmlFor="continueFromLastRun" className="text-sm">
-                 Include commits from the previous run
-              </label>
-            </div>
+            {/* Continue from last run - only for scheduled triggers */}
+            {triggerType === "interval" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="continueFromLastRun"
+                  checked={continueFromLastRun}
+                  onChange={(e) => setContinueFromLastRun(e.target.checked)}
+                  className="h-4 w-4 rounded border-border"
+                />
+                <label htmlFor="continueFromLastRun" className="text-sm">
+                  Include commits from the previous run
+                </label>
+              </div>
+            )}
 
           </form>
 
