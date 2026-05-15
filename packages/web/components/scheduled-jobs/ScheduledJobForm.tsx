@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Clock } from "lucide-react"
+import { Clock, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
-import { useReposQuery, useBranchesQueryFromFullName } from "@/lib/query"
-import type { GitHubRepo, GitHubBranch } from "@/lib/github"
+import { RepoCombobox } from "@/components/chat/RepoCombobox"
+import { BranchCombobox } from "@/components/chat/BranchCombobox"
 import { type ScheduledJob } from "@/lib/scheduled-jobs/types"
+import { agentModels, agentLabels, getModelLabel, type Agent } from "@/lib/types"
+import { AgentIcon } from "@/components/icons/agent-icons"
 
 // =============================================================================
 // Types
@@ -22,7 +24,7 @@ interface ScheduledJobFormProps {
 }
 
 // =============================================================================
-// Interval Options
+// Constants
 // =============================================================================
 
 const TRIGGER_TYPES = [
@@ -38,11 +40,7 @@ const INTERVAL_PRESETS = [
   { label: "Custom", value: -1 },
 ]
 
-const AGENT_OPTIONS = [
-  { label: "OpenCode", value: "opencode" },
-  { label: "Claude Code", value: "claude-code" },
-  { label: "Codex", value: "codex" },
-]
+const AVAILABLE_AGENTS: Agent[] = ["opencode", "claude-code", "codex"]
 
 // =============================================================================
 // Component
@@ -56,7 +54,8 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   const [prompt, setPrompt] = useState(job?.prompt ?? "")
   const [repo, setRepo] = useState(job?.repo ?? "")
   const [baseBranch, setBaseBranch] = useState(job?.baseBranch ?? "main")
-  const [agent, setAgent] = useState(job?.agent ?? "opencode")
+  const [agent, setAgent] = useState<Agent>((job?.agent as Agent) ?? "opencode")
+  const [model, setModel] = useState(job?.model ?? "")
   const [triggerType, setTriggerType] = useState<"interval" | "webhook">(job?.triggerType ?? "interval")
   const [intervalMinutes, setIntervalMinutes] = useState(job?.intervalMinutes ?? 1440)
   const [autoPR, setAutoPR] = useState(job?.autoPR ?? true)
@@ -67,18 +66,24 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch repos and branches
-  const { data: repos, isLoading: loadingRepos } = useReposQuery()
-  const { data: branches, isLoading: loadingBranches } = useBranchesQueryFromFullName(repo || null)
+  // Dropdown state
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false)
+  const [showModelDropdown, setShowModelDropdown] = useState(false)
+
+  // Get available models for selected agent
+  const availableModels = agentModels[agent] ?? []
 
   // Reset form state when job prop changes or modal opens
   useEffect(() => {
     if (open) {
+      const initialAgent = (job?.agent as Agent) ?? "opencode"
+      const initialModels = agentModels[initialAgent] ?? []
       setName(job?.name ?? "")
       setPrompt(job?.prompt ?? "")
       setRepo(job?.repo ?? "")
       setBaseBranch(job?.baseBranch ?? "main")
-      setAgent(job?.agent ?? "opencode")
+      setAgent(initialAgent)
+      setModel(job?.model ?? initialModels[0]?.value ?? "")
       setTriggerType(job?.triggerType ?? "interval")
       setIntervalMinutes(job?.intervalMinutes ?? 1440)
       setAutoPR(job?.autoPR ?? true)
@@ -89,13 +94,26 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
     }
   }, [open, job])
 
-  // Update branch when repo changes
+  // Update model when agent changes
   useEffect(() => {
-    if (branches && branches.length > 0 && !job) {
-      const defaultBranch = branches.find((b: GitHubBranch) => b.name === "main") || branches[0]
-      setBaseBranch(defaultBranch.name)
+    const models = agentModels[agent] ?? []
+    if (models.length > 0 && !models.find(m => m.value === model)) {
+      setModel(models[0].value)
     }
-  }, [branches, job])
+  }, [agent, model])
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-dropdown]')) {
+        setShowAgentDropdown(false)
+        setShowModelDropdown(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   // Check if using custom interval
   const isCustomInterval = !INTERVAL_PRESETS.find((p) => p.value === intervalMinutes && p.value !== -1)
@@ -147,6 +165,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
           repo,
           baseBranch,
           agent,
+          model: model || null,
           triggerType,
           intervalMinutes: triggerType === "interval" ? finalInterval : undefined,
           autoPR,
@@ -166,6 +185,16 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAgentChange = (newAgent: Agent) => {
+    setAgent(newAgent)
+    setShowAgentDropdown(false)
+  }
+
+  const handleModelChange = (newModel: string) => {
+    setModel(newModel)
+    setShowModelDropdown(false)
   }
 
   return (
@@ -188,7 +217,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
             title={
               <>
                 <Clock className="h-4 w-4" />
-                {isEditing ? "Edit Scheduled Job" : "New Scheduled Job"}
+                {isEditing ? "Edit Scheduled Agent" : "New Scheduled Agent"}
               </>
             }
           />
@@ -211,57 +240,6 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 placeholder="e.g., Dependency Updates"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
-            </div>
-
-            {/* Repository */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Repository</label>
-              <select
-                value={repo}
-                onChange={(e) => setRepo(e.target.value)}
-                disabled={loadingRepos || isEditing}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              >
-                <option value="">Select a repository</option>
-                {repos?.map((r: GitHubRepo) => (
-                  <option key={r.full_name} value={r.full_name}>
-                    {r.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Branch */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Base Branch</label>
-              <select
-                value={baseBranch}
-                onChange={(e) => setBaseBranch(e.target.value)}
-                disabled={loadingBranches || !repo}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              >
-                {branches?.map((b: GitHubBranch) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Agent */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Agent</label>
-              <select
-                value={agent}
-                onChange={(e) => setAgent(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {AGENT_OPTIONS.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
             </div>
 
             {/* Trigger Type */}
@@ -337,16 +315,120 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               </div>
             )}
 
-            {/* Prompt */}
+            {/* Prompt Field - styled like ChatInput */}
             <div>
               <label className="block text-sm font-medium mb-1">Prompt</label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="What should the agent do?"
-                rows={4}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              />
+              <div className="rounded-xl border border-border bg-card focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20">
+                {/* Textarea */}
+                <div className="px-3 py-2">
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="What should the agent do?"
+                    rows={4}
+                    className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none resize-none"
+                  />
+                </div>
+
+                {/* Bottom bar with selectors */}
+                <div className="flex items-center gap-2 px-3 py-2 border-t border-border">
+                  {/* Repo selector */}
+                  <RepoCombobox
+                    value={repo || null}
+                    onChange={(newRepo, defaultBranch) => {
+                      setRepo(newRepo)
+                      setBaseBranch(defaultBranch)
+                    }}
+                    disabled={isEditing}
+                    isMobile={isMobile}
+                  />
+
+                  {/* Branch selector */}
+                  {repo && (
+                    <BranchCombobox
+                      repo={repo}
+                      value={baseBranch}
+                      onChange={setBaseBranch}
+                      defaultBranch={baseBranch}
+                      isMobile={isMobile}
+                    />
+                  )}
+
+                  {/* Spacer */}
+                  <div className="flex-1" />
+
+                  {/* Agent selector */}
+                  <div className="relative" data-dropdown>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setShowAgentDropdown(!showAgentDropdown)
+                        setShowModelDropdown(false)
+                      }}
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title={agentLabels[agent]}
+                    >
+                      <AgentIcon agent={agent} className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{agentLabels[agent]}</span>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    {showAgentDropdown && (
+                      <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40">
+                        {AVAILABLE_AGENTS.map((a) => (
+                          <button
+                            key={a}
+                            type="button"
+                            onClick={() => handleAgentChange(a)}
+                            className={cn(
+                              "w-full text-left hover:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
+                              a === agent && "bg-accent"
+                            )}
+                          >
+                            <AgentIcon agent={a} className="h-3.5 w-3.5" />
+                            {agentLabels[a]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Model selector */}
+                  <div className="relative" data-dropdown>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setShowModelDropdown(!showModelDropdown)
+                        setShowAgentDropdown(false)
+                      }}
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title={getModelLabel(agent, model)}
+                    >
+                      <span className="hidden sm:inline">{getModelLabel(agent, model)}</span>
+                      <span className="sm:hidden">Model</span>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    {showModelDropdown && (
+                      <div className="absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52">
+                        {availableModels.map((m) => (
+                          <button
+                            key={m.value}
+                            type="button"
+                            onClick={() => handleModelChange(m.value)}
+                            className={cn(
+                              "w-full text-left hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer",
+                              m.value === model && "bg-accent"
+                            )}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Auto-PR */}
@@ -394,7 +476,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               disabled={loading}
               className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors cursor-pointer"
             >
-              {loading ? "Saving..." : isEditing ? "Save Changes" : "Create Job"}
+              {loading ? "Saving..." : isEditing ? "Save Changes" : "Create"}
             </button>
           </div>
         </Dialog.Content>
