@@ -1,13 +1,15 @@
 "use client"
 
 import { useRef, useEffect, useCallback } from "react"
-import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, GitBranch, X, Paperclip, Pencil, ListChecks } from "lucide-react"
+import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, X, Paperclip, Pencil, ListChecks } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Chat, Agent, CredentialFlags, PendingFile } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
 import { AgentModelSelector } from "./AgentModelSelector"
+import { RepoCombobox } from "./RepoCombobox"
+import { BranchCombobox } from "./BranchCombobox"
 import { SlashCommandMenu, type SlashCommandType } from "../SlashCommandMenu"
 import {
   DropdownMenu,
@@ -64,9 +66,9 @@ interface ChatInputProps {
   showRepoButton: boolean
   isNewRepo: boolean
   canSelectRepo: boolean
-  onChangeRepo?: () => void
-  onChangeBranch?: () => void
   onUpdateChat?: (updates: Partial<Chat>) => void
+  /** Default branch for the current repo (used by BranchCombobox) */
+  defaultBranch?: string
   // Agent/model
   credentialFlags: CredentialFlags
   currentAgent: Agent
@@ -124,9 +126,8 @@ export function ChatInput({
   showRepoButton,
   isNewRepo,
   canSelectRepo,
-  onChangeRepo,
-  onChangeBranch,
   onUpdateChat,
+  defaultBranch,
   // Agent/model
   credentialFlags,
   currentAgent,
@@ -319,37 +320,25 @@ export function ChatInput({
             {/* Repo display/selector */}
             {showRepoButton ? (
               <div className="flex items-center gap-1">
-                {onChangeRepo && (
-                  <button
-                    onClick={onChangeRepo}
-                    className={cn(
-                      "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer",
-                      isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-sm"
-                    )}
-                    title={isNewRepo ? "Select repository" : chat.repo}
-                  >
-                    <Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                    <span className={cn(isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")}>
-                      {isNewRepo ? "Repository" : chat.repo?.split("/").pop()}
-                    </span>
-                    <ChevronDown className={cn(isMobile ? "h-4 w-4 hidden @[16rem]/row1:block" : "h-3.5 w-3.5")} />
-                  </button>
-                )}
-                {!isNewRepo && onChangeBranch && isNewChat && (
-                  <button
-                    onClick={onChangeBranch}
-                    className={cn(
-                      "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer",
-                      isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-sm"
-                    )}
-                    title={chat.branch || chat.baseBranch}
-                  >
-                    <GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                    <span className={cn(isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")}>
-                      {chat.branch || chat.baseBranch}
-                    </span>
-                    <ChevronDown className={cn(isMobile ? "h-4 w-4 hidden @[16rem]/row1:block" : "h-3.5 w-3.5")} />
-                  </button>
+                <RepoCombobox
+                  value={isNewRepo ? null : chat.repo}
+                  onChange={(repo, branch) => {
+                    onUpdateChat?.({ repo, baseBranch: branch })
+                  }}
+                  onRequestCreate={() => modals.setRepoCreateOpen(true)}
+                  disabled={!canSelectRepo}
+                  isMobile={isMobile}
+                />
+                {!isNewRepo && isNewChat && (
+                  <BranchCombobox
+                    repo={chat.repo}
+                    value={chat.branch || chat.baseBranch}
+                    onChange={(branch) => {
+                      onUpdateChat?.({ baseBranch: branch })
+                    }}
+                    defaultBranch={defaultBranch}
+                    isMobile={isMobile}
+                  />
                 )}
                 {!isNewRepo && onUpdateChat && canSelectRepo && (
                   <button
