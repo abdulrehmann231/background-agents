@@ -114,7 +114,7 @@ export function RepoCombobox({
         side="bottom"
         sideOffset={8}
       >
-        <Command shouldFilter={false} value={value || undefined}>
+        <Command shouldFilter={false} value={search ? undefined : (value || undefined)}>
           <CommandInput
             placeholder="Search repositories..."
             value={search}
