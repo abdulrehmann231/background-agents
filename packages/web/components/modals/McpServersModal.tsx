@@ -66,6 +66,10 @@ interface McpServersModalProps {
   open: boolean
   onClose: () => void
   chatId: string
+  /** True when chatId is a not-yet-persisted draft id (e.g. "draft-..."). */
+  isDraftChat: boolean
+  /** Persists the draft chat to the DB and returns the real chatId. */
+  onMaterializeDraft: (draftId: string) => Promise<string | null>
 }
 
 /** Sentinel used by the server-side ChatMcpServer row for the GitHub MCP. */
@@ -79,8 +83,33 @@ export function McpServersModal({
   open,
   onClose,
   chatId,
+  isDraftChat,
+  onMaterializeDraft,
 }: McpServersModalProps) {
   const [tab, setTab] = useState<TabKey>("connected")
+
+  // Effective chat id used for all chat-scoped API calls. Starts as the
+  // (possibly draft) chatId and is replaced with the real id once we
+  // materialize on first commit.
+  const [effectiveChatId, setEffectiveChatId] = useState(chatId)
+  const [isDraft, setIsDraft] = useState(isDraftChat)
+
+  // Re-sync local state whenever the prop changes (e.g., switching chats).
+  useEffect(() => {
+    setEffectiveChatId(chatId)
+    setIsDraft(isDraftChat)
+  }, [chatId, isDraftChat])
+
+  // Materialize the draft on demand. Returns the real chatId for the caller
+  // to use in its API call. Returns null if materialization failed.
+  const resolveChatId = useCallback(async (): Promise<string | null> => {
+    if (!isDraft) return effectiveChatId
+    const realId = await onMaterializeDraft(effectiveChatId)
+    if (!realId) return null
+    setEffectiveChatId(realId)
+    setIsDraft(false)
+    return realId
+  }, [isDraft, effectiveChatId, onMaterializeDraft])
 
   // Connected list
   const [connected, setConnected] = useState<ConnectedServer[]>([])
@@ -115,10 +144,13 @@ export function McpServersModal({
   // Fetchers
   // =============================================================================
 
-  const loadConnected = useCallback(async () => {
+  // Fetch connected servers for an explicit chat id. Used by handlers that
+  // just materialized a draft and need to reload before React re-renders
+  // with the new state.
+  const loadConnectedFor = useCallback(async (id: string) => {
     setLoadingConnected(true)
     try {
-      const res = await fetch(`/api/chats/${chatId}/mcp-servers`)
+      const res = await fetch(`/api/chats/${id}/mcp-servers`)
       if (res.ok) {
         const data = await res.json()
         setConnected(data.servers || [])
@@ -128,7 +160,17 @@ export function McpServersModal({
     } finally {
       setLoadingConnected(false)
     }
-  }, [chatId])
+  }, [])
+
+  const loadConnected = useCallback(async () => {
+    // Drafts have no row in the DB yet — skip the fetch and show the empty
+    // state. Once the user connects something we materialize and reload.
+    if (isDraft) {
+      setConnected([])
+      return
+    }
+    await loadConnectedFor(effectiveChatId)
+  }, [isDraft, effectiveChatId, loadConnectedFor])
 
   const loadRegistry = useCallback(
     async (q: string, p: number, append: boolean) => {
@@ -201,10 +243,12 @@ export function McpServersModal({
 
   async function handleDisconnect(serverId: string) {
     if (deletingId) return
+    // No connected rows can exist on a draft, so disconnect is a no-op there.
+    if (isDraft) return
     setDeletingId(serverId)
     try {
       const res = await fetch(
-        `/api/chats/${chatId}/mcp-servers/${serverId}`,
+        `/api/chats/${effectiveChatId}/mcp-servers/${serverId}`,
         { method: "DELETE" }
       )
       if (res.ok) {
@@ -217,10 +261,12 @@ export function McpServersModal({
 
   /** Add the GitHub MCP sentinel row to this chat. */
   async function addGithubToChat() {
-    const res = await fetch(`/api/chats/${chatId}/mcp-servers/github`, {
+    const id = await resolveChatId()
+    if (!id) return
+    const res = await fetch(`/api/chats/${id}/mcp-servers/github`, {
       method: "POST",
     })
-    if (res.ok) await loadConnected()
+    if (res.ok) await loadConnectedFor(id)
   }
 
   /**
@@ -318,7 +364,14 @@ export function McpServersModal({
         if (!url) throw new Error("Server does not expose a remote URL")
       }
 
-      const res = await fetch(`/api/chats/${chatId}/mcp-servers`, {
+      // Resolve the real chat id (materializes draft on first connect).
+      const id = await resolveChatId()
+      if (!id) {
+        setConnectingSlug(null)
+        return
+      }
+
+      const res = await fetch(`/api/chats/${id}/mcp-servers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -334,7 +387,7 @@ export function McpServersModal({
       // Instant-connect (authless server) — refresh list, switch tab, done.
       if (data.connected) {
         setConnectingSlug(null)
-        await loadConnected()
+        await loadConnectedFor(id)
         setTab("connected")
         return
       }
@@ -360,14 +413,14 @@ export function McpServersModal({
         }
         try {
           await fetch(
-            `/api/chats/${chatId}/mcp-servers/${data.serverId}/smithery-finalize`,
+            `/api/chats/${id}/mcp-servers/${data.serverId}/smithery-finalize`,
             { method: "POST" }
           )
         } catch (err) {
           console.error("[McpServersModal] finalize failed:", err)
         }
         setConnectingSlug(null)
-        await loadConnected()
+        await loadConnectedFor(id)
         setTab("connected")
       }, 500)
     } catch (err) {
