@@ -40,7 +40,7 @@ export function MobileHeader({
   }, [modals.mobileTitleMenuOpen, modals])
 
   return (
-    <div className="flex items-center gap-3 px-4 pb-3 border-b border-border bg-background pt-safe">
+    <div className="flex items-center gap-3 px-4 pb-2 bg-background pt-safe">
       <button
         onClick={onOpenMenu}
         className="p-2 -ml-2 rounded-lg hover:bg-accent active:bg-accent text-foreground transition-colors touch-target"
