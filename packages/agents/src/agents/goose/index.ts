@@ -37,6 +37,9 @@ export const gooseAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
+    // Debug: log planMode to verify it's being passed correctly
+    console.log(`[goose buildCommand] planMode=${options.planMode}`)
+
     const gooseArgs: string[] = []
 
     // Use run subcommand for non-interactive execution
