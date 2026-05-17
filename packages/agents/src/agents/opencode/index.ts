@@ -62,7 +62,10 @@ export const opencodeAgent: AgentDefinition = {
 
     if (options.planMode) {
       // Enable CLI-enforced plan mode (read-only)
+      // OPENCODE_EXPERIMENTAL_PLAN_MODE has a known bug where it still allows edits,
+      // so we also set permissions to deny edit/write/bash operations
       env.OPENCODE_EXPERIMENTAL_PLAN_MODE = "1"
+      env.OPENCODE_PERMISSION = '{"*":"allow","edit":"deny","write":"deny","bash":"deny"}'
     } else {
       // Allow all tool actions without interactive approval in headless runs
       env.OPENCODE_PERMISSION = '{"*":"allow"}'
