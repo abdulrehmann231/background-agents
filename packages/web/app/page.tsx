@@ -1312,7 +1312,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   onOpenForm={() => modals.setScheduledJobFormOpen(true)}
                   refreshKey={scheduledJobsRefreshKey}
                   onJobSelect={handleJobSelect}
-                  showList={sidebar.selectedScheduledJob === null && !urlJobId}
                   urlJobId={urlJobId}
                   onNavigateToJob={handleNavigateToJob}
                 />

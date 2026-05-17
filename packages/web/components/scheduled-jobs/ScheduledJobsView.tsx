@@ -95,10 +95,8 @@ interface ScheduledJobsViewProps {
   refreshKey?: number
   /** Callback when a job is selected/deselected (for sidebar integration) */
   onJobSelect?: (job: ScheduledJob | null) => void
-  /** When true, reset to show the list view (clear any selected job) */
-  showList?: boolean
-  /** Job ID from URL - controls which job is selected */
-  urlJobId?: string | null
+  /** Job ID from URL - controls which job is selected (null = show list) */
+  urlJobId: string | null
   /** Callback when navigating to a job (updates URL and sidebar state) */
   onNavigateToJob?: (jobId: string | null, jobName?: string) => void
 }
@@ -107,20 +105,15 @@ interface ScheduledJobsViewProps {
 // Component
 // =============================================================================
 
-export function ScheduledJobsView({ onOpenForm, refreshKey, onJobSelect, showList, urlJobId, onNavigateToJob }: ScheduledJobsViewProps) {
+export function ScheduledJobsView({ onOpenForm, refreshKey, onJobSelect, urlJobId, onNavigateToJob }: ScheduledJobsViewProps) {
   const { data: session } = useSession()
 
-  // The selected job ID - controlled by URL when urlJobId prop is provided
-  // When URL-controlled, we derive state from urlJobId directly
-  const isUrlControlled = urlJobId !== undefined
-  const selectedJobId = isUrlControlled ? (urlJobId || null) : null
+  // The selected job ID - derived directly from URL
+  const selectedJobId = urlJobId
 
-  // Handler to change selected job - updates URL when URL-controlled
+  // Handler to change selected job - notifies parent to update URL
   const setSelectedJobId = (jobId: string | null, jobName?: string) => {
-    if (isUrlControlled) {
-      // URL-controlled: notify parent to update URL
-      onNavigateToJob?.(jobId, jobName)
-    }
+    onNavigateToJob?.(jobId, jobName)
   }
 
   // Jobs list state
@@ -149,10 +142,10 @@ export function ScheduledJobsView({ onOpenForm, refreshKey, onJobSelect, showLis
   // Reset detail state when returning to list view
   // Note: Don't call setSelectedJobId here - URL changes should drive navigation
   useEffect(() => {
-    if (showList || !selectedJobId) {
+    if (!selectedJobId) {
       setSelectedJob(null)
     }
-  }, [showList, selectedJobId])
+  }, [selectedJobId])
 
   // Fetch jobs list
   const fetchJobs = async () => {
