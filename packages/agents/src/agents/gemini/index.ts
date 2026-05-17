@@ -33,11 +33,16 @@ export const geminiAgent: AgentDefinition = {
     // Stream JSON for event parsing
     args.push("--output-format", "stream-json")
 
-    // Enable full tool access (shell, file writes, etc.) - safe in sandbox environment
-    args.push("--yolo")
-    
     // Skip trust checks since we're in a controlled environment
-    args.push("--skip-trust")             
+    args.push("--skip-trust")
+
+    if (options.planMode) {
+      // Enable CLI-enforced plan mode (read-only)
+      args.push("--approval-mode", "plan")
+    } else {
+      // Enable full tool access (shell, file writes, etc.) - safe in sandbox environment
+      args.push("--yolo")
+    }             
                                       
 
     // Add model if specified (e.g., "gemini-2.0-flash", "gemini-1.5-pro")

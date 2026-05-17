@@ -47,11 +47,6 @@ export const opencodeAgent: AgentDefinition = {
       parts.push("-s", quote(options.sessionId))
     }
 
-    // Enable extended thinking when plan mode is active
-    if (options.planMode) {
-      parts.push("--thinking")
-    }
-
     // The "--" sentinel signals end-of-options to the OpenCode's argument parser
     if (options.prompt) {
       parts.push("--")
@@ -60,14 +55,23 @@ export const opencodeAgent: AgentDefinition = {
 
     const command = `${parts.join(" ")} 2>&1`
 
+    // Build environment variables
+    const env: Record<string, string> = {
+      ...options.env,
+    }
+
+    if (options.planMode) {
+      // Enable CLI-enforced plan mode (read-only)
+      env.OPENCODE_EXPERIMENTAL_PLAN_MODE = "1"
+    } else {
+      // Allow all tool actions without interactive approval in headless runs
+      env.OPENCODE_PERMISSION = '{"*":"allow"}'
+    }
+
     return {
       cmd: "bash",
       args: ["-lc", command],
-      env: {
-        // Allow all tool actions without interactive approval in headless runs
-        OPENCODE_PERMISSION: '{"*":"allow"}',
-        ...options.env,
-      },
+      env,
       wrapInBash: false, // Already wrapped
     }
   },

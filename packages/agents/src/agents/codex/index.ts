@@ -57,8 +57,13 @@ export const codexAgent: AgentDefinition = {
     // Skip git repo check for sandbox environments
     args.push("--skip-git-repo-check")
 
-    // Skip permission prompts when already running in a sandbox
-    args.push("--yolo")
+    if (options.planMode) {
+      // Enable CLI-enforced plan mode (read-only)
+      args.push("--sandbox", "read-only")
+    } else {
+      // Skip permission prompts when already running in a sandbox
+      args.push("--yolo")
+    }
 
     // Add model if specified (e.g., "gpt-4o", "o1", "o3")
     if (options.model) {

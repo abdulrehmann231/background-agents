@@ -38,8 +38,6 @@ interface ChatPanelProps {
   isSending?: boolean
   /** Callback to open the command palette */
   onOpenCommandPalette?: () => void
-  /** Callback to open a plan in the preview pane */
-  onOpenPlan?: (messageId: string) => void
   /** Whether the user is authenticated */
   isAuthenticated?: boolean
   /** Whether rapid fire mode is enabled */
@@ -48,7 +46,7 @@ interface ChatPanelProps {
   rapidFireNotification?: number
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, onOpenPlan, isAuthenticated = false, rapidFireMode = false, rapidFireNotification = 0 }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, rapidFireMode = false, rapidFireNotification = 0 }: ChatPanelProps) {
   // Get modal and git state from contexts
   const modals = useModals()
   const git = useGit()
@@ -602,7 +600,6 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
                 repo={isNewRepo ? undefined : chat.repo}
                 onOpenFile={onOpenFile}
                 onForcePush={git.handleForcePush}
-                onOpenPlan={onOpenPlan}
               />
             )
           })}

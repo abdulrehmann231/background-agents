@@ -61,8 +61,6 @@ export interface MessageMetadata {
   prUrl?: string
   /** PR number for view-pr action */
   prNumber?: number
-  /** Whether this message contains an agent's plan generated in Plan Mode */
-  isPlan?: boolean
 }
 
 export interface Message {
