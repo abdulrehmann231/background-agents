@@ -63,23 +63,6 @@ export const opencodeAgent: AgentDefinition = {
       ...options.env,
     }
 
-    if (options.planMode) {
-      // Enable CLI-enforced plan mode (read-only)
-      // Use OPENCODE_PERMISSION to deny write tools but allow read tools
-      // Format: { "toolName": "allow"|"deny"|"ask" } or { "toolName": { "pattern": "allow"|"deny"|"ask" } }
-      env.OPENCODE_EXPERIMENTAL_PLAN_MODE = "1"
-      env.OPENCODE_PERMISSION = JSON.stringify({
-        edit: "deny",
-        write: "deny",
-        bash: "deny",
-        task: "deny",
-        read: "allow",
-        glob: "allow",
-        grep: "allow",
-        "*": "allow",
-      })
-    }
-
     return {
       cmd: "bash",
       args: ["-lc", command],

@@ -34,6 +34,7 @@ export const gooseAgent: AgentDefinition = {
   capabilities: {
     supportsSystemPrompt: true,
     supportsResume: true,
+    supportsPlanMode: true,
   },
 
   buildCommand(options: RunOptions): CommandSpec {

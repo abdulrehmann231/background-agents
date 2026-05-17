@@ -55,6 +55,7 @@ export const claudeAgent: AgentDefinition = {
   capabilities: {
     supportsSystemPrompt: true,
     supportsResume: true,
+    supportsPlanMode: true,
     setup: claudeSetup,
   },
 

@@ -25,6 +25,7 @@ export const geminiAgent: AgentDefinition = {
   capabilities: {
     supportsSystemPrompt: false,
     supportsResume: true,
+    supportsPlanMode: true,
   },
 
   buildCommand(options: RunOptions): CommandSpec {

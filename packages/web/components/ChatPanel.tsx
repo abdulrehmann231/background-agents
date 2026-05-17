@@ -6,7 +6,7 @@ import { ErrorBanner, FilePreviewModal, ChatHeader, MobileConflictBar, ChatInput
 import { cn } from "@/lib/utils"
 import { useModals, useGit } from "@/lib/contexts"
 import type { Chat, Settings, Agent, CredentialFlags } from "@/lib/types"
-import { NEW_REPOSITORY, agentModels, hasCredentialsForModel, getDefaultAgent, getDefaultModelForAgent } from "@/lib/types"
+import { NEW_REPOSITORY, agentModels, hasCredentialsForModel, getDefaultAgent, getDefaultModelForAgent, agentSupportsPlanMode } from "@/lib/types"
 import { filterSlashCommandsWithConflict } from "@upstream/common"
 import { MessageBubble } from "./MessageBubble"
 import type { SlashCommandType } from "./SlashCommandMenu"
@@ -61,6 +61,14 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0)
   // Plan mode state
   const [planModeEnabled, setPlanModeEnabled] = useState(false)
+  // Computed current agent for plan mode check
+  const currentAgentForPlanMode = (chat?.agent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
+  // Reset plan mode when switching to an agent that doesn't support it
+  useEffect(() => {
+    if (planModeEnabled && !agentSupportsPlanMode[currentAgentForPlanMode]) {
+      setPlanModeEnabled(false)
+    }
+  }, [currentAgentForPlanMode, planModeEnabled])
   // File upload state - using custom hook
   const {
     pendingFiles,
@@ -424,6 +432,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       showClaudeLimitDialog={showClaudeLimitDialog}
       // Plan mode
       planModeEnabled={planModeEnabled}
+      planModeSupported={agentSupportsPlanMode[currentAgent]}
       onPlanModeToggle={() => setPlanModeEnabled((v) => !v)}
       onSetPlanMode={setPlanModeEnabled}
       // Mobile

@@ -42,6 +42,7 @@ export const codexAgent: AgentDefinition = {
   capabilities: {
     supportsSystemPrompt: false,
     supportsResume: true,
+    supportsPlanMode: true,
     setup: codexSetup,
   },
 
