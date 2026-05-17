@@ -59,12 +59,20 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
   // Slash command menu state
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0)
-  // Plan mode state - stored on chat object for per-chat persistence
-  const planModeEnabled = chat?.planModeEnabled ?? false
+  // Plan mode state - persisted to database via onUpdateChat, with local state for immediate UI updates
+  const [planModeEnabled, setPlanModeEnabledLocal] = useState(chat?.planModeEnabled ?? false)
+  // Sync local state when chat changes (switching between chats) or when chat.planModeEnabled changes
+  useEffect(() => {
+    setPlanModeEnabledLocal(chat?.planModeEnabled ?? false)
+  }, [chat?.id, chat?.planModeEnabled])
+  // Wrapper that updates both local state and persists to database
   const setPlanModeEnabled = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    const newValue = typeof value === 'function' ? value(planModeEnabled) : value
-    onUpdateChat?.({ planModeEnabled: newValue })
-  }, [onUpdateChat, planModeEnabled])
+    setPlanModeEnabledLocal((prev) => {
+      const newValue = typeof value === 'function' ? value(prev) : value
+      onUpdateChat?.({ planModeEnabled: newValue })
+      return newValue
+    })
+  }, [onUpdateChat])
   // Computed current agent for plan mode check
   const currentAgentForPlanMode = (chat?.agent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
   // Reset plan mode when switching to an agent that doesn't support it
