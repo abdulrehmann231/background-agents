@@ -1,0 +1,54 @@
+import { Daytona } from "@daytonaio/sdk"
+import {
+  getAgentSandboxImage,
+  SNAPSHOT_NAME,
+  SNAPSHOT_RESOURCES,
+} from "@upstream/sandbox-image"
+
+// Building the snapshot can take several minutes
+export const maxDuration = 300
+
+export async function GET(req: Request) {
+  // Verify cron secret
+  const cronSecret = process.env.CRON_SECRET
+  if (
+    cronSecret &&
+    req.headers.get("authorization") !== `Bearer ${cronSecret}`
+  ) {
+    return new Response("Unauthorized", { status: 401 })
+  }
+
+  const apiKey = process.env.DAYTONA_API_KEY
+  if (!apiKey) {
+    return Response.json(
+      { error: "DAYTONA_API_KEY not configured" },
+      { status: 500 }
+    )
+  }
+
+  const daytona = new Daytona({ apiKey })
+
+  try {
+    const snapshot = await daytona.snapshot.create({
+      name: SNAPSHOT_NAME,
+      image: getAgentSandboxImage(),
+      resources: SNAPSHOT_RESOURCES,
+    })
+
+    return Response.json({
+      success: true,
+      message: "Snapshot rebuilt successfully",
+      snapshotName: snapshot.name,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error("[cron/rebuild-snapshot] failed:", err)
+    return Response.json(
+      {
+        error: "SNAPSHOT_BUILD_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 }
+    )
+  }
+}
