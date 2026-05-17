@@ -387,9 +387,7 @@ export function ChatInput({
                     type="button"
                     className={cn(
                       "shrink-0 flex items-center gap-1 transition-colors cursor-pointer",
-                      planModeEnabled
-                        ? "text-primary hover:text-primary/80"
-                        : "text-muted-foreground hover:text-foreground",
+                      "text-muted-foreground hover:text-foreground",
                       isMobile ? "h-7 px-2 text-sm" : "h-6 px-1.5 text-sm"
                     )}
                     title={planModeEnabled ? "Plan mode — agent will plan before acting" : "Edit mode — agent will edit code directly"}
