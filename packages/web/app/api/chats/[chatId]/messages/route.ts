@@ -482,6 +482,9 @@ export async function POST(
       console.error("[messages] loadChatMcpServers failed:", err)
     }
 
+    // Debug: log planMode from payload
+    console.log(`[messages route] payload.planMode=${payload.planMode}`)
+
     const bgSession = await createBackgroundAgentSession(sandbox, {
       repoPath,
       previewUrlPattern: previewUrlPattern ?? undefined,

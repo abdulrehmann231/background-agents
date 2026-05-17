@@ -135,6 +135,9 @@ export async function createBackgroundAgentSession(
 
   // For OpenCode in non-plan mode, inject default permission rules via environment variable
   // (Plan mode permissions are handled by the agent's buildCommand)
+  // Debug: log planMode from options
+  console.log(`[agent-session] options.planMode=${options.planMode}`)
+
   const env = { ...options.env }
   if (agent === "opencode" && !options.planMode) {
     env.OPENCODE_PERMISSION = OPENCODE_PERMISSION_ENV
