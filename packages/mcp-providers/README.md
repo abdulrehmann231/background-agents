@@ -1,8 +1,6 @@
 # @upstream/mcp-providers
 
-Framework-agnostic MCP provider abstractions for GitHub and Smithery.
-
-This package provides pure TypeScript implementations for connecting to MCP servers. No web framework dependencies.
+TypeScript library for connecting to MCP servers via GitHub and Smithery.
 
 ## GitHub
 
@@ -124,13 +122,19 @@ import type {
 
 ## Utilities
 
+Helper functions for working with MCP servers.
+
 ```typescript
 import { safeServerName } from "@upstream/mcp-providers"
 
+// Convert qualified server names (e.g. "github/github") to safe identifiers
+// for use in file names, IDs, etc.
 safeServerName("github/github")  // "github-github"
 ```
 
 ## Constants
+
+Pre-defined URLs and identifiers for known MCP servers. Use these instead of hardcoding values to ensure consistency across your application.
 
 ```typescript
 import {
