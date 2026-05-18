@@ -13,16 +13,14 @@ interface ClaudeUsageIndicatorProps {
   isPro: boolean
   /** Reset time ISO string */
   resetAt: string | null
-  /** Display variant */
-  variant?: "compact" | "full"
   /** Additional class names */
   className?: string
 }
 
 /**
  * Displays Claude usage information for users on the shared pool.
- * - Free users: "X/10" with color coding
- * - Pro users: "X sent today"
+ * - Free users: "X/10 Claude prompts used"
+ * - Pro users: "X Claude prompts sent today"
  * - Users with own API key: not shown (used is null)
  */
 export function ClaudeUsageIndicator({
@@ -31,7 +29,6 @@ export function ClaudeUsageIndicator({
   total,
   isPro,
   resetAt,
-  variant = "compact",
   className,
 }: ClaudeUsageIndicatorProps) {
   // Don't show if user has their own API key (not using shared pool)
@@ -64,31 +61,13 @@ export function ClaudeUsageIndicator({
   const resetTime = formatResetTime()
   const tooltip = resetTime ? `Resets at ${resetTime}` : undefined
 
-  if (variant === "compact") {
-    return (
-      <span
-        className={cn("text-xs", getColorClass(), className)}
-        title={tooltip}
-      >
-        {isPro ? (
-          <>{used} sent</>
-        ) : (
-          <>{used}/{total}</>
-        )}
-      </span>
-    )
-  }
-
-  // Full variant - for menu items
   return (
-    <div className={cn("flex items-center gap-2", className)} title={tooltip}>
-      <span className={cn("text-sm", getColorClass())}>
-        {isPro ? (
-          <>{used} messages sent today</>
-        ) : (
-          <>{used} of {total} free messages used today</>
-        )}
-      </span>
+    <div className={cn("text-sm", getColorClass(), className)} title={tooltip}>
+      {isPro ? (
+        <>{used} Claude prompts sent today</>
+      ) : (
+        <>{used}/{total} Claude prompts used</>
+      )}
     </div>
   )
 }

@@ -518,20 +518,8 @@ export function Sidebar({
                     />
                   )}
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-medium truncate">
-                        {session.user.name}
-                      </span>
-                      {claudeUsage && claudeUsage.used !== null && (
-                        <ClaudeUsageIndicator
-                          used={claudeUsage.used}
-                          remaining={claudeUsage.remaining}
-                          total={claudeUsage.total}
-                          isPro={claudeUsage.isPro}
-                          resetAt={claudeUsage.resetAt}
-                          variant="compact"
-                        />
-                      )}
+                    <div className="text-base font-medium truncate">
+                      {session.user.name}
                     </div>
                     <div className="text-sm text-muted-foreground truncate">
                       {session.user.email}
@@ -551,7 +539,6 @@ export function Sidebar({
                           total={claudeUsage.total}
                           isPro={claudeUsage.isPro}
                           resetAt={claudeUsage.resetAt}
-                          variant="full"
                         />
                       </div>
                     )}
