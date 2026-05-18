@@ -25,12 +25,14 @@ interface SettingsResponse {
   claudeLimitResetAt: string | null
   /** Remaining Claude Code messages today, or null if not applicable */
   claudeLimitRemaining: number | null
-  /** Number of shared Claude messages used today, or null if not using shared pool */
+  /** Number of shared Claude messages used in current period, or null if not using shared pool */
   claudeLimitUsed: number | null
   /** Daily limit (10 for free users), or null if pro/unlimited */
   claudeLimitTotal: number | null
   /** Whether user is a pro subscriber */
   claudeIsPro: boolean
+  /** Whether usage is tracked weekly (pro) vs daily (free) */
+  claudeIsWeekly: boolean
 }
 
 function readSettings(raw: unknown): Settings {
@@ -69,6 +71,7 @@ export async function GET(): Promise<Response> {
       claudeLimitUsed: effective.limitUsed,
       claudeLimitTotal: effective.limitTotal,
       claudeIsPro: effective.isPro,
+      claudeIsWeekly: effective.isWeekly,
     }
     return Response.json(response)
   } catch (error) {
@@ -145,6 +148,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       claudeLimitUsed: effective.limitUsed,
       claudeLimitTotal: effective.limitTotal,
       claudeIsPro: effective.isPro,
+      claudeIsWeekly: effective.isWeekly,
     }
     return Response.json(response)
   } catch (error) {

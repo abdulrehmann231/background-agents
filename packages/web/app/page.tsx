@@ -148,6 +148,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     claudeLimitTotal,
     claudeLimitRemaining,
     claudeIsPro,
+    claudeIsWeekly,
     isHydrated,
     isLoadingMessages,
     deletingChatIds,
@@ -1176,7 +1177,8 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     total: claudeLimitTotal,
     isPro: claudeIsPro,
     resetAt: claudeLimitResetAt,
-  }), [claudeLimitUsed, claudeLimitRemaining, claudeLimitTotal, claudeIsPro, claudeLimitResetAt])
+    isWeekly: claudeIsWeekly,
+  }), [claudeLimitUsed, claudeLimitRemaining, claudeLimitTotal, claudeIsPro, claudeLimitResetAt, claudeIsWeekly])
 
   return (
     <PaletteProvider

@@ -68,6 +68,7 @@ interface SidebarProps {
     total: number | null
     isPro: boolean
     resetAt: string | null
+    isWeekly: boolean
   }
 }
 
@@ -539,6 +540,7 @@ export function Sidebar({
                           total={claudeUsage.total}
                           isPro={claudeUsage.isPro}
                           resetAt={claudeUsage.resetAt}
+                          isWeekly={claudeUsage.isWeekly}
                         />
                       </div>
                     )}

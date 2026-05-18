@@ -15,6 +15,7 @@ export interface SettingsData {
   claudeLimitUsed?: number | null
   claudeLimitTotal?: number | null
   claudeIsPro?: boolean
+  claudeIsWeekly?: boolean
 }
 
 /**
@@ -37,6 +38,7 @@ export function useSettingsQuery() {
         claudeLimitUsed: response.claudeLimitUsed,
         claudeLimitTotal: response.claudeLimitTotal,
         claudeIsPro: response.claudeIsPro,
+        claudeIsWeekly: response.claudeIsWeekly,
       }
     },
     enabled: isAuthenticated,

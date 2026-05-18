@@ -211,6 +211,7 @@ export function useChatWithSync() {
   const claudeLimitTotal = settingsQuery.data?.claudeLimitTotal ?? null
   const claudeLimitRemaining = settingsQuery.data?.claudeLimitRemaining ?? null
   const claudeIsPro = settingsQuery.data?.claudeIsPro ?? false
+  const claudeIsWeekly = settingsQuery.data?.claudeIsWeekly ?? false
   const currentChat = useMemo(() => chats.find((c) => c.id === currentChatId) ?? null, [chats, currentChatId])
   const isLoading = chatsQuery.isLoading || settingsQuery.isLoading
 
@@ -977,6 +978,7 @@ export function useChatWithSync() {
     claudeLimitTotal,
     claudeLimitRemaining,
     claudeIsPro,
+    claudeIsWeekly,
     isHydrated,
     isLoading,
     isLoadingMessages,

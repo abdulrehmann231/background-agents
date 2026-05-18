@@ -13,10 +13,12 @@ export interface EffectiveFlags {
   flags: CredentialFlags
   limitResetAt: Date | null
   limitRemaining: number | null
-  /** Number of shared Claude messages used today */
+  /** Number of shared Claude messages used in current period (daily for free, weekly for pro) */
   limitUsed: number | null
   /** Daily limit (10 for free users, null for pro/unlimited) */
   limitTotal: number | null
+  /** Whether usage is tracked weekly (pro) vs daily (free) */
+  isWeekly: boolean
   /** Whether user is a pro subscriber */
   isPro: boolean
 }
@@ -57,25 +59,51 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   let limitRemaining: number | null = null
   let limitUsed: number | null = null
   let limitTotal: number | null = null
+  let isWeekly = false
 
   if (usesSharedPool) {
     const now = new Date()
-    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
 
-    // Count messages sent today using shared Claude
-    const todayCount = await prisma.activityLog.count({
-      where: {
-        userId,
-        action: "message_sent",
-        createdAt: { gte: startOfDay },
-        metadata: { path: ["useSharedClaude"], equals: true },
-      },
-    })
+    if (isPro) {
+      // Pro users: track weekly usage (week starts Monday 00:00 UTC)
+      isWeekly = true
+      const dayOfWeek = now.getUTCDay() // 0 = Sunday, 1 = Monday, ...
+      const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+      const startOfWeek = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() - daysSinceMonday
+      ))
 
-    limitUsed = todayCount
-    limitResetAt = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000)
+      const weekCount = await prisma.activityLog.count({
+        where: {
+          userId,
+          action: "message_sent",
+          createdAt: { gte: startOfWeek },
+          metadata: { path: ["useSharedClaude"], equals: true },
+        },
+      })
 
-    if (!isPro) {
+      limitUsed = weekCount
+      // Reset at next Monday 00:00 UTC
+      limitResetAt = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000)
+      // Pro users: limitTotal and limitRemaining stay null (unlimited)
+    } else {
+      // Free users: track daily usage
+      const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+
+      const todayCount = await prisma.activityLog.count({
+        where: {
+          userId,
+          action: "message_sent",
+          createdAt: { gte: startOfDay },
+          metadata: { path: ["useSharedClaude"], equals: true },
+        },
+      })
+
+      limitUsed = todayCount
+      limitResetAt = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000)
+
       // Free users have a daily limit
       const dailyLimit = getDailyClaudeCodeLimit()
       limitTotal = dailyLimit
@@ -84,8 +112,7 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
       const exceeded = todayCount >= dailyLimit
       flags.CLAUDE_DAILY_LIMIT_EXCEEDED = exceeded
     }
-    // Pro users: limitTotal and limitRemaining stay null (unlimited)
   }
 
-  return { flags, limitResetAt, limitRemaining, limitUsed, limitTotal, isPro }
+  return { flags, limitResetAt, limitRemaining, limitUsed, limitTotal, isPro, isWeekly }
 }

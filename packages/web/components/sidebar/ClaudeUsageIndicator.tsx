@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 
 interface ClaudeUsageIndicatorProps {
-  /** Number of messages used today */
+  /** Number of messages used in current period */
   used: number | null
   /** Remaining messages (free users only) */
   remaining: number | null
@@ -13,14 +13,16 @@ interface ClaudeUsageIndicatorProps {
   isPro: boolean
   /** Reset time ISO string */
   resetAt: string | null
+  /** Whether usage is tracked weekly (pro) vs daily (free) */
+  isWeekly?: boolean
   /** Additional class names */
   className?: string
 }
 
 /**
  * Displays Claude usage information for users on the shared pool.
- * - Free users: "X/10 Claude prompts used"
- * - Pro users: "X Claude prompts sent today"
+ * - Free users: "X/10 Claude prompts used" (daily)
+ * - Pro users: "X Claude prompts sent this week" (weekly)
  * - Users with own API key: not shown (used is null)
  */
 export function ClaudeUsageIndicator({
@@ -29,6 +31,7 @@ export function ClaudeUsageIndicator({
   total,
   isPro,
   resetAt,
+  isWeekly = false,
   className,
 }: ClaudeUsageIndicatorProps) {
   // Don't show if user has their own API key (not using shared pool)
@@ -64,7 +67,7 @@ export function ClaudeUsageIndicator({
   return (
     <div className={cn("text-sm", getColorClass(), className)} title={tooltip}>
       {isPro ? (
-        <>{used} Claude prompts sent today</>
+        <>{used} Claude prompts sent {isWeekly ? "this week" : "today"}</>
       ) : (
         <>{used}/{total} Claude prompts used</>
       )}

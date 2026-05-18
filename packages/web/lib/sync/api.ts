@@ -64,6 +64,7 @@ export interface SettingsResponse {
   claudeLimitUsed?: number | null
   claudeLimitTotal?: number | null
   claudeIsPro?: boolean
+  claudeIsWeekly?: boolean
 }
 
 // =============================================================================
