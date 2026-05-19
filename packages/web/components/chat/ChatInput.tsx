@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback, useState } from "react"
 import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, X, Paperclip, Pencil, ListChecks } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
@@ -12,12 +12,7 @@ import { RepoCombobox } from "./RepoCombobox"
 import { BranchCombobox } from "./BranchCombobox"
 import { McpServersCombobox } from "./McpServersCombobox"
 import { SlashCommandMenu, type SlashCommandType } from "../SlashCommandMenu"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { MobileSelect } from "../ui/MobileBottomSheet"
 
 // =============================================================================
 // ChatInput - The main chat input area with all controls
@@ -152,6 +147,27 @@ export function ChatInput({
   isMobile,
 }: ChatInputProps) {
   const modals = useModals()
+  const [showModeDropdown, setShowModeDropdown] = useState(false)
+  const [showModeSheet, setShowModeSheet] = useState(false)
+
+  // Close mode dropdown when clicking outside (desktop only)
+  useEffect(() => {
+    if (isMobile) return
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-dropdown]')) {
+        setShowModeDropdown(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [isMobile])
+
+  // Mode options for mobile bottom sheet
+  const modeOptions = [
+    { value: "edit", label: "Edit", icon: <Pencil className="h-5 w-5" /> },
+    { value: "plan", label: "Plan", icon: <ListChecks className="h-5 w-5" /> },
+  ]
 
   return (
     <div className={cn(
@@ -402,45 +418,84 @@ export function ChatInput({
           <div className={cn("flex items-center gap-2", isMobile && "w-full @container/row2")}>
             {/* Mode selector dropdown (Edit/Plan) - only show if agent supports plan mode */}
             {planModeSupported && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              isMobile ? (
+                <>
                   <button
-                    type="button"
-                    className={cn(
-                      "shrink-0 flex items-center gap-1 transition-colors cursor-pointer",
-                      "text-muted-foreground hover:text-foreground",
-                      isMobile ? "h-7 px-2 text-sm" : "h-6 px-1.5 text-sm"
-                    )}
+                    onClick={() => setShowModeSheet(true)}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                     title={planModeEnabled ? "Plan mode — agent will plan before acting" : "Edit mode — agent will edit code directly"}
                   >
                     {planModeEnabled ? (
-                      <ListChecks className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                      <ListChecks className="h-4 w-4" />
                     ) : (
-                      <Pencil className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                      <Pencil className="h-4 w-4" />
                     )}
-                    <span className={cn("text-sm", isMobile ? "hidden @[18rem]/row2:inline" : "hidden @[32rem]:inline")}>
+                    <span className="hidden @[18rem]/row2:inline">
                       {planModeEnabled ? "Plan" : "Edit"}
                     </span>
-                    <ChevronDown className={cn(isMobile ? "h-3 w-3" : "h-3 w-3")} />
+                    <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[140px]">
-                  <DropdownMenuItem
-                    onClick={() => onSetPlanMode(false)}
-                    className={cn(!planModeEnabled && "bg-accent")}
+                  <MobileSelect
+                    open={showModeSheet}
+                    onClose={() => setShowModeSheet(false)}
+                    title="Select Mode"
+                    options={modeOptions}
+                    value={planModeEnabled ? "plan" : "edit"}
+                    onChange={(value) => onSetPlanMode(value === "plan")}
+                  />
+                </>
+              ) : (
+                <div className="relative" data-dropdown>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowModeDropdown(!showModeDropdown)
+                    }}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer"
+                    title={planModeEnabled ? "Plan mode — agent will plan before acting" : "Edit mode — agent will edit code directly"}
                   >
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => onSetPlanMode(true)}
-                    className={cn(planModeEnabled && "bg-accent")}
-                  >
-                    <ListChecks className="h-4 w-4 mr-2" />
-                    Plan
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    {planModeEnabled ? (
+                      <ListChecks className="h-3.5 w-3.5" />
+                    ) : (
+                      <Pencil className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden @[32rem]:inline">
+                      {planModeEnabled ? "Plan" : "Edit"}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                  {showModeDropdown && (
+                    <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-32">
+                      <button
+                        onClick={() => {
+                          onSetPlanMode(false)
+                          setShowModeDropdown(false)
+                        }}
+                        className={cn(
+                          "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
+                          !planModeEnabled && "bg-accent"
+                        )}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          onSetPlanMode(true)
+                          setShowModeDropdown(false)
+                        }}
+                        className={cn(
+                          "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
+                          planModeEnabled && "bg-accent"
+                        )}
+                      >
+                        <ListChecks className="h-3.5 w-3.5" />
+                        Plan
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
             )}
 
             {/* Agent and Model selectors */}
