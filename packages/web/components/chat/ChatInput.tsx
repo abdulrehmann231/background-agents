@@ -73,7 +73,6 @@ interface ChatInputProps {
   // Plan mode
   planModeEnabled: boolean
   planModeSupported: boolean
-  onPlanModeToggle: () => void
   onSetPlanMode: (enabled: boolean) => void
   // MCP servers (chat-scoped, draft-aware)
   showMcpButton: boolean
@@ -137,7 +136,6 @@ export function ChatInput({
   // Plan mode
   planModeEnabled,
   planModeSupported,
-  onPlanModeToggle,
   onSetPlanMode,
   // MCP servers
   showMcpButton,
