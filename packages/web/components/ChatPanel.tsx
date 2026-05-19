@@ -449,7 +449,6 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       // Plan mode
       planModeEnabled={planModeEnabled}
       planModeSupported={agentSupportsPlanMode[currentAgent]}
-      onPlanModeToggle={() => setPlanModeEnabled((v) => !v)}
       onSetPlanMode={setPlanModeEnabled}
       // MCP servers — only show when authenticated and we have a chat to attach to.
       showMcpButton={isAuthenticated && !!chat?.id && !!onMaterializeDraftForMcp}
