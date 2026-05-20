@@ -36,8 +36,12 @@ export const authOptions: NextAuthOptions = {
         return `${baseUrl}${url}`
       }
       // Allow URLs on the same origin
-      if (new URL(url).origin === baseUrl) {
-        return url
+      try {
+        if (new URL(url).origin === baseUrl) {
+          return url
+        }
+      } catch {
+        // url is not a valid absolute URL, fall through to default
       }
       return baseUrl
     },
