@@ -40,22 +40,18 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 
 2. **Configure environment variables**:
 
-   Create a `.env.local` file at the **monorepo root** (not in packages/web):
+   Create a `.env.local` file:
 
    ```bash
    cp .env.example .env.local
    ```
 
    Required variables:
-   - `DAYTONA_API_KEY` - Your Daytona API key
    - `DATABASE_URL` - PostgreSQL connection string (e.g., `postgresql://user:pass@localhost:5432/background_agents`)
-   - `ENCRYPTION_KEY` - 64-character hex string for encrypting API credentials (generate with `openssl rand -hex 32`)
-   - `NEXTAUTH_SECRET` - A random secret for NextAuth session encryption
+   - `DAYTONA_API_KEY` - Your Daytona API key
    - `NEXTAUTH_URL` - Your app URL (default: `http://localhost:4000`)
-
-   Optional (for GitHub integration):
-   - `GITHUB_CLIENT_ID` - GitHub OAuth app client ID
-   - `GITHUB_CLIENT_SECRET` - GitHub OAuth app client secret
+   - `NEXTAUTH_SECRET` - A random secret for NextAuth session encryption
+   - `ENCRYPTION_KEY` - 64-character hex string for encrypting API credentials (generate with `openssl rand -hex 32`)
 
    For MCP servers (Smithery registry + GitHub App MCP), see the [mcp-providers README](../mcp-providers/README.md).
 
