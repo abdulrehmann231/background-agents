@@ -59,13 +59,18 @@ function createWindow() {
     return { action: "deny" };
   });
 
-  // Intercept OAuth sign-in navigation - open in system browser
-  // The browser will handle the full OAuth flow and redirect back via deep link
+  // Intercept OAuth sign-in navigation - redirect to electron-start flow
+  // The new flow opens /auth/electron-start in the system browser, which handles
+  // OAuth and returns a JWT via deep link
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    // Only intercept the initial sign-in request, not callbacks or other navigation
-    // The callbackUrl in the sign-in request already points to /api/auth/electron-callback
-    // which will redirect to background-agents://auth-callback
-    if (url.includes("/api/auth/signin") || url.includes("github.com/login/oauth/authorize")) {
+    // If NextAuth is trying to sign in, redirect to our electron-start flow instead
+    if (url.includes("/api/auth/signin")) {
+      event.preventDefault();
+      const baseUrl = new URL(BACKEND_URL);
+      shell.openExternal(`${baseUrl.origin}/auth/electron-start`);
+    }
+    // Also intercept direct GitHub OAuth URLs (shouldn't happen with new flow, but just in case)
+    else if (url.includes("github.com/login/oauth/authorize")) {
       event.preventDefault();
       shell.openExternal(url);
     }
