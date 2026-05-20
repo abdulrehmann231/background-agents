@@ -2,6 +2,8 @@
 
 This document describes how to run Playwright end-to-end tests for the web application.
 
+**Note:** PostgreSQL install commands below are for **Linux** (Debian/Ubuntu-style). Adapt for other OSes.
+
 ## Build check (no .env required)
 
 To check for build errors without a real database:
@@ -14,15 +16,9 @@ Prisma only validates the URL format during generation—it doesn't connect.
 
 The structure begins with the simplest setup and progresses to the more involved one.
 
-**Note:** PostgreSQL install commands below are for **Linux** (Debian/Ubuntu-style). Adapt for other OSes.
-
----
-
 ## Agent SDK tests
 
 For unit tests and integration tests for the Agent SDK, see [packages/agents/TESTING.md](packages/agents/TESTING.md).
-
----
 
 ## Database setup
 
@@ -48,8 +44,6 @@ When the schema changes, apply it by running the command below from `packages/we
 ```bash
 DATABASE_URL="<same as the DATABASE_URL you configured>" npx prisma db push
 ```
-
----
 
 ## Playwright end-to-end tests
 
