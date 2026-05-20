@@ -54,7 +54,7 @@ export function UserMenu({ user, collapsed, claudeUsage }: UserMenuProps) {
         className={cn(
           "flex items-center gap-2 cursor-pointer rounded-md transition-colors",
           collapsed
-            ? "p-0"
+            ? "p-1.5"
             : "w-full min-w-0 px-2 py-1.5 hover:bg-accent text-left"
         )}
         aria-haspopup="menu"
