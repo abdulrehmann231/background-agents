@@ -223,18 +223,4 @@ ipcMain.on("open-external", (_event, url: string) => {
   shell.openExternal(url);
 });
 
-// Git sync settings
-ipcMain.handle("get-git-sync-settings", async () => {
-  // Return default settings - can be enhanced with electron-store
-  return {
-    enabled: false,
-    syncDirectory: path.join(app.getPath("home"), "Projects"),
-    autoSync: true,
-    bidirectionalSync: false,
-  };
-});
-
-ipcMain.handle("set-git-sync-settings", async (_event, _settings: unknown) => {
-  // Save settings - can be enhanced with electron-store
-  return true;
-});
+// Note: Git sync settings handlers are in git-sync.ts
