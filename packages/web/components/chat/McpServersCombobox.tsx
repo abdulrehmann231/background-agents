@@ -10,6 +10,7 @@
  */
 
 import {
+  AlertCircle,
   BadgeCheck,
   Check,
   ChevronDown,
@@ -24,11 +25,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Command,
   CommandEmpty,
-  CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command"
 import {
   DropdownMenu,
@@ -184,10 +183,15 @@ export function McpServersCombobox({
     }
   }, [])
 
-  // Load connected list + GitHub app status whenever the popover opens.
+  // Load connected list on mount (for the badge count) and when popover opens.
+  useEffect(() => {
+    loadConnected()
+  }, [loadConnected])
+
+  // Load GitHub app status whenever the popover opens.
   useEffect(() => {
     if (open) {
-      loadConnected()
+      loadConnected() // Refresh when opening
       loadGithubStatus()
     }
   }, [open, loadConnected, loadGithubStatus])
@@ -406,9 +410,51 @@ export function McpServersCombobox({
   // ---------- render ----------
 
   const connectedCount = connected.length
-  const showGithubRow =
-    !search.trim() || "github".includes(search.toLowerCase())
-  const githubConnected = connectedByName.has(GITHUB_QUALIFIED_NAME)
+
+  // Create a virtual "GitHub" server entry to unify with registry servers
+  const githubServer: RegistryServer = {
+    slug: GITHUB_QUALIFIED_NAME,
+    name: "GitHub",
+    description: "Issues, PRs, code search via our GitHub App",
+    iconUrl: null,
+    url: null,
+    verified: true,
+    useCount: 0,
+  }
+
+  // Combine GitHub + registry, filter by search, sort connected to top
+  const allServers = useMemo(() => {
+    const searchLower = search.toLowerCase().trim()
+
+    // Filter GitHub server
+    const githubMatches = !searchLower ||
+      githubServer.name.toLowerCase().includes(searchLower) ||
+      githubServer.description.toLowerCase().includes(searchLower)
+
+    // Filter registry servers
+    const filteredRegistry = searchLower
+      ? registry.filter(
+          (s) =>
+            s.name.toLowerCase().includes(searchLower) ||
+            s.description.toLowerCase().includes(searchLower) ||
+            s.slug.toLowerCase().includes(searchLower)
+        )
+      : registry
+
+    // Combine: GitHub first (if matches), then registry
+    const combined = githubMatches
+      ? [githubServer, ...filteredRegistry]
+      : filteredRegistry
+
+    // Sort: connected servers first
+    return combined.sort((a, b) => {
+      const aConnected = connectedByName.has(a.slug)
+      const bConnected = connectedByName.has(b.slug)
+      if (aConnected && !bConnected) return -1
+      if (!aConnected && bConnected) return 1
+      return 0
+    })
+  }, [search, registry, connectedByName])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -420,7 +466,9 @@ export function McpServersCombobox({
             "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-sm",
             disabled && "opacity-50 cursor-not-allowed"
           )}
-          title="MCP servers"
+          aria-label={`MCP servers${connectedCount > 0 ? `, ${connectedCount} connected` : ""}`}
+          aria-haspopup="listbox"
+          aria-expanded={open}
         >
           <Plug className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
           <span
@@ -459,25 +507,90 @@ export function McpServersCombobox({
             onValueChange={setSearch}
           />
           <CommandList>
-            {showGithubRow && (
-              <>
-                <CommandGroup heading="Featured">
+            {loadingRegistry && allServers.length === 0 ? (
+              <div
+                className="flex items-center justify-center py-6"
+                role="status"
+                aria-label="Loading MCP servers"
+              >
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : allServers.length === 0 ? (
+              <CommandEmpty>No servers found</CommandEmpty>
+            ) : (
+              allServers.map((s) => {
+                const isGitHub = s.slug === GITHUB_QUALIFIED_NAME
+                const connectedServer = connectedByName.get(s.slug)
+                const isConn = !!connectedServer
+                const hasError = connectedServer?.status === "error"
+                const isPending = connectedServer?.status === "pending"
+                const isBusy = isGitHub ? githubBusy : busySlug === s.slug
+                const handleSelect = isGitHub
+                  ? handleToggleGithub
+                  : () => handleToggleServer(s)
+
+                // Build status label for screen readers
+                let statusLabel = ""
+                if (isBusy) statusLabel = "Connecting"
+                else if (hasError) statusLabel = `Error: ${connectedServer?.lastError || "Connection failed"}`
+                else if (isPending) statusLabel = "Connection pending"
+                else if (isConn) statusLabel = "Connected"
+
+                return (
                   <CommandItem
-                    value="__github__"
-                    onSelect={handleToggleGithub}
-                    disabled={githubBusy}
+                    key={s.slug}
+                    value={s.slug}
+                    onSelect={handleSelect}
+                    disabled={isBusy}
                     className="flex items-center gap-2 cursor-pointer"
+                    aria-label={`${s.name}${statusLabel ? `, ${statusLabel}` : ""}`}
                   >
-                    <div className="h-6 w-6 rounded bg-muted shrink-0 flex items-center justify-center">
-                      <Github className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
+                    {isGitHub ? (
+                      <div
+                        className="h-6 w-6 rounded bg-muted shrink-0 flex items-center justify-center"
+                        aria-hidden="true"
+                      >
+                        <Github className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                    ) : s.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.iconUrl}
+                        alt={`${s.name} icon`}
+                        className="h-6 w-6 rounded shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="h-6 w-6 rounded bg-muted shrink-0 flex items-center justify-center"
+                        aria-hidden="true"
+                      >
+                        <Plug className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">GitHub</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        Issues, PRs, code search via our GitHub App
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium truncate">
+                          {s.name}
+                        </span>
+                        {s.verified && (
+                          <BadgeCheck
+                            className="h-3 w-3 text-blue-500 shrink-0"
+                            aria-label="Verified"
+                          />
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-1">
+                        {hasError ? (
+                          <span className="text-destructive">
+                            {connectedServer?.lastError || "Connection failed"}
+                          </span>
+                        ) : (
+                          s.description
+                        )}
                       </div>
                     </div>
-                    {githubInstallationId && (
+                    {/* GitHub settings dropdown */}
+                    {isGitHub && githubInstallationId && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           {/* Stop pointer events from bubbling so cmdk doesn't
@@ -502,7 +615,7 @@ export function McpServersCombobox({
                               rel="noreferrer noopener"
                               className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent"
                             >
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                               Manage repositories
                             </a>
                           </DropdownMenuItem>
@@ -510,76 +623,32 @@ export function McpServersCombobox({
                             onSelect={handleUninstallGithubApp}
                             className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm text-destructive focus:bg-destructive/10 focus:text-destructive"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             Uninstall app entirely
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
-                    {githubBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : githubConnected ? (
-                      <Check className="h-4 w-4 text-primary" />
+                    {/* Status indicator */}
+                    {isBusy ? (
+                      <Loader2
+                        className="h-4 w-4 animate-spin text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : hasError ? (
+                      <AlertCircle
+                        className="h-4 w-4 text-destructive"
+                        aria-hidden="true"
+                      />
+                    ) : isConn ? (
+                      <Check
+                        className="h-4 w-4 text-primary"
+                        aria-hidden="true"
+                      />
                     ) : null}
                   </CommandItem>
-                </CommandGroup>
-                <CommandSeparator />
-              </>
-            )}
-
-            {loadingRegistry && registry.length === 0 ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : registry.length === 0 ? (
-              <CommandEmpty>No servers found</CommandEmpty>
-            ) : (
-              <CommandGroup heading="Servers">
-                {registry.map((s) => {
-                  const isConn = connectedByName.has(s.slug)
-                  const isBusy = busySlug === s.slug
-                  return (
-                    <CommandItem
-                      key={s.slug}
-                      value={s.slug}
-                      onSelect={() => handleToggleServer(s)}
-                      disabled={isBusy}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      {s.iconUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={s.iconUrl}
-                          alt=""
-                          className="h-6 w-6 rounded shrink-0"
-                        />
-                      ) : (
-                        <div className="h-6 w-6 rounded bg-muted shrink-0 flex items-center justify-center">
-                          <Plug className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1">
-                          <div className="text-sm font-medium truncate">
-                            {s.name}
-                          </div>
-                          {s.verified && (
-                            <BadgeCheck className="h-3 w-3 text-blue-500 shrink-0" />
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground line-clamp-1">
-                          {s.description}
-                        </div>
-                      </div>
-                      {isBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      ) : isConn ? (
-                        <Check className="h-4 w-4 text-primary" />
-                      ) : null}
-                    </CommandItem>
-                  )
-                })}
-              </CommandGroup>
+                )
+              })
             )}
           </CommandList>
         </Command>
