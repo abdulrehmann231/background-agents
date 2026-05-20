@@ -15,9 +15,13 @@ export function isElectron(): boolean {
  * to the Electron app.
  */
 export function signInWithGitHub() {
-  if (isElectron()) {
+  const electron = isElectron()
+  console.log("[signInWithGitHub] isElectron:", electron, "window.electron:", typeof window !== "undefined" ? !!(window as { electron?: unknown }).electron : "SSR")
+  if (electron) {
+    console.log("[signInWithGitHub] Using Electron callback URL")
     signIn("github", { callbackUrl: "/api/auth/electron-callback" })
   } else {
+    console.log("[signInWithGitHub] Using default sign-in")
     signIn("github")
   }
 }
