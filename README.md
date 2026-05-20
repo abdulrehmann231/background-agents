@@ -27,10 +27,10 @@ https://github.com/user-attachments/assets/ee6de7e9-a32e-45bd-acfa-3da1763b80ea
 
 ## Configuration
 
-Create a `.env.local` file at the monorepo root:
+Create a `.env.local` file in `packages/web/`:
 
 ```bash
-cp .env.example .env.local
+cp packages/web/.env.example packages/web/.env.local
 ```
 
 Required variables:
