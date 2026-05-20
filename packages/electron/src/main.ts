@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 
 // Backend URL - configurable via environment
 const BACKEND_URL =
-  process.env.BACKGROUND_AGENTS_URL || "https://agents.new";
+  process.env.BACKGROUND_AGENTS_URL || "https://backgrounder.dev";
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;

@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
-const BACKEND_URL = process.env.BACKGROUND_AGENTS_URL || "https://agents.new";
+const BACKEND_URL = process.env.BACKGROUND_AGENTS_URL || "https://backgrounder.dev";
 const APP_NAME = "background-agents";
 const VERSION = "0.1.0";
 
