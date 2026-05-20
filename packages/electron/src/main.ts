@@ -63,16 +63,12 @@ function createWindow() {
   // The new flow opens /auth/electron-start in the system browser, which handles
   // OAuth and returns a JWT via deep link
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    // If NextAuth is trying to sign in, redirect to our electron-start flow instead
+    // If NextAuth is trying to sign in from the main app, redirect to electron-start flow
+    // Note: This only triggers for navigation within the Electron window, not in the system browser
     if (url.includes("/api/auth/signin")) {
       event.preventDefault();
       const baseUrl = new URL(BACKEND_URL);
       shell.openExternal(`${baseUrl.origin}/auth/electron-start`);
-    }
-    // Also intercept direct GitHub OAuth URLs (shouldn't happen with new flow, but just in case)
-    else if (url.includes("github.com/login/oauth/authorize")) {
-      event.preventDefault();
-      shell.openExternal(url);
     }
   });
 
