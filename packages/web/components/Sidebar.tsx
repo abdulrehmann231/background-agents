@@ -617,10 +617,13 @@ export function Sidebar({
       style={{ width: collapsed ? COLLAPSED_WIDTH : width }}
     >
       {/* Header */}
-      <div className={cn(
-        "flex items-center p-3",
-        collapsed ? "justify-center" : "justify-between"
-      )}>
+      <div
+        className={cn(
+          "flex items-center p-3",
+          collapsed ? "justify-center" : "justify-between"
+        )}
+        style={isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
+      >
         {!collapsed && (
           <h1 className={cn(
             "text-sm font-semibold text-foreground truncate",
@@ -632,6 +635,7 @@ export function Sidebar({
         <button
           onClick={handleToggleCollapse}
           className="p-1.5 rounded-md hover:bg-accent text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+          style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
         >
           <PanelLeft className="h-4 w-4" />
         </button>
