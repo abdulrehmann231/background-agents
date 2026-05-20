@@ -3,6 +3,7 @@
 import { useState, useRef } from "react"
 import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command } from "lucide-react"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
+import { useElectron } from "@/lib/hooks/useElectron"
 import { useModals, useGit } from "@/lib/contexts"
 import { Input } from "../ui/input"
 import type { Chat } from "@/lib/types"
@@ -27,6 +28,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const modals = useModals()
   const git = useGit()
+  const { isDesktopApp } = useElectron()
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -78,8 +80,18 @@ export function ChatHeader({
   }
 
   return (
-    <div className="flex items-center justify-between pt-3" style={{ paddingLeft: "1.625rem", paddingRight: "1rem" }}>
-      <div className="flex items-center gap-2">
+    <div
+      className="flex items-center justify-between pt-3"
+      style={{
+        paddingLeft: "1.625rem",
+        paddingRight: "1rem",
+        ...(isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : {}),
+      }}
+    >
+      <div
+        className="flex items-center gap-2"
+        style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
+      >
         {/* Conflict indicator */}
         {inConflict && (
           <ConflictIndicator
@@ -173,7 +185,10 @@ export function ChatHeader({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1">
+      <div
+        className="flex items-center gap-1"
+        style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
+      >
         {onOpenCommandPalette && (
           <button
             onClick={onOpenCommandPalette}
