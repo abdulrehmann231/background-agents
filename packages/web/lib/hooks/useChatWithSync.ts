@@ -389,11 +389,20 @@ export function useChatWithSync() {
     parentChatId?: string,
     switchTo: boolean = true,
     initialStatus: Chat["status"] = "pending",
+    agent?: string | null,
+    model?: string | null,
   ): Promise<string | null> => {
     // Branch chats (with parentChatId) are created immediately since they need to reference the parent
     if (parentChatId) {
       try {
-        const newChat = await createChatMutation.mutateAsync({ repo, baseBranch, parentChatId, status: initialStatus })
+        const newChat = await createChatMutation.mutateAsync({
+          repo,
+          baseBranch,
+          parentChatId,
+          agent,
+          model,
+          status: initialStatus,
+        })
         if (switchTo) {
           setCurrentChatIdState(newChat.id)
           persistCurrentChatId(newChat.id)
