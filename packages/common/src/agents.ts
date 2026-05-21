@@ -211,7 +211,7 @@ export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "default",
   "opencode": "opencode/big-pickle", // Free model, no API key needed
   "codex": "gpt-5.4",
-  "copilot": "claude-sonnet-4.5",
+  "copilot": "gpt-5-mini",
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
   "gemini": "gemini-2.5-flash",
   "goose": "gpt-4o",

@@ -1,13 +1,23 @@
 /**
  * GitHub Copilot CLI output parser
  *
- * Parses JSONL events from `copilot -p "..." --output-format=json --silent`.
- * Handles both naming conventions found in different CLI versions:
+ * Parses JSONL events from `copilot -p "..." --output-format=json --silent --autopilot`.
+ *
+ * Real event types observed from @github/copilot CLI:
+ *   - assistant.message_delta            → TokenEvent  (deltaContent field)
+ *   - tool.execution_start               → ToolStartEvent
+ *   - tool.execution_complete            → ToolEndEvent
+ *   - session.task_complete              → EndEvent  (final event before process exits)
+ *   - assistant.turn_end                 → ignored (autopilot fires a continuation turn after this)
+ *   - result                             → EndEvent fallback (exitCode field)
+ *
+ * Legacy naming conventions also supported for forward-compat:
  *   - message.delta / assistant.message_delta  → TokenEvent
  *   - tool.call / tool.start                   → ToolStartEvent
  *   - tool.result / tool.end                   → ToolEndEvent
- *   - turn.end / assistant.turn_end            → EndEvent
+ *   - turn.end                                 → EndEvent
  *   - session.start                            → SessionEvent
+ *   - session.shutdown                         → EndEvent
  */
 
 import type { Event } from "../../types/events"
@@ -30,20 +40,24 @@ interface CopilotSessionStart extends CopilotBaseEvent {
 
 interface CopilotMessageDelta extends CopilotBaseEvent {
   type: "message.delta" | "assistant.message_delta"
+  // @github/copilot uses data.deltaContent; legacy uses content at top level
+  data?: { deltaContent?: string; messageId?: string }
   content?: string
   deltaContent?: string
   role?: string
 }
 
-interface CopilotToolCall extends CopilotBaseEvent {
-  type: "tool.call" | "tool.start"
+interface CopilotToolExecutionStart extends CopilotBaseEvent {
+  type: "tool.execution_start" | "tool.call" | "tool.start"
+  data?: { toolName?: string; arguments?: Record<string, unknown>; toolCallId?: string }
   name?: string
   arguments?: Record<string, unknown>
   callId?: string
 }
 
-interface CopilotToolResult extends CopilotBaseEvent {
-  type: "tool.result" | "tool.end"
+interface CopilotToolExecutionComplete extends CopilotBaseEvent {
+  type: "tool.execution_complete" | "tool.result" | "tool.end"
+  data?: { result?: { content?: string }; success?: boolean; toolCallId?: string }
   callId?: string
   result?: string
   output?: string
@@ -56,6 +70,21 @@ interface CopilotTurnEnd extends CopilotBaseEvent {
   error?: string | { message: string }
 }
 
+interface CopilotTaskComplete extends CopilotBaseEvent {
+  type: "session.task_complete"
+  data?: { success?: boolean; summary?: string }
+}
+
+interface CopilotResult extends CopilotBaseEvent {
+  type: "result"
+  exitCode?: number
+}
+
+interface CopilotMcpStatus extends CopilotBaseEvent {
+  type: "session.mcp_server_status_changed"
+  data?: { serverName?: string; status?: string }
+}
+
 interface CopilotSessionShutdown extends CopilotBaseEvent {
   type: "session.shutdown"
 }
@@ -63,9 +92,12 @@ interface CopilotSessionShutdown extends CopilotBaseEvent {
 type CopilotEvent =
   | CopilotSessionStart
   | CopilotMessageDelta
-  | CopilotToolCall
-  | CopilotToolResult
+  | CopilotToolExecutionStart
+  | CopilotToolExecutionComplete
   | CopilotTurnEnd
+  | CopilotTaskComplete
+  | CopilotResult
+  | CopilotMcpStatus
   | CopilotSessionShutdown
   | CopilotBaseEvent
 
@@ -85,30 +117,76 @@ export function parseCopilotLine(
     return { type: "session", id: ev.sessionId ?? "" }
   }
 
-  // ─── Text streaming (both naming conventions) ─────────────
+  // ─── Text streaming ───────────────────────────────────────
+  // @github/copilot wraps content in data.deltaContent
   if (json.type === "message.delta" || json.type === "assistant.message_delta") {
     const ev = json as CopilotMessageDelta
-    const text = ev.content ?? ev.deltaContent ?? ""
+    const text = ev.data?.deltaContent ?? ev.content ?? ev.deltaContent ?? ""
     if (!text) return null
     return { type: "token", text }
   }
 
   // ─── Tool invocation start ────────────────────────────────
-  if (json.type === "tool.call" || json.type === "tool.start") {
-    const ev = json as CopilotToolCall
-    const name = ev.name ?? "unknown"
-    return createToolStartEvent(name, ev.arguments, toolMappings)
+  // @github/copilot uses tool.execution_start with data.toolName
+  if (
+    json.type === "tool.execution_start" ||
+    json.type === "tool.call" ||
+    json.type === "tool.start"
+  ) {
+    const ev = json as CopilotToolExecutionStart
+    const name = ev.data?.toolName ?? ev.name ?? "unknown"
+    const args = ev.data?.arguments ?? ev.arguments
+    return createToolStartEvent(name, args, toolMappings)
   }
 
   // ─── Tool result ──────────────────────────────────────────
-  if (json.type === "tool.result" || json.type === "tool.end") {
-    const ev = json as CopilotToolResult
-    const output = ev.result ?? ev.output
+  // @github/copilot uses tool.execution_complete with data.result.content
+  if (
+    json.type === "tool.execution_complete" ||
+    json.type === "tool.result" ||
+    json.type === "tool.end"
+  ) {
+    const ev = json as CopilotToolExecutionComplete
+    const output = ev.data?.result?.content ?? ev.result ?? ev.output
     return { type: "tool_end", output }
   }
 
-  // ─── Turn / agent loop complete ───────────────────────────
-  if (json.type === "turn.end" || json.type === "assistant.turn_end") {
+  // ─── MCP server auth failure ─────────────────────────────
+  // Fired when the built-in github-mcp-server can't authenticate.
+  // This is an actionable auth error, not a generic crash.
+  if (json.type === "session.mcp_server_status_changed") {
+    const ev = json as CopilotMcpStatus
+    if (ev.data?.status === "failed") {
+      const server = ev.data?.serverName ?? "GitHub MCP server"
+      return {
+        type: "end",
+        error:
+          `${server} failed to connect. ` +
+          `Ensure your COPILOT_GITHUB_TOKEN has the "Copilot Requests" permission ` +
+          `and has not expired.`,
+      }
+    }
+    return null
+  }
+
+  // ─── Task complete (final event before process exits in autopilot) ───
+  // This is the true terminal event — emit end here.
+  if (json.type === "session.task_complete") {
+    return { type: "end" }
+  }
+
+  // ─── Result line (process-level exit summary) ─────────────
+  if (json.type === "result") {
+    const ev = json as CopilotResult
+    const error = ev.exitCode !== 0 ? `Process exited with code ${ev.exitCode}` : undefined
+    return { type: "end", error }
+  }
+
+  // ─── Turn end ─────────────────────────────────────────────
+  // In autopilot mode the CLI fires a continuation turn after assistant.turn_end,
+  // so we do NOT emit end here — we wait for session.task_complete instead.
+  // For legacy turn.end (non-autopilot) we do emit end.
+  if (json.type === "turn.end") {
     const ev = json as CopilotTurnEnd
     let error: string | undefined
     if (ev.status && ev.status !== "success") {
