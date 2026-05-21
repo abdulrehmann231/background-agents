@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest"
 import {
   parseClaudeLine,
   parseCodexLine,
+  parseCopilotLine,
   parseElizaLine,
   parseGeminiLine,
   parseGooseLine,
@@ -13,6 +14,7 @@ import {
   parsePiLine,
   CLAUDE_TOOL_MAPPINGS,
   CODEX_TOOL_MAPPINGS,
+  COPILOT_TOOL_MAPPINGS,
   ELIZA_TOOL_MAPPINGS,
   GEMINI_TOOL_MAPPINGS,
   GOOSE_TOOL_MAPPINGS,
@@ -1274,3 +1276,195 @@ describe("parseElizaLine", () => {
     expect(parseElizaLine('{"type": "unknown_event"}', mappings)).toBeNull()
   })
 })
+
+describe("parseCopilotLine", () => {
+  const mappings = COPILOT_TOOL_MAPPINGS
+
+  it("returns null for invalid JSON", () => {
+    expect(parseCopilotLine("not json", mappings)).toBeNull()
+    expect(parseCopilotLine("", mappings)).toBeNull()
+    expect(parseCopilotLine("{bad}", mappings)).toBeNull()
+  })
+
+  it("returns null for JSON without type field", () => {
+    expect(parseCopilotLine('{"foo": "bar"}', mappings)).toBeNull()
+  })
+
+  it("parses session.start event", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "session.start", sessionId: "sess-abc-123" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "session", id: "sess-abc-123" })
+  })
+
+  it("parses session.start with missing sessionId", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "session.start" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "session", id: "" })
+  })
+
+  it("parses message.delta event", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "message.delta", content: "Hello world" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "token", text: "Hello world" })
+  })
+
+  it("parses assistant.message_delta event (alternate naming)", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "assistant.message_delta", deltaContent: "chunk" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "token", text: "chunk" })
+  })
+
+  it("returns null for message.delta with empty content", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "message.delta" }),
+      mappings
+    )
+    expect(event).toBeNull()
+  })
+
+  it("parses tool.call event with shell tool", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "tool.call",
+        name: "shell",
+        arguments: { command: "ls -la" },
+        callId: "call_001",
+      }),
+      mappings
+    )
+    expect(event).toMatchObject({
+      type: "tool_start",
+      name: "shell",
+    })
+  })
+
+  it("parses tool.start event (alternate naming)", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "tool.start",
+        name: "read_file",
+        arguments: { file_path: "/src/main.ts" },
+      }),
+      mappings
+    )
+    expect(event).toMatchObject({
+      type: "tool_start",
+      name: "read",
+    })
+  })
+
+  it("normalizes tool names through mappings", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "tool.call",
+        name: "create_file",
+        arguments: { file_path: "/new.ts", content: "// new" },
+      }),
+      mappings
+    )
+    expect(event).toMatchObject({
+      type: "tool_start",
+      name: "write",
+    })
+  })
+
+  it("parses tool.result event", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "tool.result",
+        callId: "call_001",
+        result: "main.go\nREADME.md",
+      }),
+      mappings
+    )
+    expect(event).toEqual({
+      type: "tool_end",
+      output: "main.go\nREADME.md",
+    })
+  })
+
+  it("parses tool.end event (alternate naming) with output field", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "tool.end",
+        output: "done",
+      }),
+      mappings
+    )
+    expect(event).toEqual({ type: "tool_end", output: "done" })
+  })
+
+  it("parses turn.end success", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "turn.end", status: "success" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "end" })
+  })
+
+  it("parses turn.end with error status (string error)", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "turn.end",
+        status: "error",
+        error: "Rate limit exceeded",
+      }),
+      mappings
+    )
+    expect(event).toEqual({ type: "end", error: "Rate limit exceeded" })
+  })
+
+  it("parses turn.end with error status (object error)", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "turn.end",
+        status: "error",
+        error: { message: "Something went wrong" },
+      }),
+      mappings
+    )
+    expect(event).toEqual({ type: "end", error: "Something went wrong" })
+  })
+
+  it("parses turn.end with non-success status but no error field", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "turn.end", status: "cancelled" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "end", error: "Turn ended with status: cancelled" })
+  })
+
+  it("parses assistant.turn_end (alternate naming)", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "assistant.turn_end", status: "success" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "end" })
+  })
+
+  it("parses session.shutdown as end event", () => {
+    const event = parseCopilotLine(
+      JSON.stringify({ type: "session.shutdown" }),
+      mappings
+    )
+    expect(event).toEqual({ type: "end" })
+  })
+
+  it("returns null for unknown event types", () => {
+    expect(
+      parseCopilotLine('{"type": "permission.requested"}', mappings)
+    ).toBeNull()
+    expect(
+      parseCopilotLine('{"type": "session.compaction"}', mappings)
+    ).toBeNull()
+  })
+})
+
