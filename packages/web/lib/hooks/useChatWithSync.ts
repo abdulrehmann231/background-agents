@@ -415,7 +415,7 @@ export function useChatWithSync() {
     }
 
     // For regular new chats, enter draft mode instead of creating in DB
-    const draftId = enterDraftMode(repo, baseBranch)
+    const draftId = enterDraftMode(repo, baseBranch, agent, model)
     return draftId
   }, [createChatMutation, enterDraftMode])
 

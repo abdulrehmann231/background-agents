@@ -756,7 +756,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     const repo = displayCurrentChat?.repo ?? NEW_REPOSITORY
     const baseBranch = displayCurrentChat?.baseBranch ?? "main"
 
-    const chatId = await startNewChat(repo, baseBranch, undefined, false, "pending")
+    const chatId = await startNewChat(repo, baseBranch, undefined, false, "pending", agent, model)
     if (!chatId) return
 
     sendMessage(message, agent, model, files, chatId, planMode)
