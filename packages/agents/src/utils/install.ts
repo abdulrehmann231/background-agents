@@ -11,6 +11,7 @@ const PROVIDER_PACKAGES: Record<ProviderName, string> = {
   copilot: "@github/copilot",
   eliza: "", // eliza is built-in, no installation needed
   goose: "", // goose uses shell script installer, not npm
+  kilo: "@kilocode/cli",
   opencode: "opencode",
   gemini: "@google/gemini-cli",
   pi: "@mariozechner/pi-coding-agent",
@@ -133,7 +134,7 @@ export function ensureCliInstalled(
  * Check installation status of all providers
  */
 export function getInstallationStatus(): Record<ProviderName, boolean> {
-  const providers: ProviderName[] = ["claude", "codex", "copilot", "eliza", "goose", "opencode", "gemini", "pi"]
+  const providers: ProviderName[] = ["claude", "codex", "copilot", "eliza", "goose", "kilo", "opencode", "gemini", "pi"]
   const status: Record<string, boolean> = {}
 
   for (const provider of providers) {

@@ -1,5 +1,8 @@
 /**
- * OpenCode CLI Agent Definition
+ * Kilo CLI Agent Definition
+ *
+ * Kilo is a fork of OpenCode with its own gateway and model catalog.
+ * Uses --auto flag for fully autonomous runs in sandbox environments.
  */
 
 import type {
@@ -9,20 +12,27 @@ import type {
   RunOptions,
 } from "../../core/agent"
 import type { Event } from "../../types/events"
-import { parseOpencodeLine } from "./parser"
-import { OPENCODE_TOOL_MAPPINGS } from "./tools"
-import { quote } from "../../utils/shell"
+import { parseKiloLine } from "./parser"
+import { KILO_TOOL_MAPPINGS } from "./tools"
 
 /**
- * OpenCode CLI agent definition.
+ * Quote a string for bash
+ */
+function quote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`
+}
+
+/**
+ * Kilo CLI agent definition.
  *
- * Interacts with the OpenCode CLI tool which outputs JSON lines.
+ * Interacts with the Kilo CLI tool which outputs JSON lines.
+ * Uses --auto to auto-approve all permissions (safe in sandbox).
  * Wraps command in bash to capture stderr.
  */
-export const opencodeAgent: AgentDefinition = {
-  name: "opencode",
+export const kiloAgent: AgentDefinition = {
+  name: "kilo",
 
-  toolMappings: OPENCODE_TOOL_MAPPINGS,
+  toolMappings: KILO_TOOL_MAPPINGS,
 
   capabilities: {
     supportsSystemPrompt: false,
@@ -30,8 +40,8 @@ export const opencodeAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    // OpenCode sometimes writes JSON events to stderr; run under bash and redirect 2>&1
-    const parts: string[] = ["opencode", "run", "--format", "json", "--variant", "medium"]
+    // Kilo sometimes writes JSON events to stderr; run under bash and redirect 2>&1
+    const parts: string[] = ["kilo", "run", "--format", "json", "--auto"]
 
     if (options.model) {
       parts.push("-m", quote(options.model))
@@ -41,7 +51,7 @@ export const opencodeAgent: AgentDefinition = {
       parts.push("-s", quote(options.sessionId))
     }
 
-    // The "--" sentinel signals end-of-options to the OpenCode's argument parser
+    // The "--" sentinel signals end-of-options to Kilo's argument parser
     if (options.prompt) {
       parts.push("--")
       parts.push(quote(options.prompt))
@@ -63,6 +73,6 @@ export const opencodeAgent: AgentDefinition = {
   },
 
   parse(line: string, context: ParseContext): Event | Event[] | null {
-    return parseOpencodeLine(line, this.toolMappings, context)
+    return parseKiloLine(line, this.toolMappings, context)
   },
 }

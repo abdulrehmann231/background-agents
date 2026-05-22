@@ -246,7 +246,7 @@ type Event =
 
 | Provider | Example | Docs |
 |----------|---------|------|
-| **Claude** | `model: "sonnet"`, `model: "opus"`, `model: "haiku"` | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) |
+| **Claude** | `model: "sonnet"`, `model: "opus"`, `model: "haiku"` | [Claude Code](https://code.claude.com/docs/en/model-config#model-aliases) |
 | **Codex** | `model: "gpt-5.4"`, `model: "gpt-5.3-codex"` | [Codex CLI models](https://developers.openai.com/codex/models) |
 | **Goose** | `model: "gpt-4o"`, `model: "claude-sonnet-4-5"`, `model: "claude-opus-4-7"` | [Goose providers](https://block.github.io/goose/docs/getting-started/providers) |
 | **OpenCode** | `model: "opencode/big-pickle"` (free), `model: "anthropic/claude-sonnet-4-5"` | [OpenCode models](https://opencode.ai/docs/models/) |
