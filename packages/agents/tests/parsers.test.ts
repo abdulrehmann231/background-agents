@@ -1550,31 +1550,67 @@ describe("parseCopilotLine", () => {
     expect(endEvent).toEqual({ type: "tool_end", output: "file.ts\n" })
   })
 
-  it("suppresses ephemeral assistant.message_delta events (narration)", () => {
+  // ─── assistant.message_delta ───────────────────────────────────────────────
+  // The ephemeral flag is NOT the discriminator. Continuation state is.
+
+  it("passes through assistant.message_delta (ephemeral: true) during the initial turn", () => {
+    // gpt-5-mini marks ALL deltas ephemeral: true, including real responses.
+    // Without a continuation flag set, the delta must be emitted.
+    const ctx = createContext()
     const event = parseCopilotLine(
       JSON.stringify({
         type: "assistant.message_delta",
-        data: { deltaContent: "Gathering environment info", messageId: "msg-1" },
+        data: { deltaContent: "Dogs are loyal companions.", messageId: "msg-1" },
         ephemeral: true,
       }),
-      mappings
+      mappings,
+      ctx
     )
-    expect(event).toBeNull()
+    expect(event).toEqual({ type: "token", text: "Dogs are loyal companions." })
   })
 
-  it("passes through non-ephemeral assistant.message_delta events", () => {
+  it("passes through assistant.message_delta (ephemeral: false) during the initial turn", () => {
+    const ctx = createContext()
     const event = parseCopilotLine(
       JSON.stringify({
         type: "assistant.message_delta",
         data: { deltaContent: "Hello!", messageId: "msg-2" },
         ephemeral: false,
       }),
-      mappings
+      mappings,
+      ctx
     )
     expect(event).toEqual({ type: "token", text: "Hello!" })
   })
 
-  it("emits text from assistant.message with no tool requests (final response)", () => {
+  it("suppresses assistant.message_delta during autopilot continuation turn", () => {
+    // session.info sets the continuation flag; subsequent deltas are narration.
+    const ctx = createContext()
+    parseCopilotLine(
+      JSON.stringify({
+        type: "session.info",
+        data: { infoType: "autopilot_continuation", message: "Continuing autonomously" },
+        ephemeral: true,
+      }),
+      mappings,
+      ctx
+    )
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "assistant.message_delta",
+        data: { deltaContent: "Marking the task complete.", messageId: "msg-narrate" },
+        ephemeral: true,
+      }),
+      mappings,
+      ctx
+    )
+    expect(event).toBeNull()
+  })
+
+  // ─── assistant.message ────────────────────────────────────────────────────
+
+  it("emits text from assistant.message with no tool requests (gpt-4.1 final response)", () => {
+    const ctx = createContext()
     const event = parseCopilotLine(
       JSON.stringify({
         type: "assistant.message",
@@ -1584,12 +1620,30 @@ describe("parseCopilotLine", () => {
           toolRequests: [],
         },
       }),
-      mappings
+      mappings,
+      ctx
     )
     expect(event).toEqual({ type: "token", text: "Here is my final answer." })
   })
 
-  it("suppresses assistant.message with tool requests (narration before tool call)", () => {
+  it("emits text from assistant.message even when ephemeral: true (before continuation flag)", () => {
+    // gpt-5-mini may mark assistant.message ephemeral. The ephemeral flag alone
+    // must not suppress it — only the continuation state should.
+    const ctx = createContext()
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "assistant.message",
+        data: { messageId: "msg-5", content: "Here is my response.", toolRequests: [] },
+        ephemeral: true,
+      }),
+      mappings,
+      ctx
+    )
+    expect(event).toEqual({ type: "token", text: "Here is my response." })
+  })
+
+  it("suppresses assistant.message with tool requests (prelude to tool call)", () => {
+    const ctx = createContext()
     const event = parseCopilotLine(
       JSON.stringify({
         type: "assistant.message",
@@ -1599,31 +1653,134 @@ describe("parseCopilotLine", () => {
           toolRequests: [{ toolCallId: "call_abc", name: "bash", type: "function" }],
         },
       }),
-      mappings
+      mappings,
+      ctx
     )
     expect(event).toBeNull()
   })
 
-  it("suppresses ephemeral assistant.message events", () => {
+  it("suppresses assistant.message during autopilot continuation turn", () => {
+    const ctx = createContext()
+    parseCopilotLine(
+      JSON.stringify({
+        type: "session.info",
+        data: { infoType: "autopilot_continuation", message: "Continuing autonomously" },
+        ephemeral: true,
+      }),
+      mappings,
+      ctx
+    )
     const event = parseCopilotLine(
       JSON.stringify({
         type: "assistant.message",
-        data: { messageId: "msg-5", content: "internal reasoning" },
-        ephemeral: true,
+        data: { messageId: "msg-cont", content: "Internal narration.", toolRequests: [] },
       }),
-      mappings
+      mappings,
+      ctx
     )
     expect(event).toBeNull()
   })
 
   it("returns null for assistant.message with empty content and no tool requests", () => {
+    const ctx = createContext()
     const event = parseCopilotLine(
       JSON.stringify({
         type: "assistant.message",
         data: { messageId: "msg-6", content: "", toolRequests: [] },
       }),
-      mappings
+      mappings,
+      ctx
     )
     expect(event).toBeNull()
+  })
+
+  // ─── session.info ─────────────────────────────────────────────────────────
+
+  it("session.info autopilot_continuation sets continuation flag and returns null", () => {
+    const ctx = createContext()
+    const event = parseCopilotLine(
+      JSON.stringify({
+        type: "session.info",
+        data: { infoType: "autopilot_continuation", message: "Continuing autonomously (1 premium request)" },
+        ephemeral: true,
+      }),
+      mappings,
+      ctx
+    )
+    expect(event).toBeNull()
+    expect(ctx.state["copilot_in_autopilot_continuation"]).toBe(true)
+  })
+
+  it("session.info with other infoType does not set continuation flag", () => {
+    const ctx = createContext()
+    parseCopilotLine(
+      JSON.stringify({
+        type: "session.info",
+        data: { infoType: "some_other_info", message: "something" },
+      }),
+      mappings,
+      ctx
+    )
+    expect(ctx.state["copilot_in_autopilot_continuation"]).toBeUndefined()
+  })
+
+  // ─── Fixture-driven integration tests ────────────────────────────────────
+  // Replay full JSONL streams and assert the correct token sequence.
+
+  it("gpt-5-mini stream: emits response tokens from initial-turn deltas, suppresses continuation narration", () => {
+    const fs = require("fs")
+    const path = require("path")
+    const fixture = fs.readFileSync(
+      path.join(__dirname, "fixtures/jsonl-reference/copilot-gpt-5-mini.jsonl"),
+      "utf-8"
+    )
+    const lines = fixture.split("\n").filter(Boolean)
+    const ctx = createContext()
+    const tokens: string[] = []
+    const events: string[] = []
+    for (const line of lines) {
+      const event = parseCopilotLine(line, mappings, ctx)
+      if (!event) continue
+      if (event.type === "token") tokens.push((event as { type: "token"; text: string }).text)
+      else events.push(event.type)
+    }
+    // Should have emitted the initial-turn deltas as tokens
+    expect(tokens.length).toBeGreaterThan(0)
+    expect(tokens.join("")).toContain("Dogs")
+    // No continuation narration ("Marking") should have leaked through
+    expect(tokens.join("")).not.toContain("Mark")
+    // Should have emitted exactly one end event (from session.task_complete)
+    expect(events).toContain("end")
+    expect(events.filter(e => e === "end")).toHaveLength(1)
+  })
+
+  it("gpt-4.1 stream: emits response from assistant.message, suppresses continuation turn", () => {
+    const fs = require("fs")
+    const path = require("path")
+    const fixture = fs.readFileSync(
+      path.join(__dirname, "fixtures/jsonl-reference/copilot-gpt-4.1.jsonl"),
+      "utf-8"
+    )
+    const lines = fixture.split("\n").filter(Boolean)
+    const ctx = createContext()
+    const tokens: string[] = []
+    const events: string[] = []
+    for (const line of lines) {
+      const event = parseCopilotLine(line, mappings, ctx)
+      if (!event) continue
+      if (event.type === "token") tokens.push((event as { type: "token"; text: string }).text)
+      else events.push(event.type)
+    }
+    // Response content arrives via streaming deltas; assistant.message is
+    // suppressed by the messageId dedup. The joined text must equal the full
+    // response and must not be repeated (repetition bug).
+    const fullText = tokens.join("")
+    expect(fullText).toBe("Dogs are loyal and affectionate companions.")
+    // No duplicate: the text appears exactly once
+    expect(fullText.indexOf("Dogs")).toBe(0)
+    expect(fullText.lastIndexOf("Dogs")).toBe(0)
+    // One end event (result is suppressed since task_complete already fired)
+    expect(events).toContain("end")
+    expect(events.filter(e => e === "end")).toHaveLength(1)
   })
 })

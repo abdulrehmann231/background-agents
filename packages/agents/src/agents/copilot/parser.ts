@@ -88,6 +88,11 @@ interface CopilotMcpStatus extends CopilotBaseEvent {
   data?: { serverName?: string; status?: string }
 }
 
+interface CopilotSessionInfo extends CopilotBaseEvent {
+  type: "session.info"
+  data?: { infoType?: string; message?: string }
+}
+
 interface CopilotSessionShutdown extends CopilotBaseEvent {
   type: "session.shutdown"
 }
@@ -116,6 +121,7 @@ type CopilotEvent =
   | CopilotTaskComplete
   | CopilotResult
   | CopilotMcpStatus
+  | CopilotSessionInfo
   | CopilotSessionShutdown
   | CopilotBaseEvent
 
@@ -139,8 +145,31 @@ const COPILOT_INTERNAL_TOOLS = new Set([
   "think",
 ])
 
-/** Key used to store suppressed tool call IDs in ParseContext.state */
+/**
+ * Key used to store suppressed tool call IDs in ParseContext.state.
+ * Paired with AUTOPILOT_CONTINUATION_KEY to track the current turn phase.
+ */
 const SUPPRESSED_IDS_KEY = "copilot_suppressed_tool_call_ids"
+
+/**
+ * Set to true in context.state once `session.info { infoType: "autopilot_continuation" }`
+ * fires. Everything from that point until session.task_complete is an internal
+ * autopilot workflow turn — model narration, tool bookkeeping — not user-visible output.
+ */
+const AUTOPILOT_CONTINUATION_KEY = "copilot_in_autopilot_continuation"
+
+/**
+ * Set of messageIds for which delta tokens have already been streamed.
+ * When assistant.message fires for the same messageId, the full content
+ * would duplicate what the deltas already emitted — suppress it.
+ */
+const STREAMED_MESSAGE_IDS_KEY = "copilot_streamed_message_ids"
+
+/**
+ * Set to true when session.task_complete fires. The subsequent `result`
+ * event also emits end — suppress the duplicate.
+ */
+const TASK_COMPLETE_KEY = "copilot_task_complete"
 
 function getSuppressedIds(context: ParseContext): Set<string> {
   if (!context.state[SUPPRESSED_IDS_KEY]) {
@@ -168,28 +197,58 @@ export function parseCopilotLine(
 
   // ─── Text streaming ───────────────────────────────────────
   // @github/copilot wraps content in data.deltaContent.
-  // In autopilot mode, narration/reasoning deltas are marked ephemeral: true
-  // and must be filtered — otherwise the model's internal chain-of-thought
-  // streams into the UI as visible text.
+  //
+  // The `ephemeral` flag is NOT a reliable discriminator here: free-tier models
+  // (gpt-5-mini) mark ALL deltas as ephemeral: true — including the real
+  // user-facing response. The correct signal is whether we are inside an
+  // autopilot continuation turn (set by the session.info handler below).
+  // Continuation turns are internal workflow turns (narration, task_complete
+  // bookkeeping) and must be suppressed entirely.
+  //
+  // Note: the legacy `message.delta` path (non-@github/copilot format) is
+  // also guarded here. It does not appear in modern captures but is kept for
+  // forward-compat; it has no ephemeral flag so the continuation guard is
+  // the only filter applied.
   if (json.type === "message.delta" || json.type === "assistant.message_delta") {
-    if (json.ephemeral === true) return null
+    if (context?.state[AUTOPILOT_CONTINUATION_KEY]) return null
     const ev = json as CopilotMessageDelta
     const text = ev.data?.deltaContent ?? ev.content ?? ev.deltaContent ?? ""
     if (!text) return null
+    // Record the messageId so the paired assistant.message is suppressed.
+    const messageId = ev.data?.messageId
+    if (messageId && context) {
+      if (!context.state[STREAMED_MESSAGE_IDS_KEY]) {
+        context.state[STREAMED_MESSAGE_IDS_KEY] = new Set<string>()
+      }
+      ;(context.state[STREAMED_MESSAGE_IDS_KEY] as Set<string>).add(messageId)
+    }
     return { type: "token", text }
   }
 
   // ─── Full message (end of turn) ────────────────────────────
-  // In autopilot mode, the actual user-facing response lives here,
-  // not in the deltas (which are all ephemeral). We only emit text
-  // from messages that have NO tool requests — those are final responses.
-  // Messages WITH toolRequests are just narration before a tool call.
+  // Paid-tier models (gpt-4.1) emit a single assistant.message with the
+  // complete response text and an empty toolRequests array. Free-tier models
+  // (gpt-5-mini) skip this event entirely and rely solely on deltas.
+  //
+  // Suppress if:
+  //   - We are in an autopilot continuation turn (internal narration/bookkeeping)
+  //   - The message has tool requests (it's a prelude to a tool call, not a response)
   if (json.type === "assistant.message") {
-    if (json.ephemeral === true) return null
+    if (context?.state[AUTOPILOT_CONTINUATION_KEY]) return null
     const ev = json as CopilotMessage
     const toolRequests = ev.data?.toolRequests
     const hasToolCalls = Array.isArray(toolRequests) && toolRequests.length > 0
-    if (hasToolCalls) return null // narration before tool call — suppress
+    if (hasToolCalls) return null
+    // Suppress if deltas were already streamed for this messageId —
+    // the full text would duplicate what the streaming path already emitted.
+    const messageId = ev.data?.messageId
+    if (
+      messageId &&
+      context?.state[STREAMED_MESSAGE_IDS_KEY] &&
+      (context.state[STREAMED_MESSAGE_IDS_KEY] as Set<string>).has(messageId)
+    ) {
+      return null
+    }
     const text = ev.data?.content ?? ""
     if (!text) return null
     return { type: "token", text }
@@ -254,14 +313,33 @@ export function parseCopilotLine(
     return null
   }
 
+  // ─── Autopilot continuation signal ──────────────────────────
+  // Fired between the user-facing turn and the internal continuation turn.
+  // Everything after this event (until session.task_complete) is internal
+  // autopilot workflow — model narration and task bookkeeping. Set a flag in
+  // context.sta te so the delta and message handlers can suppress those events.
+  if (json.type === "session.info") {
+    const ev = json as CopilotSessionInfo
+    if (ev.data?.infoType === "autopilot_continuation" && context) {
+      context.state[AUTOPILOT_CONTINUATION_KEY] = true
+    }
+    return null
+  }
+
   // ─── Task complete (final event before process exits in autopilot) ───
-  // This is the true terminal event — emit end here.
+  // This is the true terminal event in autopilot mode. The `result` event
+  // that follows also maps to end — track completion to avoid a duplicate.
   if (json.type === "session.task_complete") {
+    if (context) context.state[TASK_COMPLETE_KEY] = true
     return { type: "end" }
   }
 
   // ─── Result line (process-level exit summary) ─────────────
+  // In autopilot mode session.task_complete already emitted end; suppress
+  // this duplicate. In non-autopilot mode (no task_complete) this is the
+  // only terminal event, so emit it normally.
   if (json.type === "result") {
+    if (context?.state[TASK_COMPLETE_KEY]) return null
     const ev = json as CopilotResult
     const error = ev.exitCode !== 0 ? `Process exited with code ${ev.exitCode}` : undefined
     return { type: "end", error }
