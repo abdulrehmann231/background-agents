@@ -75,12 +75,14 @@ interface CopilotTurnEnd extends CopilotBaseEvent {
 
 interface CopilotTaskComplete extends CopilotBaseEvent {
   type: "session.task_complete"
+  sessionId?: string
   data?: { success?: boolean; summary?: string }
 }
 
 interface CopilotResult extends CopilotBaseEvent {
   type: "result"
   exitCode?: number
+  sessionId?: string
 }
 
 interface CopilotMcpStatus extends CopilotBaseEvent {
@@ -330,7 +332,12 @@ export function parseCopilotLine(
   // This is the true terminal event in autopilot mode. The `result` event
   // that follows also maps to end — track completion to avoid a duplicate.
   if (json.type === "session.task_complete") {
-    if (context) context.state[TASK_COMPLETE_KEY] = true
+    const ev = json as CopilotTaskComplete
+    if (context) {
+      context.state[TASK_COMPLETE_KEY] = true
+      // Capture the session ID so the next turn can resume with --continue.
+      if (ev.sessionId) context.sessionId = ev.sessionId
+    }
     return { type: "end" }
   }
 
@@ -339,8 +346,11 @@ export function parseCopilotLine(
   // this duplicate. In non-autopilot mode (no task_complete) this is the
   // only terminal event, so emit it normally.
   if (json.type === "result") {
-    if (context?.state[TASK_COMPLETE_KEY]) return null
     const ev = json as CopilotResult
+    // Always capture the session ID regardless of exit code — it's needed
+    // so the next turn can pass --continue to resume the session.
+    if (context && ev.sessionId) context.sessionId = ev.sessionId
+    if (context?.state[TASK_COMPLETE_KEY]) return null
     const error = ev.exitCode !== 0 ? `Process exited with code ${ev.exitCode}` : undefined
     return { type: "end", error }
   }
