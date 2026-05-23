@@ -110,11 +110,18 @@ export async function DELETE(_req: NextRequest): Promise<Response> {
     data: { githubAppInstallationId: null },
   })
 
-  // Also drop any per-chat GitHub MCP rows that point at this user's chats,
-  // so the modal stops showing GitHub as connected.
+  // Also drop any per-chat / per-job GitHub MCP rows that point at this
+  // user's resources, so the picker stops showing GitHub as connected and a
+  // scheduled run days later doesn't try to use a dead installation id.
   await prisma.chatMcpServer.deleteMany({
     where: {
       chat: { userId },
+      qualifiedName: "github/github",
+    },
+  })
+  await prisma.scheduledJobMcpServer.deleteMany({
+    where: {
+      job: { userId },
       qualifiedName: "github/github",
     },
   })
