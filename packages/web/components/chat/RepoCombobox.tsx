@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Github, Lock, Globe, ChevronDown, Loader2, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { fetchRepos } from "@/lib/github"
+import { fetchAllRepos } from "@/lib/github"
 import type { GitHubRepo } from "@/lib/types"
 import {
   Popover,
@@ -49,18 +49,35 @@ export function RepoCombobox({
   const [open, setOpen] = useState(false)
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
 
-  // Fetch repos when popover opens
+  // Fetch repos when popover opens - with progressive loading
   useEffect(() => {
     if (open && repos.length === 0 && !loading) {
       setLoading(true)
+      setLoadingMore(false)
       setError(null)
-      fetchRepos()
-        .then(setRepos)
-        .catch((err) => setError(err.message))
-        .finally(() => setLoading(false))
+
+      let isFirstPage = true
+      fetchAllRepos((repos, isComplete) => {
+        setRepos(repos)
+        if (isFirstPage) {
+          setLoading(false)
+          isFirstPage = false
+          if (!isComplete) {
+            setLoadingMore(true)
+          }
+        }
+        if (isComplete) {
+          setLoadingMore(false)
+        }
+      }).catch((err) => {
+        setError(err.message)
+        setLoading(false)
+        setLoadingMore(false)
+      })
     }
   }, [open, repos.length, loading])
 
@@ -178,7 +195,7 @@ export function RepoCombobox({
                     <CommandSeparator />
                   </>
                 )}
-                <CommandEmpty>No repositories found</CommandEmpty>
+                <CommandEmpty>{loadingMore ? "Loading repositories..." : "No repositories found"}</CommandEmpty>
                 <CommandGroup heading={repos.length > 0 ? "Your repositories" : undefined}>
                   {filteredRepos.map((repo) => (
                     <CommandItem
@@ -202,6 +219,13 @@ export function RepoCombobox({
                       </div>
                     </CommandItem>
                   ))}
+                  {/* Loading indicator for background pagination */}
+                  {loadingMore && filteredRepos.length > 0 && (
+                    <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading more...
+                    </div>
+                  )}
                 </CommandGroup>
               </>
             )}

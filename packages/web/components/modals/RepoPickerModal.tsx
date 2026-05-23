@@ -8,7 +8,7 @@ import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { fetchRepos, fetchBranches, createRepository, fetchRepo, forkRepository, parseGitHubUrl } from "@/lib/github"
+import { fetchAllRepos, fetchBranches, createRepository, fetchRepo, forkRepository, parseGitHubUrl } from "@/lib/github"
 import type { GitHubRepo, GitHubBranch } from "@/lib/types"
 import { GitFork } from "lucide-react"
 
@@ -60,6 +60,7 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
   const [selectedBranch, setSelectedBranch] = useState<string>("")
   const [showBranchDropdown, setShowBranchDropdown] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false) // Background loading additional pages
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -172,14 +173,32 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
 
   // Fetch repos on open — only when the select tab is available; otherwise we
   // never show the repo list and the loading spinner would flash for nothing.
+  // Uses progressive loading: first page shows immediately, rest load in background.
   useEffect(() => {
     if (open && session && allowSelect) {
       setLoading(true)
+      setLoadingMore(false)
       setError(null)
-      fetchRepos()
-        .then(setRepos)
-        .catch((err) => setError(err.message))
-        .finally(() => setLoading(false))
+
+      let isFirstPage = true
+      fetchAllRepos((repos, isComplete) => {
+        setRepos(repos)
+        if (isFirstPage) {
+          // First page loaded - show UI immediately
+          setLoading(false)
+          isFirstPage = false
+          if (!isComplete) {
+            setLoadingMore(true)
+          }
+        }
+        if (isComplete) {
+          setLoadingMore(false)
+        }
+      }).catch((err) => {
+        setError(err.message)
+        setLoading(false)
+        setLoadingMore(false)
+      })
     }
   }, [open, session, allowSelect])
 
@@ -206,6 +225,7 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
       setBranchSearch("")
       setShowBranchDropdown(false)
       setError(null)
+      setLoadingMore(false)
       // Reset create form
       setNewRepoName("")
       setNewRepoDescription("")
@@ -650,46 +670,58 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                     "text-muted-foreground text-center",
                     isMobile ? "p-6 text-base" : "p-4 text-sm"
                   )}>
-                    No repositories found
+                    {loadingMore ? "Loading repositories..." : "No repositories found"}
                   </div>
                 ) : (
-                  filteredRepos.map((repo, index) => (
-                    <button
-                      key={repo.id}
-                      onClick={() => handleSelectRepo(repo)}
-                      className={cn(
-                        "flex items-center gap-3 w-full rounded-lg hover:bg-accent active:bg-accent transition-colors text-left touch-target",
-                        isMobile ? "px-4 py-4" : "px-3 py-2",
-                        index === selectedRepoIndex && "bg-accent"
-                      )}
-                    >
-                      {repo.private ? (
-                        <Lock className={cn(
-                          "text-muted-foreground shrink-0",
-                          isMobile ? "h-5 w-5" : "h-4 w-4"
-                        )} />
-                      ) : (
-                        <Globe className={cn(
-                          "text-muted-foreground shrink-0",
-                          isMobile ? "h-5 w-5" : "h-4 w-4"
-                        )} />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className={cn(
-                          "font-medium truncate",
-                          isMobile ? "text-base" : "text-sm"
-                        )}>
-                          {repo.full_name}
+                  <>
+                    {filteredRepos.map((repo, index) => (
+                      <button
+                        key={repo.id}
+                        onClick={() => handleSelectRepo(repo)}
+                        className={cn(
+                          "flex items-center gap-3 w-full rounded-lg hover:bg-accent active:bg-accent transition-colors text-left touch-target",
+                          isMobile ? "px-4 py-4" : "px-3 py-2",
+                          index === selectedRepoIndex && "bg-accent"
+                        )}
+                      >
+                        {repo.private ? (
+                          <Lock className={cn(
+                            "text-muted-foreground shrink-0",
+                            isMobile ? "h-5 w-5" : "h-4 w-4"
+                          )} />
+                        ) : (
+                          <Globe className={cn(
+                            "text-muted-foreground shrink-0",
+                            isMobile ? "h-5 w-5" : "h-4 w-4"
+                          )} />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className={cn(
+                            "font-medium truncate",
+                            isMobile ? "text-base" : "text-sm"
+                          )}>
+                            {repo.full_name}
+                          </div>
+                          <div className={cn(
+                            "text-muted-foreground",
+                            isMobile ? "text-sm" : "text-xs"
+                          )}>
+                            Default: {repo.default_branch}
+                          </div>
                         </div>
-                        <div className={cn(
-                          "text-muted-foreground",
-                          isMobile ? "text-sm" : "text-xs"
-                        )}>
-                          Default: {repo.default_branch}
-                        </div>
+                      </button>
+                    ))}
+                    {/* Loading indicator for background pagination */}
+                    {loadingMore && (
+                      <div className={cn(
+                        "flex items-center justify-center gap-2 text-muted-foreground",
+                        isMobile ? "py-4 text-sm" : "py-2 text-xs"
+                      )}>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Loading more repositories...
                       </div>
-                    </button>
-                  ))
+                    )}
+                  </>
                 )}
               </div>
             )}
