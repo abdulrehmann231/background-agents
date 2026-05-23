@@ -293,6 +293,12 @@ model ScheduledJob {
   // Continue from last run
   continueFromLastRun Boolean @default(false)
 
+  // Draft state — true while the user is still in the create-job modal after
+  // materializing the row to attach MCP servers. Drafts are filtered out of
+  // the list, the cron, and the Run Now endpoint. Flipped to false on the
+  // final Create submit; DELETEd on Cancel.
+  isDraft Boolean @default(false)
+
   // Failure tracking
   consecutiveFailures Int @default(0)
 

@@ -77,6 +77,8 @@ interface UpdateScheduledJobBody {
   autoPR?: boolean
   continueFromLastRun?: boolean
   enabled?: boolean
+  /** Flip from true → false when the user clicks Create on a materialized draft. */
+  isDraft?: boolean
 }
 
 export async function PATCH(
@@ -122,6 +124,7 @@ export async function PATCH(
       enabled?: boolean
       nextRunAt?: Date
       consecutiveFailures?: number
+      isDraft?: boolean
     } = {}
 
     if (body.name !== undefined) updateData.name = body.name.trim()
@@ -137,6 +140,15 @@ export async function PATCH(
     }
      if (body.autoPR !== undefined) updateData.autoPR = body.autoPR
      if (body.continueFromLastRun !== undefined) updateData.continueFromLastRun = body.continueFromLastRun
+     if (body.isDraft !== undefined) {
+      updateData.isDraft = body.isDraft
+      // Reset the schedule when promoting a draft so the first run lands a
+      // full interval after the user finishes creating, not at the placeholder
+      // nextRunAt the materialize POST originally wrote.
+      if (body.isDraft === false) {
+        updateData.nextRunAt = addMinutes(new Date(), body.intervalMinutes ?? job.intervalMinutes)
+      }
+    }
      if (body.enabled !== undefined) {
       updateData.enabled = body.enabled
       // Reset failure count when re-enabling

@@ -112,6 +112,7 @@ export async function GET(req: Request) {
     const dueJobs = await prisma.scheduledJob.findMany({
       where: {
         enabled: true,
+        isDraft: false,
         nextRunAt: { lte: now },
         runs: { none: { status: "running" } },
       },
@@ -145,8 +146,11 @@ export async function GET(req: Request) {
     // =========================================
     // 2. Start Pending Scheduled Runs
     // =========================================
+    // Drafts shouldn't have pending runs (the run-now endpoint blocks them),
+    // but filter here too so a stale row from before this guard can't sneak
+    // through the cron.
     const pendingRuns = await prisma.scheduledJobRun.findMany({
-      where: { status: "pending" },
+      where: { status: "pending", job: { isDraft: false } },
       include: { job: true },
     })
 
