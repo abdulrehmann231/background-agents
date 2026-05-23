@@ -25,7 +25,7 @@ export const SNAPSHOT_RESOURCES = {
 export const AGENT_PACKAGES = {
   claude: "@anthropic-ai/claude-code",
   codex: "@openai/codex",
-  opencode: "opencode",
+  // opencode: "opencode", // Package doesn't exist on npm - skipped
   gemini: "@google/gemini-cli",
   pi: "@mariozechner/pi-coding-agent",
 } as const
@@ -50,26 +50,38 @@ const GOOSE_INSTALL_CMD = `
  * Pre-installed agents:
  * - Claude (@anthropic-ai/claude-code)
  * - Codex (@openai/codex)
- * - OpenCode (opencode)
  * - Gemini (@google/gemini-cli)
  * - Pi (@mariozechner/pi-coding-agent)
  * - Goose (binary from GitHub releases)
  *
  * Note: Eliza is built-in to the agents package (no CLI installation needed).
+ * Note: OpenCode is skipped as the npm package doesn't exist.
  */
 export function getAgentSandboxImage(): Image {
   const npmPackages = Object.values(AGENT_PACKAGES).join(" ")
 
-  return Image.debianSlim("3.12")
+  return Image.base("node:22-bookworm")
     .runCommands(
-      // Install system dependencies (curl for Goose download, Node.js for npm)
+      // Install system dependencies (curl for Goose download, git for agents)
       "apt-get update && apt-get install -y --no-install-recommends " +
-        "curl ca-certificates nodejs npm git " +
+        "curl ca-certificates git bzip2 " +
         "&& rm -rf /var/lib/apt/lists/*"
     )
     .runCommands(
-      // Install all npm-based agent CLIs globally
-      `npm install -g ${npmPackages}`
+      // Install Claude Code CLI
+      "npm install -g @anthropic-ai/claude-code"
+    )
+    .runCommands(
+      // Install Codex CLI
+      "npm install -g @openai/codex"
+    )
+    .runCommands(
+      // Install Gemini CLI
+      "npm install -g @google/gemini-cli"
+    )
+    .runCommands(
+      // Install Pi CLI
+      "npm install -g @mariozechner/pi-coding-agent"
     )
     .runCommands(
       // Install Goose binary
@@ -77,7 +89,7 @@ export function getAgentSandboxImage(): Image {
     )
     .runCommands(
       // Create required directories and add ~/.local/bin to PATH
-      "mkdir -p ~/.gemini ~/.config/goose && " +
+      "mkdir -p ~/.gemini ~/.config/goose /home/daytona && " +
         'echo \'export PATH="$HOME/.local/bin:$PATH"\' >> ~/.bashrc'
     )
     .workdir("/home/daytona")
