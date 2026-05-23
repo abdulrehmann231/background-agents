@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { RepoCombobox } from "@/components/chat/RepoCombobox"
 import { BranchCombobox } from "@/components/chat/BranchCombobox"
+import { McpServersCombobox } from "@/components/chat/McpServersCombobox"
 import { type ScheduledJob } from "@/lib/scheduled-jobs/types"
 import { agentModels, agentLabels, getModelLabel, type Agent } from "@/lib/types"
 import { AgentIcon } from "@/components/icons/agent-icons"
@@ -509,6 +510,24 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* MCP servers — edit-only. Saving the job materializes the id we
+                need to scope the connections, so we hide the picker until the
+                job exists. */}
+            <div>
+              <label className="block text-sm font-medium mb-2">MCP Servers</label>
+              {isEditing && job ? (
+                <McpServersCombobox
+                  entityId={job.id}
+                  apiBase="/api/scheduled-jobs"
+                  isMobile={isMobile}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Save the job first, then re-open it to attach MCP servers.
+                </p>
+              )}
             </div>
 
             {/* Options Section */}
