@@ -12,7 +12,7 @@ import {
 import { addMinutes } from "date-fns"
 import { toScheduledJobResponse } from "@/lib/scheduled-jobs/types"
 import { deleteWebhook } from "@upstream/common"
-import { createSmitheryProvider } from "@upstream/mcp-providers"
+import { cleanupSmitheryConnections } from "@/lib/mcp/connections"
 
 // =============================================================================
 // Helper: Get job with auth check
@@ -222,30 +222,7 @@ export async function DELETE(
     // Best-effort Smithery cleanup before we drop the DB rows. The MCP rows
     // themselves cascade with the job; Smithery's side has to be told
     // explicitly or the connection lingers and counts against quota.
-    const smitheryApiKey = process.env.SMITHERY_API_KEY
-    if (smitheryApiKey) {
-      const mcpRows = await prisma.scheduledJobMcpServer.findMany({
-        where: { jobId: id, smitheryConnectionId: { not: null } },
-        select: { smitheryConnectionId: true },
-      })
-      if (mcpRows.length > 0) {
-        const smithery = createSmitheryProvider({
-          apiKey: smitheryApiKey,
-          namespace: process.env.SMITHERY_NAMESPACE,
-        })
-        for (const row of mcpRows) {
-          if (!row.smitheryConnectionId) continue
-          try {
-            await smithery.deleteConnection(row.smitheryConnectionId)
-          } catch (err) {
-            console.error(
-              "[scheduled-jobs] Smithery cleanup failed (non-fatal):",
-              err
-            )
-          }
-        }
-      }
-    }
+    await cleanupSmitheryConnections({ kind: "job", id })
 
     // Delete job (cascades to runs and mcpServers, but runs' chats need
     // manual cleanup).

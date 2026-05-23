@@ -1,23 +1,12 @@
 /**
  * POST /api/chats/<chatId>/mcp-servers/github
  *
- * Add a sentinel ChatMcpServer row that points at GitHub's hosted MCP
- * (api.githubcopilot.com/mcp/). No Smithery involved — the agent-side
- * loader detects the sentinel qualifiedName and mints a fresh installation
- * token on every turn.
- *
- * Requires the user to have completed the GitHub App install first
- * (User.githubAppInstallationId must be set).
+ * Add a sentinel row pointing at GitHub's hosted MCP. The runtime loader
+ * mints fresh installation tokens from the user's githubAppInstallationId.
  */
-import { prisma } from "@/lib/db/prisma"
-import {
-  requireAuth,
-  isAuthError,
-  notFound,
-  internalError,
-  getChatWithAuth,
-} from "@/lib/db/api-helpers"
-import { GITHUB_MCP_QUALIFIED_NAME, GITHUB_MCP_URL } from "@upstream/mcp-providers"
+import { requireAuth, isAuthError, notFound } from "@/lib/db/api-helpers"
+import { requireMcpOwnerAuth, type McpOwner } from "@/lib/mcp/owner"
+import { attachGithubResponse } from "@/lib/mcp/connections"
 
 export async function POST(
   _req: Request,
@@ -25,47 +14,11 @@ export async function POST(
 ): Promise<Response> {
   const auth = await requireAuth()
   if (isAuthError(auth)) return auth
-  const { userId } = auth
   const { chatId } = await params
 
-  const chat = await getChatWithAuth(chatId, userId)
-  if (!chat) return notFound("Chat not found")
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { githubAppInstallationId: true },
-  })
-  if (!user?.githubAppInstallationId) {
-    return Response.json(
-      { error: "GitHub App not installed for this user" },
-      { status: 409 }
-    )
+  const owner: McpOwner = { kind: "chat", id: chatId }
+  if (!(await requireMcpOwnerAuth(owner, auth.userId))) {
+    return notFound("Chat not found")
   }
-
-  try {
-    const { id: serverId } = await prisma.chatMcpServer.upsert({
-      where: {
-        chatId_qualifiedName: {
-          chatId,
-          qualifiedName: GITHUB_MCP_QUALIFIED_NAME,
-        },
-      },
-      create: {
-        chatId,
-        qualifiedName: GITHUB_MCP_QUALIFIED_NAME,
-        displayName: "GitHub",
-        iconUrl: null,
-        mcpUrl: GITHUB_MCP_URL,
-        status: "connected",
-      },
-      update: {
-        status: "connected",
-        lastError: null,
-      },
-      select: { id: true },
-    })
-    return Response.json({ connected: true, serverId })
-  } catch (err) {
-    return internalError(err)
-  }
+  return attachGithubResponse(owner, auth.userId)
 }

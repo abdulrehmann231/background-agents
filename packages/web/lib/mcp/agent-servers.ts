@@ -1,6 +1,5 @@
 /**
- * Load a chat's or scheduled job's connected MCP servers in the shape
- * `setupMcpForAgent` wants.
+ * Load an owner's connected MCP servers in the shape `setupMcpForAgent` wants.
  *
  * Two kinds of rows:
  *   - Smithery rows  → decrypt the stored Smithery API key for the bearer.
@@ -8,11 +7,11 @@
  *                      (tokens are 1-hour, so we re-mint on every turn instead
  *                      of trying to keep them in sync with the DB).
  *
- * Both ChatMcpServer and ScheduledJobMcpServer share a row shape; the shared
- * translator below handles either. On GitHub token mint failure we update the
- * row's `lastError`/`status` so the UI can surface "GitHub App uninstalled" on
- * the next form open — important for scheduled jobs that may run days after
- * being configured.
+ * Chats and scheduled jobs share the same McpServerConnection table; the
+ * loader takes an `McpOwner` and filters on the right FK column. On GitHub
+ * token mint failure we update the row's `lastError`/`status` so the UI can
+ * surface "GitHub App uninstalled" on the next form open — important for
+ * scheduled jobs that may run days after being configured.
  */
 import { prisma } from "@/lib/db/prisma"
 import { decrypt } from "@/lib/db/encryption"
@@ -22,6 +21,7 @@ import {
   safeServerName,
 } from "@upstream/mcp-providers"
 import type { AgentMcpServer } from "@upstream/agent-configuration/mcp"
+import { type McpOwner, ownerWhere } from "./owner"
 
 // Lazily-initialized GitHub provider
 let githubProvider: ReturnType<typeof createGitHubMcpProvider> | null = null
@@ -42,28 +42,12 @@ function getGitHubProvider() {
 }
 
 /**
- * Row shape common to ChatMcpServer and ScheduledJobMcpServer.
- */
-interface McpRow {
-  id: string
-  qualifiedName: string
-  mcpUrl: string | null
-  encryptedApiKey: string | null
-}
-
-/**
- * Update the row's lastError/status. Tries the chat table first, falls back to
- * the job table. Best-effort — failure to record a warning shouldn't tank the
- * turn.
+ * Update the row's lastError/status. Best-effort — failure to record a
+ * warning shouldn't tank the turn.
  */
 async function markRowError(rowId: string, message: string): Promise<void> {
   try {
-    const updated = await prisma.chatMcpServer.updateMany({
-      where: { id: rowId },
-      data: { status: "error", lastError: message },
-    })
-    if (updated.count > 0) return
-    await prisma.scheduledJobMcpServer.updateMany({
+    await prisma.mcpServerConnection.update({
       where: { id: rowId },
       data: { status: "error", lastError: message },
     })
@@ -72,14 +56,16 @@ async function markRowError(rowId: string, message: string): Promise<void> {
   }
 }
 
+interface McpRow {
+  id: string
+  qualifiedName: string
+  mcpUrl: string | null
+  encryptedApiKey: string | null
+}
+
 /**
  * Translate one DB row to the AgentMcpServer shape the sandbox loader expects.
- * For Smithery rows: decrypt the stored bearer. For the GitHub sentinel: mint
- * a fresh installation token from the owning user's `githubAppInstallationId`.
- *
- * Returns null when the row can't produce a usable connection (e.g. App
- * uninstalled). On GitHub mint failure, the row's `lastError` is updated so
- * the user sees it on next form open.
+ * Returns null when the row can't produce a usable connection.
  */
 async function translateRow(
   row: McpRow,
@@ -123,53 +109,49 @@ async function translateRow(
   }
 }
 
-export async function loadChatMcpServers(
-  chatId: string
+/**
+ * Load the MCP servers attached to either a chat or a scheduled job. The
+ * GitHub installation id is read off the owner's user relation regardless of
+ * the owner kind.
+ */
+export async function loadMcpConnections(
+  owner: McpOwner
 ): Promise<AgentMcpServer[]> {
-  const rows = await prisma.chatMcpServer.findMany({
-    where: { chatId, status: "connected" },
+  const rows = await prisma.mcpServerConnection.findMany({
+    where: { ...ownerWhere(owner), status: "connected" },
     select: {
       id: true,
       qualifiedName: true,
       mcpUrl: true,
       encryptedApiKey: true,
       chat: { select: { user: { select: { githubAppInstallationId: true } } } },
+      scheduledJob: {
+        select: { user: { select: { githubAppInstallationId: true } } },
+      },
     },
   })
 
   const out: AgentMcpServer[] = []
   for (const row of rows) {
-    const installationId = row.chat.user.githubAppInstallationId
+    const installationId =
+      row.chat?.user.githubAppInstallationId ??
+      row.scheduledJob?.user.githubAppInstallationId ??
+      null
     const translated = await translateRow(row, installationId)
     if (translated) out.push(translated)
   }
   return out
 }
 
-/**
- * Load the MCP servers attached to a scheduled job. Same translation as for
- * chats; the difference is the FK column and the relation traversal up to the
- * owning user (for the GitHub installationId).
- */
-export async function loadJobMcpServers(
-  jobId: string
-): Promise<AgentMcpServer[]> {
-  const rows = await prisma.scheduledJobMcpServer.findMany({
-    where: { jobId, status: "connected" },
-    select: {
-      id: true,
-      qualifiedName: true,
-      mcpUrl: true,
-      encryptedApiKey: true,
-      job: { select: { user: { select: { githubAppInstallationId: true } } } },
-    },
-  })
+// =============================================================================
+// Thin wrappers preserved so existing callsites don't need to change. New code
+// should call loadMcpConnections directly.
+// =============================================================================
 
-  const out: AgentMcpServer[] = []
-  for (const row of rows) {
-    const installationId = row.job.user.githubAppInstallationId
-    const translated = await translateRow(row, installationId)
-    if (translated) out.push(translated)
-  }
-  return out
+export function loadChatMcpServers(chatId: string): Promise<AgentMcpServer[]> {
+  return loadMcpConnections({ kind: "chat", id: chatId })
+}
+
+export function loadJobMcpServers(jobId: string): Promise<AgentMcpServer[]> {
+  return loadMcpConnections({ kind: "job", id: jobId })
 }
