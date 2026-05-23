@@ -394,6 +394,24 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               </div>
             )}
 
+            {/* MCP servers — edit-only. Saving the job materializes the id we
+                need to scope the connections, so we hide the picker until the
+                job exists. */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium">MCP Servers</label>
+              {isEditing && job ? (
+                <McpServersCombobox
+                  entityId={job.id}
+                  apiBase="/api/scheduled-jobs"
+                  isMobile={isMobile}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Save the job first, then re-open it to attach MCP servers.
+                </p>
+              )}
+            </div>
+
             {/* Prompt Field - styled like ChatInput */}
             <div>
               <label className="block text-sm font-medium mb-1">Prompt</label>
@@ -510,24 +528,6 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* MCP servers — edit-only. Saving the job materializes the id we
-                need to scope the connections, so we hide the picker until the
-                job exists. */}
-            <div>
-              <label className="block text-sm font-medium mb-2">MCP Servers</label>
-              {isEditing && job ? (
-                <McpServersCombobox
-                  entityId={job.id}
-                  apiBase="/api/scheduled-jobs"
-                  isMobile={isMobile}
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Save the job first, then re-open it to attach MCP servers.
-                </p>
-              )}
             </div>
 
             {/* Options Section */}
