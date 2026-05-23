@@ -121,7 +121,10 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           const data: SSEUpdateEvent = JSON.parse(event.data)
           const store = useStreamStore.getState()
           const stream = store.getStream(chatId)
-          if (!stream) return
+          if (!stream) {
+            console.warn("[SSE] Update received but stream was stopped for chat:", chatId)
+            return
+          }
 
           store.updateStream(chatId, { cursor: data.cursor, reconnectAttempts: 0 })
 
