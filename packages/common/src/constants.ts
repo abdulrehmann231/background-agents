@@ -42,7 +42,7 @@ export const ENV_VARS = {
 
 export const SANDBOX_CONFIG = {
   /** Default snapshot for sandbox creation */
-  DEFAULT_SNAPSHOT: "daytona-medium",
+  DEFAULT_SNAPSHOT: "background-agents",
   /** Label key for identifying upstream-agents sandboxes */
   LABEL_KEY: "upstream-agents",
   /** Default preview port */
