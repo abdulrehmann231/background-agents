@@ -10,9 +10,12 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
   - Claude Code
   - OpenCode
   - Codex
+  - GitHub Copilot
   - Gemini
   - Goose
+  - Kilo
   - Pi
+  - Eliza (deterministic test agent)
 
 - **Sandbox Isolation**: Each chat session runs in an isolated Daytona sandbox environment
 
