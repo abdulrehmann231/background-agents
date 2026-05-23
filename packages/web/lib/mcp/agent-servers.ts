@@ -143,15 +143,3 @@ export async function loadMcpConnections(
   return out
 }
 
-// =============================================================================
-// Thin wrappers preserved so existing callsites don't need to change. New code
-// should call loadMcpConnections directly.
-// =============================================================================
-
-export function loadChatMcpServers(chatId: string): Promise<AgentMcpServer[]> {
-  return loadMcpConnections({ kind: "chat", id: chatId })
-}
-
-export function loadJobMcpServers(jobId: string): Promise<AgentMcpServer[]> {
-  return loadMcpConnections({ kind: "job", id: jobId })
-}

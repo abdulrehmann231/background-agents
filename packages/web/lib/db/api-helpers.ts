@@ -255,22 +255,6 @@ export async function getUserCredentials(userId: string): Promise<Credentials> {
 // =============================================================================
 
 /**
- * Fetches a scheduled job by ID and verifies ownership.
- * Returns null if not found or not owned by user.
- */
-export async function getJobWithAuth(
-  jobId: string,
-  userId: string
-): Promise<{ id: string; userId: string } | null> {
-  const job = await prisma.scheduledJob.findUnique({
-    where: { id: jobId },
-    select: { id: true, userId: true },
-  })
-  if (!job || job.userId !== userId) return null
-  return job
-}
-
-/**
  * Fetches a chat by ID and verifies ownership
  * Returns null if not found or not owned by user
  */

@@ -20,7 +20,7 @@ import {
   type AgentSnapshot,
 } from "@/lib/agent-session"
 import { createGitOperationMessage } from "@/lib/db/git-messages"
-import { loadJobMcpServers } from "@/lib/mcp/agent-servers"
+import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 
 // Vercel Pro plan allows up to 5 minutes for cron jobs
 export const maxDuration = 300
@@ -439,11 +439,11 @@ async function startJobExecution(
   // a descriptive lastError if the GitHub App is gone or any other auth issue
   // is found — best-effort, so the run proceeds without that MCP server rather
   // than failing the whole job. Failure to load shouldn't tank the turn.
-  let mcpServers: Awaited<ReturnType<typeof loadJobMcpServers>> = []
+  let mcpServers: Awaited<ReturnType<typeof loadMcpConnections>> = []
   try {
-    mcpServers = await loadJobMcpServers(job.id)
+    mcpServers = await loadMcpConnections({ kind: "job", id: job.id })
   } catch (err) {
-    console.error(`[agent-lifecycle] loadJobMcpServers failed for ${job.id}:`, err)
+    console.error(`[agent-lifecycle] loadMcpConnections failed for ${job.id}:`, err)
   }
 
   const bgSession = await createBackgroundAgentSession(sandbox, {
