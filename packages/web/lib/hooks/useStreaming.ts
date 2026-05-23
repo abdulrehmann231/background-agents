@@ -69,7 +69,10 @@ export function useStreaming(options: UseStreamingOptions = {}) {
   // Helper to update query cache
   const updateChatsCache = useCallback((updater: (chats: Chat[]) => Chat[]) => {
     queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
-      if (!old) return old
+      if (!old) {
+        console.warn("[SSE] updateChatsCache called but query data is undefined")
+        return old
+      }
       return updater(old)
     })
   }, [queryClient])
@@ -121,7 +124,10 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           const data: SSEUpdateEvent = JSON.parse(event.data)
           const store = useStreamStore.getState()
           const stream = store.getStream(chatId)
-          if (!stream) return
+          if (!stream) {
+            console.warn("[SSE] Update received but stream was stopped for chat:", chatId)
+            return
+          }
 
           store.updateStream(chatId, { cursor: data.cursor, reconnectAttempts: 0 })
 
