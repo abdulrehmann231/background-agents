@@ -127,7 +127,8 @@ export async function GET(req: Request) {
           controller.enqueue(
             encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
           )
-        } catch {
+        } catch (err) {
+          console.error("[agent/stream] sendEvent failed, marking stream closed:", err)
           isStreamClosed = true
         }
       }

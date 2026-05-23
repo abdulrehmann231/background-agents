@@ -69,7 +69,10 @@ export function useStreaming(options: UseStreamingOptions = {}) {
   // Helper to update query cache
   const updateChatsCache = useCallback((updater: (chats: Chat[]) => Chat[]) => {
     queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
-      if (!old) return old
+      if (!old) {
+        console.warn("[SSE] updateChatsCache called but query data is undefined")
+        return old
+      }
       return updater(old)
     })
   }, [queryClient])
