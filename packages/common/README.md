@@ -36,6 +36,7 @@ import {
   agentToProvider,
   agentModels,
   defaultAgentModel,
+  agentSupportsPlanMode,
   // Functions
   getDefaultAgent,
   hasCredentialsForModel,
@@ -67,6 +68,7 @@ import {
   // High-level API methods
   getUser,
   getUserRepos,
+  getAllUserRepos,
   getRepo,
   getRepoBranches,
   compareBranches,
@@ -165,7 +167,7 @@ import {
 ### Common Utilities
 
 ```typescript
-import { cn } from "@upstream/common"
+import { cn, escapeShell, quote } from "@upstream/common"
 ```
 
 ### Constants
@@ -182,9 +184,11 @@ React components for displaying agent icons.
 import {
   ClaudeCodeIcon,
   CodexIcon,
+  CopilotIcon,
   OpenCodeIcon,
   GeminiIcon,
   GooseIcon,
+  KiloIcon,
   ElizaIcon,
   PiIcon,
   AgentIcon,
