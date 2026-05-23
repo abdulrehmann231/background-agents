@@ -65,6 +65,7 @@ export {
   // High-level API methods
   getUser,
   getUserRepos,
+  getAllUserRepos,
   getRepo,
   getRepoBranches,
   compareBranches,

@@ -14,18 +14,60 @@ import type {
 // Re-export types for convenience
 export type { GitHubUser, GitHubRepo, GitHubBranch }
 
+interface FetchReposPageResult {
+  repos: GitHubRepo[]
+  page: number
+  hasMore: boolean
+}
+
 /**
- * Fetch repositories for the authenticated user (100 most recent).
+ * Fetch a single page of repositories for the authenticated user.
  * Calls GET /api/github/repos which reads the token from DB server-side.
  */
-export async function fetchRepos(): Promise<GitHubRepo[]> {
-  const res = await fetch("/api/github/repos")
+export async function fetchReposPage(page: number = 1): Promise<FetchReposPageResult> {
+  const res = await fetch(`/api/github/repos?page=${page}`)
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     throw new Error((data as { error?: string }).error || "Failed to fetch repos")
   }
-  const data = await res.json()
-  return data.repos
+  return res.json()
+}
+
+/**
+ * Fetch repositories for the authenticated user (first page only, for backward compatibility).
+ * Calls GET /api/github/repos which reads the token from DB server-side.
+ */
+export async function fetchRepos(): Promise<GitHubRepo[]> {
+  const { repos } = await fetchReposPage(1)
+  return repos
+}
+
+/**
+ * Fetch ALL repositories for the authenticated user with progressive loading.
+ * Calls onProgress callback after each page is fetched.
+ *
+ * @param onProgress - Called with accumulated repos and loading status after each page
+ * @returns Promise that resolves to all repos when complete
+ */
+export async function fetchAllRepos(
+  onProgress?: (repos: GitHubRepo[], isComplete: boolean) => void
+): Promise<GitHubRepo[]> {
+  const allRepos: GitHubRepo[] = []
+  let page = 1
+  let hasMore = true
+
+  while (hasMore) {
+    const result = await fetchReposPage(page)
+    allRepos.push(...result.repos)
+    hasMore = result.hasMore
+
+    // Notify progress
+    onProgress?.(allRepos, !hasMore)
+
+    page++
+  }
+
+  return allRepos
 }
 
 /**
