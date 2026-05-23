@@ -508,9 +508,13 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
             {/* Prompt Field - styled like ChatInput */}
             <div>
               <label className="block text-sm font-medium mb-1">Prompt</label>
-              <div className="rounded-xl border border-border bg-card focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20">
+              <div className={cn(
+                "relative flex flex-col border shadow-sm bg-card border-border",
+                isMobile ? "rounded-xl" : "rounded-2xl",
+                "focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
+              )}>
                 {/* Textarea */}
-                <div className="px-3 py-2">
+                <div className={cn(isMobile ? "px-3 py-2" : "px-4 py-3")}>
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
@@ -520,42 +524,54 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   />
                 </div>
 
-                {/* Bottom bar with selectors */}
-                <div className="flex items-center gap-2 px-3 py-2 border-t border-border">
-                  {/* Repo selector */}
-                  <RepoCombobox
-                    value={repo || null}
-                    onChange={(newRepo, defaultBranch) => {
-                      setRepo(newRepo)
-                      setBaseBranch(defaultBranch)
-                    }}
-                    disabled={isEditing}
-                    isMobile={isMobile}
-                    showLabel
-                  />
-
-                  {/* Branch selector */}
-                  {repo && (
-                    <BranchCombobox
-                      repo={repo}
-                      value={baseBranch}
-                      onChange={setBaseBranch}
-                      defaultBranch={baseBranch}
+                {/* Bottom bar with selectors. The container wrappers mirror
+                    ChatInput so the inner pickers can reveal labels and counts
+                    at the right widths via container queries. */}
+                <div className={cn(
+                  "@container flex items-center",
+                  isMobile ? "gap-2 px-3 py-2" : "gap-3 px-4 py-2"
+                )}>
+                  {/* Left side items (repo / branch / MCP) */}
+                  <div className={cn(
+                    "flex items-center gap-2",
+                    isMobile ? "w-full @container/row1" : "flex-1"
+                  )}>
+                    {/* Repo selector */}
+                    <RepoCombobox
+                      value={repo || null}
+                      onChange={(newRepo, defaultBranch) => {
+                        setRepo(newRepo)
+                        setBaseBranch(defaultBranch)
+                      }}
+                      disabled={isEditing}
                       isMobile={isMobile}
                       showLabel
                     />
-                  )}
 
-                  {/* MCP servers picker — inline alongside repo/branch like the
-                      chat input. In create mode the first click materializes
-                      the job so the picker has a real id; cancel cleans up. */}
-                  <McpServersCombobox
-                    entityId={materializedJobId ?? job?.id ?? "draft"}
-                    apiBase="/api/scheduled-jobs"
-                    isDraft={!isEditing && !materializedJobId}
-                    onMaterializeDraft={materializeJob}
-                    isMobile={isMobile}
-                  />
+                    {/* Branch selector */}
+                    {repo && (
+                      <BranchCombobox
+                        repo={repo}
+                        value={baseBranch}
+                        onChange={setBaseBranch}
+                        defaultBranch={baseBranch}
+                        isMobile={isMobile}
+                        showLabel
+                      />
+                    )}
+
+                    {/* MCP servers picker — inline alongside repo/branch like
+                        the chat input. In create mode the first click
+                        materializes the job so the picker has a real id;
+                        cancel cleans up. */}
+                    <McpServersCombobox
+                      entityId={materializedJobId ?? job?.id ?? "draft"}
+                      apiBase="/api/scheduled-jobs"
+                      isDraft={!isEditing && !materializedJobId}
+                      onMaterializeDraft={materializeJob}
+                      isMobile={isMobile}
+                    />
+                  </div>
 
                   {/* Spacer */}
                   <div className="flex-1" />
