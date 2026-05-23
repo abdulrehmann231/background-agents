@@ -13,6 +13,7 @@ Raw JSONL output captured from actual AI coding agent CLI runs. These are **not 
 | `eliza.jsonl` | Eliza | Built-in deterministic test agent |
 | `gemini.jsonl` | Gemini | Google Gemini CLI |
 | `goose.jsonl` | Goose | Block's Goose AI coding agent CLI |
+| `kilo.jsonl` | Kilo | Kilo CLI — OpenCode fork with its own gateway |
 | `opencode.jsonl` | OpenCode | OpenCode CLI |
 | `pi.jsonl` | Pi | Pi Coding Agent CLI |
 
