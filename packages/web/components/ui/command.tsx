@@ -103,8 +103,11 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  rightSlot,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+  rightSlot?: React.ReactNode
+}) {
   return (
     <div
       data-slot="command-input-wrapper"
@@ -119,6 +122,7 @@ function CommandInput({
         )}
         {...props}
       />
+      {rightSlot}
     </div>
   )
 }
@@ -140,12 +144,13 @@ function CommandList({
 }
 
 function CommandEmpty({
+  className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
-      className="py-6 text-center text-sm"
+      className={cn("py-6 text-center text-sm", className)}
       {...props}
     />
   )

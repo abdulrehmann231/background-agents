@@ -133,6 +133,7 @@ export function McpServersCombobox({
   const [connected, setConnected] = useState<ConnectedServer[]>([])
   const [registry, setRegistry] = useState<RegistryServer[]>([])
   const [loadingRegistry, setLoadingRegistry] = useState(false)
+  const [hasLoadedRegistry, setHasLoadedRegistry] = useState(false)
   const [search, setSearch] = useState("")
   const [busySlug, setBusySlug] = useState<string | null>(null)
   const [githubBusy, setGithubBusy] = useState(false)
@@ -197,6 +198,7 @@ export function McpServersCombobox({
       console.error("[McpServersCombobox] loadRegistry failed:", err)
     } finally {
       setLoadingRegistry(false)
+      setHasLoadedRegistry(true)
     }
   }, [])
 
@@ -528,18 +530,28 @@ export function McpServersCombobox({
             placeholder="Search MCP servers..."
             value={search}
             onValueChange={setSearch}
+            rightSlot={
+              hasLoadedRegistry && loadingRegistry ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin text-muted-foreground shrink-0"
+                  aria-label="Searching"
+                />
+              ) : null
+            }
           />
-          <CommandList>
-            {loadingRegistry && allServers.length === 0 ? (
+          <CommandList className="h-[252px] max-h-[252px]">
+            {!hasLoadedRegistry ? (
               <div
-                className="flex items-center justify-center py-6"
+                className="flex items-center justify-center h-[252px]"
                 role="status"
                 aria-label="Loading MCP servers"
               >
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : allServers.length === 0 ? (
-              <CommandEmpty>No servers found</CommandEmpty>
+            ) : allServers.length === 0 && !loadingRegistry ? (
+              <CommandEmpty className="flex items-center justify-center h-[252px] py-0">
+                No servers found
+              </CommandEmpty>
             ) : (
               allServers.map((s) => {
                 const isGitHub = s.slug === GITHUB_QUALIFIED_NAME
