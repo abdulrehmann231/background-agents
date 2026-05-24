@@ -12,7 +12,7 @@ From the package directory:
 npm run dev
 ```
 
-Or from the repo root (if configured):
+Or from the repo root:
 
 ```bash
 npm run dev:cron

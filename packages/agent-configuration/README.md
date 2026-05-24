@@ -1,15 +1,17 @@
 # @upstream/agent-configuration
 
-Agent configuration and policy rules for blocking dangerous operations in AI coding agents.
+Agent configuration and policy rules for AI coding agents running in Daytona sandboxes.
 
 ## Overview
 
-This package provides centralized configuration for AI coding agents running in sandboxed environments. The primary focus is **git safety** - preventing agents from executing dangerous git operations that could:
+This package provides centralized configuration for AI coding agents running in sandboxed environments. It covers two areas:
 
-- Rewrite history (`git commit --amend`, `git rebase`, `git reset --hard`)
-- Push changes without authorization (`git push`)
-- Manipulate branches (`git branch -d/-D/-m/-M`, `git checkout -b`, `git switch -c`)
-- Switch branches (`git checkout <branch>`, `git switch <branch>`)
+1. **Git safety** — Preventing agents from executing dangerous git operations that could:
+   - Rewrite history (`git commit --amend`, `git rebase`, `git reset --hard`)
+   - Push changes without authorization (`git push`)
+   - Manipulate branches (`git branch -d/-D/-m/-M`, `git checkout -b`, `git switch -c`)
+   - Switch branches (`git checkout <branch>`, `git switch <branch>`)
+2. **MCP setup** — Writing per-agent MCP server configuration files into the sandbox so the agent CLI picks them up on startup.
 
 ## Installation
 
@@ -69,6 +71,27 @@ All agents block the same set of dangerous operations:
 | Branch Creation | `git checkout -b`, `git switch -c` | Agents should stay on assigned branch |
 | Branch Switching | `git checkout <branch>`, `git switch <branch>` | Agents should stay on assigned branch |
 
+## MCP Setup
+
+Writes per-agent MCP server configs into the sandbox before the agent CLI starts. Currently supported agents: `claude-code`, `codex`, `gemini`, `opencode`, `goose`, `copilot`, `kilo`.
+
+```ts
+import { setupMcpForAgent } from '@upstream/agent-configuration'
+
+await setupMcpForAgent(sandbox, {
+  agent: 'claude-code',
+  servers: [
+    {
+      name: 'github',
+      url: 'https://api.githubcopilot.com/mcp/',
+      bearerToken: '<github-installation-token>',
+    },
+  ],
+})
+```
+
+The function is a no-op for agents that don't support MCP. Each agent CLI loads MCP servers from a different config file with a different schema; this helper writes the correct file in the correct format.
+
 ## Exports
 
 ### Git Safety
@@ -93,6 +116,16 @@ import {
   OPENCODE_PERMISSION_ENV,
   OPENCODE_PERMISSION_CONFIG,
   OPENCODE_PERMISSIONS,
+} from '@upstream/agent-configuration'
+```
+
+### MCP
+
+```ts
+import {
+  setupMcpForAgent,
+  type AgentMcpServer,
+  type SetupMcpOptions,
 } from '@upstream/agent-configuration'
 ```
 
