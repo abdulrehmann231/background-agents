@@ -1,0 +1,75 @@
+# @upstream/sandbox-image
+
+Custom [Daytona](https://daytona.io) sandbox image with pre-installed AI coding agent CLIs.
+
+## Overview
+
+This package builds a Daytona `Image` spec with the supported agent CLIs baked in, so sandbox startup is fast and predictable. Agents do not have to be installed on every new sandbox.
+
+Pre-installed agents:
+
+- **Claude Code** (`@anthropic-ai/claude-code`)
+- **Codex** (`@openai/codex`)
+- **OpenCode** (`opencode-ai`)
+- **Gemini** (`@google/gemini-cli`)
+- **Pi** (`@mariozechner/pi-coding-agent`)
+- **Goose** (binary from GitHub releases)
+
+> Note: Eliza is built into the `background-agents` package and does not need to be installed in the sandbox.
+
+The image is based on `node:22-bookworm` and runs as a non-root `daytona` user (Claude Code refuses to run as root).
+
+## Installation
+
+This is an internal workspace package. It's automatically available to other packages in the monorepo:
+
+```json
+{
+  "dependencies": {
+    "@upstream/sandbox-image": "*"
+  }
+}
+```
+
+## Usage
+
+```typescript
+import { Daytona } from "@daytonaio/sdk"
+import {
+  getAgentSandboxImage,
+  SNAPSHOT_NAME,
+  SNAPSHOT_RESOURCES,
+} from "@upstream/sandbox-image"
+
+const daytona = new Daytona({ apiKey: process.env.DAYTONA_API_KEY })
+
+// Create a sandbox from the pre-built image
+const sandbox = await daytona.create({
+  image: getAgentSandboxImage(),
+  resources: SNAPSHOT_RESOURCES,
+})
+```
+
+## Exports
+
+```typescript
+import {
+  getAgentSandboxImage, // Builds the Daytona Image spec
+  AGENT_PACKAGES,       // Map of agent name -> npm package
+  SNAPSHOT_NAME,        // Registered snapshot name ("background-agents")
+  SNAPSHOT_RESOURCES,   // { cpu, memory, disk } defaults
+} from "@upstream/sandbox-image"
+```
+
+### Default resources
+
+| Resource | Value |
+|----------|-------|
+| CPU      | 1 vCPU |
+| Memory   | 3 GB  |
+| Disk     | 5 GB  |
+
+## Requirements
+
+- Node.js >= 18
+- `@daytonaio/sdk` >= 0.170.0
