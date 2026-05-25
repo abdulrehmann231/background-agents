@@ -76,7 +76,7 @@ const TRIGGER_TYPES = [
 ] as const
 
 const INTERVAL_PRESETS = [
-  { label: "5 minutes", value: 5 },
+  { label: "10 minutes", value: 10 },
   { label: "15 minutes", value: 15 },
   { label: "30 minutes", value: 30 },
   { label: "Hour", value: 60 },
@@ -111,7 +111,7 @@ function inferIntervalMode(minutes: number): {
   customUnit: IntervalUnit
 } {
   if (INTERVAL_PRESETS.some((p) => p.value === minutes)) {
-    return { isCustom: false, intervalMinutes: minutes, customValue: 5, customUnit: "minutes" }
+    return { isCustom: false, intervalMinutes: minutes, customValue: 10, customUnit: "minutes" }
   }
   if (minutes % 10080 === 0) {
     return { isCustom: true, intervalMinutes: minutes, customValue: minutes / 10080, customUnit: "weeks" }
@@ -285,8 +285,8 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
       setError("Repository is required")
       return null
     }
-    if (triggerType === "interval" && effectiveIntervalMinutes < 1) {
-      setError("Interval must be at least 1 minute")
+    if (triggerType === "interval" && effectiveIntervalMinutes < 10) {
+      setError("Interval must be at least 10 minutes")
       return null
     }
     const runAtHourUtc = localHourToUtc(runAtHourLocal)
@@ -547,7 +547,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                     <>
                       <input
                         type="number"
-                        min={1}
+                        min={customIntervalUnit === "minutes" ? 10 : 1}
                         step={1}
                         value={customIntervalValue}
                         onChange={(e) => {
@@ -608,9 +608,9 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   )}
                 </div>
 
-                {isCustomInterval && effectiveIntervalMinutes < 5 && (
-                  <p className="text-xs text-muted-foreground">
-                    Runs shorter than 5 minutes may overlap with previous executions if a run takes longer than the interval.
+                {isCustomInterval && effectiveIntervalMinutes < 10 && (
+                  <p className="text-xs text-destructive">
+                    Interval must be at least 10 minutes.
                   </p>
                 )}
               </div>
