@@ -291,8 +291,8 @@ describe("parseGeminiLine", () => {
       mappings,
       ctx
     )
-    // run_shell_command is not in GEMINI_TOOL_MAPPINGS, so it passes through normalized
-    expect(event).toMatchObject({ type: "tool_start", name: "run_shell_command" })
+    // run_shell_command is mapped to "shell" in GEMINI_TOOL_MAPPINGS
+    expect(event).toMatchObject({ type: "tool_start", name: "shell" })
   })
 
   it("parses tool_use for known tool and normalizes name", () => {
@@ -1328,6 +1328,9 @@ describe("parseCopilotLine", () => {
     const event = parseCopilotLine(
       JSON.stringify({ type: "message.delta" }),
       mappings
+    )
+    expect(event).toBeNull()
+  })
 
   it("parses tool.call event with shell tool", () => {
     const event = parseCopilotLine(
@@ -1405,6 +1408,9 @@ describe("parseCopilotLine", () => {
     const event = parseCopilotLine(
       JSON.stringify({ type: "turn.end", status: "success" }),
       mappings
+    )
+    expect(event).toEqual({ type: "end" })
+  })
 
   it("parses turn.end with error status (string error)", () => {
     const event = parseCopilotLine(
