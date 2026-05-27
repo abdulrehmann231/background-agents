@@ -10,6 +10,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
+import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { formatAxisDate, formatTooltipDate, formatHour } from "./chartFormatters"
 
 interface MessagesChatsData {
   time: string
@@ -20,13 +22,6 @@ interface MessagesChatsData {
 interface DailyMessagesChatsChartProps {
   data: MessagesChatsData[]
   isHourly?: boolean
-}
-
-function formatHour(hour: number): string {
-  if (hour === 0) return "12am"
-  if (hour === 12) return "12pm"
-  if (hour < 12) return `${hour}am`
-  return `${hour - 12}pm`
 }
 
 export function DailyMessagesChatsChart({ data, isHourly = false }: DailyMessagesChatsChartProps) {
@@ -49,13 +44,9 @@ export function DailyMessagesChatsChart({ data, isHourly = false }: DailyMessage
           <XAxis
             dataKey="time"
             tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-            tickFormatter={(value) => {
-              if (isHourly) {
-                return formatHour(Number(value))
-              }
-              const date = new Date(value)
-              return `${date.getMonth() + 1}/${date.getDate()}`
-            }}
+            tickFormatter={(value) =>
+              isHourly ? formatHour(Number(value)) : formatAxisDate(value)
+            }
             axisLine={{ stroke: "hsl(var(--border))" }}
             tickLine={{ stroke: "hsl(var(--border))" }}
             interval={isHourly ? 3 : "preserveStartEnd"}
@@ -67,23 +58,11 @@ export function DailyMessagesChatsChart({ data, isHourly = false }: DailyMessage
             width={45}
           />
           <Tooltip
-            contentStyle={{
-              backgroundColor: "var(--tooltip-bg, #fff)",
-              border: "1px solid var(--tooltip-border, #e5e7eb)",
-              borderRadius: "8px",
-              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              padding: "8px 12px",
-            }}
-            labelStyle={{ color: "var(--tooltip-text, #111)", fontWeight: 600, marginBottom: 4 }}
-            itemStyle={{ color: "var(--tooltip-text, #111)", padding: "2px 0" }}
-            cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "4 4" }}
-            labelFormatter={(label) => {
-              if (isHourly) {
-                return formatHour(Number(label))
-              }
-              const date = new Date(label)
-              return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-            }}
+            {...chartTooltipProps}
+            cursor={lineTooltipCursor}
+            labelFormatter={(label) =>
+              isHourly ? formatHour(Number(label)) : formatTooltipDate(label)
+            }
           />
           <Legend
             wrapperStyle={{ fontSize: 12, paddingTop: 10 }}
