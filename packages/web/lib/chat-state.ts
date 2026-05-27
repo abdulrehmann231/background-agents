@@ -166,3 +166,66 @@ export function upsertDraft(
   }
   return next
 }
+
+// =============================================================================
+// Removal & selection
+// =============================================================================
+
+/**
+ * Drop all local-only state for the given chat ids (counterpart to
+ * migrateLocalChatState). Used when chats are deleted.
+ */
+export function removeLocalChatStateFor(prev: LocalChatState, ids: string[]): LocalChatState {
+  const next: LocalChatState = {
+    previewStates: { ...prev.previewStates },
+    queuedMessages: { ...prev.queuedMessages },
+    queuePaused: { ...prev.queuePaused },
+    drafts: { ...prev.drafts },
+  }
+  for (const id of ids) {
+    delete next.previewStates[id]
+    delete next.queuedMessages[id]
+    delete next.queuePaused[id]
+    delete next.drafts[id]
+  }
+  return next
+}
+
+/**
+ * Fallback selection after a deletion: the first chat that isn't being deleted,
+ * or null. (The richer tree-aware selection lives in chat-tree.ts; this is the
+ * default used when no tree-order resolver is supplied.)
+ */
+export function selectFallbackNextChatId(chats: Chat[], deletedIds: string[]): string | null {
+  const deleted = new Set(deletedIds)
+  const remaining = chats.filter((c) => !deleted.has(c.id))
+  return remaining[0]?.id ?? null
+}
+
+// =============================================================================
+// Preview state
+// =============================================================================
+
+/**
+ * Compute the next preview state for a chat from a partial update merged onto
+ * the current state. Returns undefined (i.e. "clear it") when the update
+ * explicitly sets all three preview fields to undefined.
+ *
+ * Note: callers should first check whether any preview key is *present* in the
+ * update before calling — a fully-absent update means "don't touch preview
+ * state", which is distinct from the all-undefined "clear" case handled here.
+ */
+export function computeNextPreviewState(
+  currentState: PreviewState | undefined,
+  updates: Pick<Partial<Chat>, "previewItems" | "activePreviewIndex" | "previewPaneHidden">
+): PreviewState | undefined {
+  const { previewItems, activePreviewIndex, previewPaneHidden } = updates
+  if (previewItems === undefined && activePreviewIndex === undefined && previewPaneHidden === undefined) {
+    return undefined
+  }
+  return {
+    items: previewItems ?? currentState?.items ?? [],
+    activeIndex: activePreviewIndex ?? currentState?.activeIndex ?? 0,
+    hidden: previewPaneHidden ?? currentState?.hidden,
+  }
+}

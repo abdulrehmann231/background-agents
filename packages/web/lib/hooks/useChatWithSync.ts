@@ -31,7 +31,6 @@ import {
   clearDraftChatConfig,
   migrateDraftToRealChat,
   type DraftChatConfig,
-  type PreviewState,
 } from "@/lib/storage"
 import {
   useChatsQuery,
@@ -57,6 +56,9 @@ import {
   dequeue,
   isChatReadyForQueueDispatch,
   upsertDraft,
+  removeLocalChatStateFor,
+  selectFallbackNextChatId,
+  computeNextPreviewState,
   type LocalChatState,
 } from "@/lib/chat-state"
 import {
@@ -371,14 +373,9 @@ export function useChatWithSync() {
       setDeletingChatIds((prev) => new Set([...prev, ...allIds]))
 
       const selectNextChat = (deletedIds: string[]) => {
-        let nextChat: string | null = null
-        if (getNextChatId) {
-          nextChat = getNextChatId(deletedIds)
-        } else {
-          // Fallback: select first remaining chat
-          const remaining = chats.filter((c) => !deletedIds.includes(c.id))
-          nextChat = remaining[0]?.id ?? null
-        }
+        const nextChat = getNextChatId
+          ? getNextChatId(deletedIds)
+          : selectFallbackNextChatId(chats, deletedIds)
         setCurrentChatIdState(nextChat)
         persistCurrentChatId(nextChat)
       }
@@ -397,16 +394,7 @@ export function useChatWithSync() {
           sandboxDeleteMutation.mutate(sandboxId)
         }
         clearLocalStateForChats(result.deletedChatIds)
-        setLocalChatState((prev) => {
-          const next = { ...prev, previewStates: { ...prev.previewStates }, queuedMessages: { ...prev.queuedMessages }, queuePaused: { ...prev.queuePaused }, drafts: { ...prev.drafts } }
-          for (const id of result.deletedChatIds) {
-            delete next.previewStates[id]
-            delete next.queuedMessages[id]
-            delete next.queuePaused[id]
-            delete next.drafts[id]
-          }
-          return next
-        })
+        setLocalChatState((prev) => removeLocalChatStateFor(prev, result.deletedChatIds))
         // Reconcile against the server's actual deleted set in case it removed
         // descendants we didn't predict locally and the open chat was among them.
         const serverDeletedExtra = result.deletedChatIds.some((id) => !allIds.includes(id))
@@ -467,20 +455,11 @@ export function useChatWithSync() {
     chatId: string,
     updates: Pick<Partial<Chat>, "previewItems" | "activePreviewIndex" | "previewPaneHidden">
   ) => {
-    const { previewItems, activePreviewIndex, previewPaneHidden } = updates
-
     if (!("previewItems" in updates) && !("activePreviewIndex" in updates) && !("previewPaneHidden" in updates)) {
       return
     }
 
-    const currentState = localChatState.previewStates[chatId]
-    const newState: PreviewState | undefined = previewItems === undefined && activePreviewIndex === undefined && previewPaneHidden === undefined
-      ? undefined
-      : {
-          items: previewItems ?? currentState?.items ?? [],
-          activeIndex: activePreviewIndex ?? currentState?.activeIndex ?? 0,
-          hidden: previewPaneHidden ?? currentState?.hidden,
-        }
+    const newState = computeNextPreviewState(localChatState.previewStates[chatId], updates)
     setPreviewState(chatId, newState)
     setLocalChatState((prev) => {
       const newPreviewStates = { ...prev.previewStates }

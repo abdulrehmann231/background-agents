@@ -10,6 +10,9 @@ import {
   dequeue,
   isChatReadyForQueueDispatch,
   upsertDraft,
+  removeLocalChatStateFor,
+  selectFallbackNextChatId,
+  computeNextPreviewState,
   type LocalChatState,
 } from "@/lib/chat-state"
 
@@ -193,5 +196,59 @@ describe("upsertDraft", () => {
     const input = { a: "hi" }
     upsertDraft(input, "a", "bye")
     expect(input).toEqual({ a: "hi" })
+  })
+})
+
+describe("removeLocalChatStateFor", () => {
+  it("drops every map entry for the given ids and keeps the rest", () => {
+    const prev: LocalChatState = {
+      previewStates: { a: { items: [], activeIndex: 0, hidden: false }, b: { items: [], activeIndex: 0, hidden: false } },
+      queuedMessages: { a: [q("1")], b: [q("2")] },
+      queuePaused: { a: true, b: false },
+      drafts: { a: "x", b: "y" },
+    }
+
+    const next = removeLocalChatStateFor(prev, ["a"])
+
+    expect(Object.keys(next.previewStates)).toEqual(["b"])
+    expect(next.queuedMessages).toEqual({ b: [q("2")] })
+    expect(next.queuePaused).toEqual({ b: false })
+    expect(next.drafts).toEqual({ b: "y" })
+  })
+
+  it("is immutable and tolerates ids with no local state", () => {
+    const prev: LocalChatState = { ...emptyLocal(), drafts: { a: "x" } }
+    const next = removeLocalChatStateFor(prev, ["missing"])
+    expect(next.drafts).toEqual({ a: "x" })
+    expect(prev.drafts).toEqual({ a: "x" })
+  })
+})
+
+describe("selectFallbackNextChatId", () => {
+  it("returns the first chat not being deleted", () => {
+    const list = [chat({ id: "a" }), chat({ id: "b" }), chat({ id: "c" })]
+    expect(selectFallbackNextChatId(list, ["a"])).toBe("b")
+  })
+
+  it("returns null when everything is deleted", () => {
+    const list = [chat({ id: "a" })]
+    expect(selectFallbackNextChatId(list, ["a"])).toBeNull()
+  })
+})
+
+describe("computeNextPreviewState", () => {
+  it("returns undefined when all preview fields are undefined (clear)", () => {
+    expect(computeNextPreviewState(undefined, {})).toBeUndefined()
+  })
+
+  it("merges a partial update onto the current state", () => {
+    const current = { items: [{ type: "terminal" as const, id: "t1" }], activeIndex: 2, hidden: true }
+    const next = computeNextPreviewState(current, { previewPaneHidden: false })
+    expect(next).toEqual({ items: current.items, activeIndex: 2, hidden: false })
+  })
+
+  it("defaults items/activeIndex when there is no current state", () => {
+    const next = computeNextPreviewState(undefined, { previewPaneHidden: true })
+    expect(next).toEqual({ items: [], activeIndex: 0, hidden: true })
   })
 })
