@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { formatAxisDate, formatTooltipDate } from "./chartFormatters"
 
 interface WeeklyActiveUsersData {
   date: string
@@ -46,10 +47,7 @@ export function UserGrowthChart({ data }: UserGrowthChartProps) {
           <XAxis
             dataKey="date"
             tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-            tickFormatter={(value) => {
-              const date = new Date(value)
-              return `${date.getMonth() + 1}/${date.getDate()}`
-            }}
+            tickFormatter={(value) => formatAxisDate(value)}
             axisLine={{ stroke: "hsl(var(--border))" }}
             tickLine={{ stroke: "hsl(var(--border))" }}
           />
@@ -63,10 +61,7 @@ export function UserGrowthChart({ data }: UserGrowthChartProps) {
             {...chartTooltipProps}
             cursor={lineTooltipCursor}
             formatter={(value) => [value, "Active Users (7-day)"]}
-            labelFormatter={(label) => {
-              const date = new Date(label)
-              return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-            }}
+            labelFormatter={(label) => formatTooltipDate(label)}
           />
           <Area
             type="monotone"

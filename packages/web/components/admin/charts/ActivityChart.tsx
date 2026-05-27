@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { formatAxisDate } from "./chartFormatters"
 
 interface ActivityData {
   date: string
@@ -61,10 +62,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
           <XAxis
             dataKey="date"
             tick={{ fontSize: 12 }}
-            tickFormatter={(value) => {
-              const date = new Date(value)
-              return `${date.getMonth() + 1}/${date.getDate()}`
-            }}
+            tickFormatter={(value) => formatAxisDate(value)}
             className="text-muted-foreground"
           />
           <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
