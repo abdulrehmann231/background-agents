@@ -48,38 +48,12 @@ import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent, type Agent, t
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import { PATHS } from "@upstream/common"
 import type { GitHubRepo, GitHubBranch } from "@/lib/github"
-
-// Storage key for pending message (persists across OAuth redirect)
-const PENDING_MESSAGE_KEY = "simple-chat-pending-message"
-
-// Type for pending message data stored before sign-in
-interface PendingMessage {
-  message: string
-  agent: string
-  model: string
-}
-
-// Helper to save pending message to sessionStorage
-function savePendingMessage(data: PendingMessage): void {
-  if (typeof window !== "undefined") {
-    sessionStorage.setItem(PENDING_MESSAGE_KEY, JSON.stringify(data))
-  }
-}
-
-// Helper to load and clear pending message from sessionStorage
-function loadAndClearPendingMessage(): PendingMessage | null {
-  if (typeof window === "undefined") return null
-  const stored = sessionStorage.getItem(PENDING_MESSAGE_KEY)
-  if (stored) {
-    sessionStorage.removeItem(PENDING_MESSAGE_KEY)
-    try {
-      return JSON.parse(stored) as PendingMessage
-    } catch {
-      return null
-    }
-  }
-  return null
-}
+import {
+  savePendingMessage,
+  loadAndClearPendingMessage,
+  hasPendingMessage,
+} from "@/lib/pending-message"
+import { buildTreeOrderedChatIds, getNextChatIdAfterDeletion } from "@/lib/chat-tree"
 
 function ChatPanelWithPalette(props: React.ComponentProps<typeof ChatPanel>) {
   const { openCommand } = usePalette()
@@ -404,7 +378,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   // below will handle chat creation when sending the pending message.
   useEffect(() => {
     if (!isHydrated || currentChatId || !session) return
-    if (typeof window !== "undefined" && sessionStorage.getItem(PENDING_MESSAGE_KEY)) return
+    if (hasPendingMessage()) return
     // Enter draft mode instead of creating a real chat
     startNewChat()
   }, [isHydrated, currentChatId, session, startNewChat])
@@ -1014,37 +988,10 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   // Build the full tree-ordered id list matching the sidebar (ignoring
   // collapsed state — so Alt+Up/Down can reach every chat, expanding
   // collapsed ancestors along the way).
-  const treeOrderedChatIds = useMemo(() => {
-    // Show empty chats if they have a parentChatId (were branched)
-    // Apply the same repo filter as the Sidebar so navigation matches visual order
-    const visible = chats.filter((c) => {
-      const hasMessages = c.messages.length > 0 || (c.messageCount ?? 0) > 0
-      if (!hasMessages && !c.parentChatId) return false
-      if (sidebar.repoFilter === ALL_REPOSITORIES) return true
-      if (sidebar.repoFilter === NO_REPOSITORY) return c.repo === NEW_REPOSITORY
-      return c.repo === sidebar.repoFilter
-    })
-    visible.sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt))
-    const visibleIds = new Set(visible.map((c) => c.id))
-    const kids = new Map<string, Chat[]>()
-    for (const c of visible) {
-      const parent = c.parentChatId && visibleIds.has(c.parentChatId) ? c.parentChatId : null
-      if (parent) {
-        const list = kids.get(parent) ?? []
-        list.push(c)
-        kids.set(parent, list)
-      }
-    }
-    const roots = visible.filter((c) => !(c.parentChatId && visibleIds.has(c.parentChatId)))
-    const out: string[] = []
-    const walk = (c: Chat) => {
-      out.push(c.id)
-      const children = kids.get(c.id) ?? []
-      for (const child of children) walk(child)
-    }
-    for (const r of roots) walk(r)
-    return out
-  }, [chats, sidebar.repoFilter])
+  const treeOrderedChatIds = useMemo(
+    () => buildTreeOrderedChatIds(chats, sidebar.repoFilter),
+    [chats, sidebar.repoFilter]
+  )
 
   const handleRequestMergeChats = useCallback((sourceId: string, targetId?: string) => {
     const source = chats.find((c) => c.id === sourceId)
@@ -1090,18 +1037,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
 
   // Compute the next chat to select after deletion (following chat, or previous if last)
   const getNextChatId = useCallback(
-    (deletedIds: string[]) => {
-      const deletedSet = new Set(deletedIds)
-      const remaining = treeOrderedChatIds.filter((id) => !deletedSet.has(id))
-      if (remaining.length === 0) return null
-
-      // Find index of first deleted chat in original order
-      const firstDeletedIdx = treeOrderedChatIds.findIndex((id) => deletedSet.has(id))
-
-      // Select chat at same index (following chat) or last remaining if beyond bounds
-      const targetIdx = Math.min(firstDeletedIdx, remaining.length - 1)
-      return remaining[targetIdx] ?? null
-    },
+    (deletedIds: string[]) => getNextChatIdAfterDeletion(treeOrderedChatIds, deletedIds),
     [treeOrderedChatIds]
   )
 
