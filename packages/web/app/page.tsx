@@ -9,20 +9,9 @@ import { MobileHeader } from "@/components/MobileHeader"
 import { Sidebar } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
 import { PreviewView } from "@/components/PreviewView"
-import { RepoPickerModal } from "@/components/modals/RepoPickerModal"
-import { SettingsModal } from "@/components/modals/SettingsModal"
-import { SignInModal } from "@/components/modals/SignInModal"
-import { ReAuthModal } from "@/components/modals/ReAuthModal"
-import { HelpModal } from "@/components/modals/HelpModal"
-import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
-import { LimitReachedDialog } from "@/components/modals/LimitReachedDialog"
-import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, ForcePushDialog, useGitDialogs } from "@/components/modals/GitDialogs"
-import { EnvironmentVariablesModal } from "@/components/modals/EnvironmentVariablesModal"
-import { MobileCommandsMenu } from "@/components/MobileCommandsMenu"
-import { MobileRenameModal } from "@/components/ui/MobileBottomSheet"
-import { ScheduledJobForm } from "@/components/scheduled-jobs/ScheduledJobForm"
+import { AppModals } from "@/components/AppModals"
+import { useGitDialogs } from "@/components/modals/GitDialogs"
 import { ScheduledJobsView } from "@/components/scheduled-jobs/ScheduledJobsView"
-import { SkillSearchView } from "@/components/skills/SkillSearchView"
 import { clearAllStorage } from "@/lib/storage"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider, usePalette } from "@/components/search-palette"
@@ -1341,176 +1330,22 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         <div className="fixed inset-0 z-[999] cursor-col-resize" />
       )}
 
-      <RepoPickerModal
-        open={modals.repoCreateOpen}
-        onClose={() => modals.setRepoCreateOpen(false)}
-        onSelect={handleRepoSelect}
+      <AppModals
         isMobile={isMobile}
-        mode="create"
-        suggestedName={currentChat?.displayName ?? null}
-      />
-
-        <SettingsModal
-          open={modals.settingsOpen}
-          onClose={modals.closeSettings}
-          settings={settings}
-          credentialFlags={credentialFlags}
-          onSave={updateSettings}
-          highlightKey={modals.settingsHighlightKey}
-          defaultSection={modals.settingsDefaultSection}
-          isMobile={isMobile}
-        />
-
-        <EnvironmentVariablesModal
-          open={modals.envVarsModalOpen}
-          onClose={() => modals.setEnvVarsModalOpen(false)}
-          chatId={displayCurrentChatId || ""}
-          repoName={displayCurrentChat?.repo !== NEW_REPOSITORY ? displayCurrentChat?.repo : undefined}
-          onSave={handleSaveEnvVars}
-          initialChatEnvVars={envVarsChatEnvVars}
-          initialRepoEnvVars={envVarsRepoEnvVars}
-          isMobile={isMobile}
-        />
-
-      {/* Skills Search Modal */}
-      {currentChat?.sandboxId && currentChat.repo !== NEW_REPOSITORY && (
-        <SkillSearchView
-          open={skillsModalOpen}
-          onOpenChange={setSkillsModalOpen}
-          chatId={currentChat.id}
-          repo={currentChat.repo}
-        />
-      )}
-
-      {/* Git Dialogs - now use API calls instead of pasting git commands */}
-      <MergeDialog
-        open={gitDialogs.mergeOpen}
-        onClose={() => gitDialogs.setMergeOpen(false)}
-        gitDialogs={gitDialogs}
-        chat={displayCurrentChat}
-        isMobile={isMobile}
-      />
-      <RebaseDialog
-        open={gitDialogs.rebaseOpen}
-        onClose={() => gitDialogs.setRebaseOpen(false)}
-        gitDialogs={gitDialogs}
-        chat={displayCurrentChat}
-        isMobile={isMobile}
-      />
-      <PRDialog
-        open={gitDialogs.prOpen}
-        onClose={() => gitDialogs.setPROpen(false)}
-        gitDialogs={gitDialogs}
-        chat={displayCurrentChat}
-        isMobile={isMobile}
-      />
-      <SquashDialog
-        open={gitDialogs.squashOpen}
-        onClose={() => gitDialogs.setSquashOpen(false)}
-        gitDialogs={gitDialogs}
-        chat={displayCurrentChat}
-        isMobile={isMobile}
-      />
-      <ForcePushDialog
-        open={gitDialogs.forcePushOpen}
-        onClose={() => gitDialogs.setForcePushOpen(false)}
-        gitDialogs={gitDialogs}
-        chat={displayCurrentChat}
-        isMobile={isMobile}
-      />
-
-      {/* Sign In Modal - shown when user tries to send message without being signed in */}
-      <SignInModal
-        open={modals.signInModalOpen}
-        onClose={() => modals.setSignInModalOpen(false)}
-        isMobile={isMobile}
-      />
-
-      {/* Re-auth Modal - shown when stored GitHub token has expired or been revoked */}
-      <ReAuthModal
-        open={githubTokenInvalid}
-        onClose={() => {}}
-        isMobile={isMobile}
-      />
-
-      <HelpModal
-        open={modals.helpOpen}
-        onClose={() => modals.setHelpOpen(false)}
-        isMobile={isMobile}
-      />
-
-      {/* Scheduled Job Form */}
-      <ScheduledJobForm
-        open={modals.scheduledJobFormOpen}
-        onClose={() => modals.setScheduledJobFormOpen(false)}
-        onSuccess={() => {
-          modals.setScheduledJobFormOpen(false)
-          setScheduledJobsRefreshKey((k) => k + 1)
-        }}
-        isMobile={isMobile}
-      />
-
-      {/* Mobile Commands Menu */}
-      {isMobile && (
-        <MobileCommandsMenu
-          open={modals.mobileCommandsOpen}
-          onClose={() => modals.setMobileCommandsOpen(false)}
-          onSlashCommand={handleSlashCommand}
-          hasLinkedRepo={!!(currentChat && currentChat.repo !== NEW_REPOSITORY)}
-          inConflict={!!(gitDialogs.rebaseConflict?.inRebase || gitDialogs.rebaseConflict?.inMerge)}
-        />
-      )}
-
-      <ConfirmDialog
-        open={modals.deleteConfirmChatId !== null}
-        onClose={() => modals.setDeleteConfirmChatId(null)}
-        onConfirm={() => {
-          if (modals.deleteConfirmChatId) removeChat(modals.deleteConfirmChatId, getNextChatId)
-        }}
-        title="Delete chat"
-        description={
-          <>
-            Delete{" "}
-            <span className="font-medium text-foreground">
-              {chats.find((c) => c.id === modals.deleteConfirmChatId)?.displayName || "this chat"}
-            </span>
-            ? This cannot be undone.
-          </>
-        }
-        confirmLabel="Delete"
-        variant="destructive"
-        isMobile={isMobile}
-      />
-
-      {/* Mobile Rename Modal */}
-      <MobileRenameModal
-        open={modals.mobileRenameChat !== null}
-        onClose={() => modals.setMobileRenameChat(null)}
-        title="Rename Chat"
-        initialValue={modals.mobileRenameChat?.name ?? ""}
-        onSave={(newName) => {
-          if (modals.mobileRenameChat) {
-            renameChat(modals.mobileRenameChat.id, newName)
-          }
-        }}
-        placeholder="Chat name"
-      />
-
-      {/* Daily Limit Reached Dialog */}
-      <LimitReachedDialog
-        open={limitReachedState.show}
-        onClose={dismissLimitReached}
+        githubTokenInvalid={githubTokenInvalid}
+        onRepoSelect={handleRepoSelect}
+        onSaveSettings={updateSettings}
+        onSaveEnvVars={handleSaveEnvVars}
+        envVarsChatEnvVars={envVarsChatEnvVars}
+        envVarsRepoEnvVars={envVarsRepoEnvVars}
+        skillsModalOpen={skillsModalOpen}
+        onSkillsModalOpenChange={setSkillsModalOpen}
+        onScheduledJobSuccess={() => setScheduledJobsRefreshKey((k) => k + 1)}
+        onSlashCommand={handleSlashCommand}
+        onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
+        limitReachedState={limitReachedState}
+        onDismissLimitReached={dismissLimitReached}
         onContinueWithOpenCode={retryWithOpenCode}
-        onAddApiKey={() => {
-          dismissLimitReached()
-          modals.openSettings("anthropic")
-        }}
-        onUpgradeToPro={() => {
-          dismissLimitReached()
-          window.open("mailto:james@jamesmurdza.com?subject=Upgrade%20to%20Pro", "_blank")
-        }}
-        resetAt={limitReachedState.resetAt}
-        isMobile={isMobile}
       />
     </div>
     </GitProvider>
