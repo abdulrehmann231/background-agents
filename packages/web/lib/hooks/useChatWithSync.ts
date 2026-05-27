@@ -12,10 +12,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { nanoid } from "nanoid"
-import type { Chat, ChatStatus, Message, QueuedMessage, Agent } from "@/lib/types"
-import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent } from "@/lib/types"
+import type { Chat, ChatStatus, Message, QueuedMessage } from "@/lib/types"
+import { NEW_REPOSITORY, getDefaultModelForAgent } from "@/lib/types"
 import type { Credentials } from "@/lib/credentials"
-import { generateBranchName } from "@/lib/utils"
 import {
   loadLocalState,
   setCurrentChatId as persistCurrentChatId,
@@ -60,65 +59,18 @@ import {
   upsertDraft,
   type LocalChatState,
 } from "@/lib/chat-state"
-
-// =============================================================================
-// API helpers
-// =============================================================================
-
-interface SendMessagePayload {
-  message: string
-  agent: string
-  model: string
-  userMessageId: string
-  assistantMessageId: string
-  newBranch?: string
-  planMode?: boolean
-}
-
-interface SendMessageResponse {
-  sandboxId: string
-  branch: string | null
-  previewUrlPattern: string | null
-  backgroundSessionId: string
-  uploadedFiles: string[]
-}
-
-/**
- * Send a message to the API, handling both JSON and FormData (for files)
- */
-async function sendMessageToApi(
-  chatId: string,
-  payload: SendMessagePayload,
-  files?: File[]
-): Promise<{ ok: true; data: SendMessageResponse } | { ok: false; error: string; isDailyLimit: boolean; resetAt?: string }> {
-  let response: Response
-
-  if (files?.length) {
-    const formData = new FormData()
-    formData.append("payload", JSON.stringify(payload))
-    files.forEach((file, i) => formData.append(`file-${i}`, file))
-    response = await fetch(`/api/chats/${chatId}/messages`, { method: "POST", body: formData })
-  } else {
-    response = await fetch(`/api/chats/${chatId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-  }
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    return {
-      ok: false,
-      error: err.error || "Failed to send message",
-      isDailyLimit: err.error === "DAILY_LIMIT_EXCEEDED",
-      resetAt: err.resetAt,
-    }
-  }
-
-  const data = await response.json() as SendMessageResponse
-  return { ok: true, data }
-}
+import {
+  sendMessageToApi,
+  resolveAgentAndModel,
+  usesSharedClaudePool,
+  newBranchForSend,
+  applyOptimisticSend,
+  removeOptimisticMessages,
+  applySendSuccess,
+  applySendError,
+  decrementClaudeUsage,
+  type SendMessagePayload,
+} from "@/lib/chat-messages"
 
 // =============================================================================
 // Hook
@@ -611,21 +563,21 @@ export function useChatWithSync() {
       if (!session) return
 
       const isFirstMessage = chat.messages.length === 0
-      const selectedAgent = (agent ?? chat.agent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
-      const selectedModel = model ?? chat.model ?? settings.defaultModel ?? getDefaultModelForAgent(selectedAgent, credentialFlags)
+      const { agent: selectedAgent, model: selectedModel } = resolveAgentAndModel(
+        agent,
+        model,
+        chat,
+        settings,
+        credentialFlags
+      )
 
-      const userMessage: Message = { id: nanoid(), role: "user", content, timestamp: Date.now() }
-      const assistantMessage: Message = { id: nanoid(), role: "assistant", content: "", timestamp: Date.now() + 1, toolCalls: [], contentBlocks: [] }
+      const now = Date.now()
+      const userMessage: Message = { id: nanoid(), role: "user", content, timestamp: now }
+      const assistantMessage: Message = { id: nanoid(), role: "assistant", content: "", timestamp: now + 1, toolCalls: [], contentBlocks: [] }
 
       // Optimistic update
       updateChatsCache((old) => old.map((c) =>
-        c.id === chatId ? {
-          ...c,
-          messages: [...c.messages, userMessage, assistantMessage],
-          status: chat.sandboxId ? "running" : "creating",
-          lastActiveAt: Date.now(),
-          errorMessage: undefined,
-        } : c
+        c.id === chatId ? applyOptimisticSend(c, userMessage, assistantMessage, now) : c
       ))
 
       try {
@@ -635,7 +587,7 @@ export function useChatWithSync() {
           model: selectedModel,
           userMessageId: userMessage.id,
           assistantMessageId: assistantMessage.id,
-          newBranch: chat.sandboxId ? undefined : `agent/${generateBranchName()}`,
+          newBranch: newBranchForSend(chat),
           planMode: planMode || undefined,
         }
 
@@ -646,11 +598,7 @@ export function useChatWithSync() {
           if (result.isDailyLimit) {
             // Remove the optimistic messages
             updateChatsCache((old) => old.map((c) =>
-              c.id === chatId ? {
-                ...c,
-                status: "ready",
-                messages: c.messages.filter((m) => m.id !== userMessage.id && m.id !== assistantMessage.id),
-              } : c
+              c.id === chatId ? removeOptimisticMessages(c, [userMessage.id, assistantMessage.id]) : c
             ))
 
             // Show the limit reached dialog with pending message info
@@ -667,39 +615,14 @@ export function useChatWithSync() {
 
         const { data } = result
         updateChatsCache((old) => old.map((c) =>
-          c.id === chatId ? {
-            ...c,
-            sandboxId: data.sandboxId,
-            branch: data.branch,
-            previewUrlPattern: data.previewUrlPattern ?? undefined,
-            backgroundSessionId: data.backgroundSessionId,
-            agent: selectedAgent,
-            model: selectedModel,
-            status: "running",
-            messages: c.messages.map((m) =>
-              m.id === userMessage.id && data.uploadedFiles.length > 0 ? { ...m, uploadedFiles: data.uploadedFiles } : m
-            ),
-          } : c
+          c.id === chatId ? applySendSuccess(c, data, selectedAgent, selectedModel, userMessage.id) : c
         ))
 
         startStreaming(chatId, data.sandboxId, "project", data.backgroundSessionId, assistantMessage.id, data.previewUrlPattern ?? undefined, data.branch, undefined, planMode)
 
         // Optimistically update Claude usage count if using shared pool with Claude Code
-        if (selectedAgent === "claude-code") {
-          const hasOwnAnthropicKey = !!credentialFlags.ANTHROPIC_API_KEY || !!credentialFlags.CLAUDE_CODE_CREDENTIALS
-          const usesSharedPool = credentialFlags.CLAUDE_SHARED_POOL_AVAILABLE && !hasOwnAnthropicKey
-          if (usesSharedPool) {
-            queryClient.setQueryData<SettingsData>(queryKeys.settings.all, (old) => {
-              if (!old || old.claudeLimitUsed === null || old.claudeLimitUsed === undefined) return old
-              return {
-                ...old,
-                claudeLimitUsed: old.claudeLimitUsed + 1,
-                claudeLimitRemaining: old.claudeLimitRemaining !== null && old.claudeLimitRemaining !== undefined
-                  ? Math.max(0, old.claudeLimitRemaining - 1)
-                  : null,
-              }
-            })
-          }
+        if (usesSharedClaudePool(selectedAgent, credentialFlags)) {
+          queryClient.setQueryData<SettingsData>(queryKeys.settings.all, decrementClaudeUsage)
         }
 
         if (isFirstMessage) {
@@ -708,14 +631,7 @@ export function useChatWithSync() {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error"
         updateChatsCache((old) => old.map((c) =>
-          c.id === chatId ? {
-            ...c,
-            status: "error",
-            errorMessage,
-            messages: c.messages.map((m) =>
-              m.id === assistantMessage.id ? { ...m, content: `Error: ${errorMessage}`, isError: true } : m
-            ),
-          } : c
+          c.id === chatId ? applySendError(c, assistantMessage.id, errorMessage) : c
         ))
       }
     } finally {
