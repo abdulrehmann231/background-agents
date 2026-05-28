@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto"
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import {
@@ -7,7 +8,7 @@ import {
   notFound,
   internalError,
 } from "@/lib/db/api-helpers"
-import { addMinutes } from "date-fns"
+import { addMinutes, addYears } from "date-fns"
 import { toScheduledJobResponse } from "@/lib/scheduled-jobs/types"
 import { cleanupSmitheryConnections } from "@/lib/mcp/connections"
 
@@ -70,6 +71,8 @@ interface UpdateScheduledJobBody {
   baseBranch?: string
   agent?: string
   model?: string | null
+  /** Swap a job (or still-open draft) between trigger types. */
+  triggerType?: "interval" | "incoming"
   intervalMinutes?: number
   autoPR?: boolean
   continueFromLastRun?: boolean
@@ -115,6 +118,7 @@ export async function PATCH(
       baseBranch?: string
       agent?: string
       model?: string | null
+      triggerType?: string
       intervalMinutes?: number
       autoPR?: boolean
       continueFromLastRun?: boolean
@@ -122,6 +126,7 @@ export async function PATCH(
       nextRunAt?: Date
       consecutiveFailures?: number
       isDraft?: boolean
+      incomingToken?: string
     } = {}
 
     if (body.name !== undefined) updateData.name = body.name.trim()
@@ -130,10 +135,39 @@ export async function PATCH(
     if (body.baseBranch !== undefined) updateData.baseBranch = body.baseBranch.trim()
     if (body.agent !== undefined) updateData.agent = body.agent.trim()
     if (body.model !== undefined) updateData.model = body.model?.trim() ?? null
+    if (body.triggerType !== undefined && body.triggerType !== job.triggerType) {
+      updateData.triggerType = body.triggerType
+      if (body.triggerType === "incoming") {
+        // Park the run-sweeper far in the future so the cron stops picking
+        // this job up; the receiver fires runs instead.
+        updateData.nextRunAt = addYears(new Date(), 100)
+        // Pre-mint a token for legacy jobs that were created before tokens
+        // were always-minted. New jobs already have one, so this is a no-op
+        // for them. We don't rotate existing tokens here — that's what the
+        // dedicated rotate-token endpoint is for.
+        if (!job.incomingToken) {
+          updateData.incomingToken = randomBytes(32).toString("hex")
+        }
+      } else if (body.triggerType === "interval") {
+        // Switching back to interval needs intervalMinutes — fall back to
+        // whatever the row had before incoming (could be 0 if the job has
+        // never been interval) so the caller can override via the same
+        // PATCH if needed.
+        const minutes = body.intervalMinutes ?? job.intervalMinutes
+        updateData.nextRunAt = addMinutes(new Date(), Math.max(minutes, 1))
+      }
+    }
     if (body.intervalMinutes !== undefined) {
       updateData.intervalMinutes = body.intervalMinutes
-      // Reschedule next run based on new interval
-      updateData.nextRunAt = addMinutes(new Date(), body.intervalMinutes)
+      // Reschedule next run based on new interval. If this PATCH is also
+      // switching to incoming above, that nextRunAt assignment wins because
+      // it runs after this branch is gated by `body.intervalMinutes !==
+      // undefined`. We re-assert the interval-friendly nextRunAt only when
+      // the effective triggerType (post-PATCH) is "interval".
+      const effectiveType = body.triggerType ?? job.triggerType
+      if (effectiveType === "interval") {
+        updateData.nextRunAt = addMinutes(new Date(), body.intervalMinutes)
+      }
     }
      if (body.autoPR !== undefined) updateData.autoPR = body.autoPR
      if (body.continueFromLastRun !== undefined) updateData.continueFromLastRun = body.continueFromLastRun
@@ -141,17 +175,24 @@ export async function PATCH(
       updateData.isDraft = body.isDraft
       // Reset the schedule when promoting a draft so the first run lands a
       // full interval after the user finishes creating, not at the placeholder
-      // nextRunAt the materialize POST originally wrote.
-      if (body.isDraft === false) {
+      // nextRunAt the materialize POST originally wrote. Only relevant for
+      // interval-triggered jobs — incoming jobs already park nextRunAt far
+      // in the future via the triggerType branch above.
+      const effectiveType = body.triggerType ?? job.triggerType
+      if (body.isDraft === false && effectiveType === "interval") {
         updateData.nextRunAt = addMinutes(new Date(), body.intervalMinutes ?? job.intervalMinutes)
       }
     }
      if (body.enabled !== undefined) {
       updateData.enabled = body.enabled
-      // Reset failure count when re-enabling
+      // Reset failure count when re-enabling. Only reschedule for interval
+      // jobs — incoming jobs are fired by the receiver, not by nextRunAt.
+      const effectiveType = body.triggerType ?? job.triggerType
       if (body.enabled && !job.enabled) {
         updateData.consecutiveFailures = 0
-        updateData.nextRunAt = addMinutes(new Date(), job.intervalMinutes)
+        if (effectiveType === "interval") {
+          updateData.nextRunAt = addMinutes(new Date(), job.intervalMinutes)
+        }
       }
     }
 

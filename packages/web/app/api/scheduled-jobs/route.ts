@@ -111,34 +111,13 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const now = new Date()
 
-    // Handle generic incoming-webhook trigger. Unlike the GitHub "webhook"
-    // path, we don't call out to any external API — the URL token is the
-    // entire setup. Works with or without a repo (repo-less incoming jobs
-    // are valid; auto-PR just gets forced off downstream).
-    if (triggerType === "incoming") {
-      const incomingToken = randomBytes(32).toString("hex")
-      const job = await prisma.scheduledJob.create({
-        data: {
-          userId,
-          name: body.name.trim(),
-          prompt: body.prompt.trim(),
-          repo: body.repo.trim(),
-          baseBranch: body.baseBranch.trim(),
-          agent: body.agent.trim(),
-          model: body.model?.trim() ?? null,
-          triggerType: "incoming",
-          incomingToken,
-          intervalMinutes: 0, // Not used for incoming triggers
-          autoPR: isRepoLess ? false : body.autoPR ?? true,
-          continueFromLastRun: body.continueFromLastRun ?? false,
-          nextRunAt: addYears(now, 100), // Far future — never picked up by the interval cron
-        },
-      })
+    // Every job gets an incomingToken on create, regardless of triggerType.
+    // The token is dormant on interval jobs (the receiver rejects unless
+    // triggerType is "incoming"), but minting it up-front lets a user swap
+    // a job from interval → incoming later — including mid-draft — without
+    // a second round-trip to issue a URL.
+    const incomingToken = randomBytes(32).toString("hex")
 
-      return Response.json(toScheduledJobResponse(job), { status: 201 })
-    }
-
-    // Create interval-triggered job (existing behavior)
     const job = await prisma.scheduledJob.create({
       data: {
         userId,
@@ -148,11 +127,20 @@ export async function POST(req: NextRequest): Promise<Response> {
         baseBranch: body.baseBranch.trim(),
         agent: body.agent.trim(),
         model: body.model?.trim() ?? null,
-        triggerType: "interval",
-        intervalMinutes: body.intervalMinutes!,
-        autoPR: body.autoPR ?? true,
+        triggerType,
+        incomingToken,
+        // Interval jobs need intervalMinutes; incoming jobs don't use it but
+        // the column is NOT NULL so we write 0.
+        intervalMinutes: triggerType === "interval" ? body.intervalMinutes! : 0,
+        // Repo-less jobs have nothing to push to.
+        autoPR: isRepoLess ? false : body.autoPR ?? true,
         continueFromLastRun: body.continueFromLastRun ?? false,
-        nextRunAt: addMinutes(now, body.intervalMinutes!),
+        // Interval jobs schedule a real next run; incoming jobs sit far in
+        // the future so the nextRunAt sweeper never picks them up.
+        nextRunAt:
+          triggerType === "interval"
+            ? addMinutes(now, body.intervalMinutes!)
+            : addYears(now, 100),
         isDraft: body.isDraft ?? false,
         enabled: body.enabled ?? true,
       },
