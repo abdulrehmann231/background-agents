@@ -316,47 +316,10 @@ export function ChatInput({
             />
           </div>
 
-          {/* Button container */}
-          <div className={cn(
-            "shrink-0 flex items-center justify-center",
-            isMobile ? "h-9 w-9" : "h-7 w-7"
-          )}>
-            {isRunning && canQueue ? (
-              <button
-                onClick={handleSendWithSpeechStop}
-                title="Queue message (sent after current response)"
-                className={cn(
-                  "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors",
-                  isMobile ? "h-9 w-9" : "h-7 w-7"
-                )}
-              >
-                <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-              </button>
-            ) : isRunning ? (
-              <button
-                onClick={onStop}
-                className={cn(
-                  "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors",
-                  isMobile ? "h-9 w-9" : "h-7 w-7"
-                )}
-              >
-                <Square className={cn(isMobile ? "h-3.5 w-3.5" : "h-3 w-3", "fill-current")} />
-              </button>
-            ) : canSend ? (
-              <button
-                onClick={handleSendWithSpeechStop}
-                className={cn(
-                  "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors",
-                  isMobile ? "h-9 w-9" : "h-7 w-7"
-                )}
-              >
-                <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-              </button>
-            ) : null}
-          </div>
-
-          {/* Voice dictation (speech-to-text) — anchored to the bottom-right,
-              vertically aligned with the send button even as the textarea
+          {/* Voice dictation (speech-to-text) — sits on the left of the send
+              button. When the input is empty (no send button) it's the only
+              control on the right; once the send button appears it moves to
+              its left. Bottom-aligned with the send button as the textarea
               grows. Only shown when supported. */}
           {speech.isSupported && (
             <button
@@ -390,6 +353,49 @@ export function ChatInput({
             >
               <Mic className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
             </button>
+          )}
+
+          {/* Send / stop / queue button — only occupies space when there's an
+              action to show, so the mic stays flush-right when the input is
+              empty. Rendered on the far right. */}
+          {(isRunning || canSend) && (
+            <div className={cn(
+              "shrink-0 flex items-center justify-center",
+              isMobile ? "h-9 w-9" : "h-7 w-7"
+            )}>
+              {isRunning && canQueue ? (
+                <button
+                  onClick={handleSendWithSpeechStop}
+                  title="Queue message (sent after current response)"
+                  className={cn(
+                    "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors",
+                    isMobile ? "h-9 w-9" : "h-7 w-7"
+                  )}
+                >
+                  <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                </button>
+              ) : isRunning ? (
+                <button
+                  onClick={onStop}
+                  className={cn(
+                    "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors",
+                    isMobile ? "h-9 w-9" : "h-7 w-7"
+                  )}
+                >
+                  <Square className={cn(isMobile ? "h-3.5 w-3.5" : "h-3 w-3", "fill-current")} />
+                </button>
+              ) : canSend ? (
+                <button
+                  onClick={handleSendWithSpeechStop}
+                  className={cn(
+                    "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors",
+                    isMobile ? "h-9 w-9" : "h-7 w-7"
+                  )}
+                >
+                  <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                </button>
+              ) : null}
+            </div>
           )}
         </div>
 
