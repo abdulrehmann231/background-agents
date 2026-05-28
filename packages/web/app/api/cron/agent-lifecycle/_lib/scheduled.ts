@@ -242,6 +242,53 @@ export async function startJobExecution(
     finalPrompt = contextLines
   }
 
+  // Generic incoming webhook: any external app (Jira, Slack, Linear, curl).
+  // We don't know the shape of the payload, so we hand it to the agent as a
+  // fenced JSON block plus the captured event-type header, if any.
+  if (run.triggerContext && job.triggerType === "incoming") {
+    const ctx = run.triggerContext as {
+      source?: string
+      receivedAt?: string
+      headers?: Record<string, string>
+      payload?: unknown
+    }
+
+    const eventType =
+      ctx.headers?.["x-github-event"] ??
+      ctx.headers?.["x-gitlab-event"] ??
+      ctx.headers?.["x-event-key"] ??
+      null
+    const userAgent = ctx.headers?.["user-agent"] ?? null
+
+    // JSON.stringify won't throw on cyclic structures coming from Prisma's
+    // JSONB column (it's already serialized), so this is safe.
+    let payloadJson = "{}"
+    try {
+      payloadJson = JSON.stringify(ctx.payload ?? {}, null, 2)
+    } catch {
+      payloadJson = String(ctx.payload)
+    }
+
+    finalPrompt = [
+      `## Incoming Webhook Event`,
+      ``,
+      `An external service triggered this agent run.`,
+      eventType ? `- **Event**: ${eventType}` : null,
+      userAgent ? `- **Source**: ${userAgent}` : null,
+      ctx.receivedAt ? `- **Received at**: ${ctx.receivedAt}` : null,
+      ``,
+      `### Payload`,
+      ``,
+      "```json",
+      payloadJson,
+      "```",
+      ``,
+      `---`,
+      ``,
+      job.prompt,
+    ].filter(Boolean).join("\n")
+  }
+
   // 9. Create user message for the prompt
   const userMessageId = randomUUID()
   const assistantMessageId = randomUUID()
