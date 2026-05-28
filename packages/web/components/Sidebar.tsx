@@ -17,10 +17,7 @@ import {
   UserMenu,
   ChatItem,
   MobileChatItem,
-  MergedChatCheckmark,
   ClaudeUsageIndicator,
-  hasMergedSuccessfully,
-  getFirstMessagePreview,
 } from "./sidebar"
 
 // =============================================================================
