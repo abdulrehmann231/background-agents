@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Clock, ChevronDown, X } from "lucide-react"
+import { Clock, ChevronDown, X, Copy, RefreshCw, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { RepoCombobox } from "@/components/chat/RepoCombobox"
@@ -72,6 +72,11 @@ const TRIGGER_TYPES = [
     label: "When CI/CD fails",
     value: "webhook",
     description: "Triggered by GitHub Actions failure"
+  },
+  {
+    label: "Via webhook",
+    value: "incoming",
+    description: "Triggered by any external app (Jira, Slack, Linear, …) — paste the generated URL into the source app"
   },
 ] as const
 
@@ -182,7 +187,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   const isRepoLess = !repo
   const [agent, setAgent] = useState<Agent>((job?.agent as Agent) ?? "opencode")
   const [model, setModel] = useState(job?.model ?? "")
-  const [triggerType, setTriggerType] = useState<"interval" | "webhook">(job?.triggerType ?? "interval")
+  const [triggerType, setTriggerType] = useState<"interval" | "webhook" | "incoming">(job?.triggerType ?? "interval")
   const initialIntervalMode = inferIntervalMode(job?.intervalMinutes ?? 1440)
   const [intervalMinutes, setIntervalMinutes] = useState(initialIntervalMode.intervalMinutes)
   const [isCustomInterval, setIsCustomInterval] = useState(initialIntervalMode.isCustom)
@@ -213,6 +218,12 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   // Dropdown state
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
+
+  // Incoming-webhook URL state. The token comes from the saved job and can be
+  // swapped out via the rotate-token endpoint without closing the modal.
+  const [incomingToken, setIncomingToken] = useState<string | null>(job?.incomingToken ?? null)
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [rotating, setRotating] = useState(false)
 
   // Get available models for selected agent
   const availableModels = agentModels[agent] ?? []
@@ -248,6 +259,9 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
       setContinueFromLastRun(job?.continueFromLastRun ?? false)
       setError(null)
       setMaterializedJobId(null)
+      setIncomingToken(job?.incomingToken ?? null)
+      setCopiedUrl(false)
+      setRotating(false)
     }
   }, [open, job])
 
@@ -336,7 +350,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
    */
   async function materializeJob(_draftId: string): Promise<string | null> {
     setError(null)
-    if (triggerType === "webhook") {
+    if (triggerType === "webhook" || triggerType === "incoming") {
       setError("Save the job first to attach MCP servers to webhook-triggered jobs.")
       return null
     }
@@ -444,6 +458,50 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
       }
     }
     onClose()
+  }
+
+  /**
+   * Build the URL the user pastes into their external app. Browser-only —
+   * SSR returns an empty string and the panel hides the value until hydration.
+   */
+  const incomingWebhookUrl = useMemo(() => {
+    if (!incomingToken) return ""
+    if (typeof window === "undefined") return ""
+    return `${window.location.origin}/api/webhooks/in/${incomingToken}`
+  }, [incomingToken])
+
+  const handleCopyUrl = async () => {
+    if (!incomingWebhookUrl) return
+    try {
+      await navigator.clipboard.writeText(incomingWebhookUrl)
+      setCopiedUrl(true)
+      setTimeout(() => setCopiedUrl(false), 1500)
+    } catch (err) {
+      console.error("[ScheduledJobForm] copy failed:", err)
+    }
+  }
+
+  const handleRotateToken = async () => {
+    const targetId = job?.id
+    if (!targetId) return
+    if (!confirm("Rotating will invalidate the existing webhook URL. Continue?")) return
+    setRotating(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/scheduled-jobs/${targetId}/rotate-token`, {
+        method: "POST",
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to rotate token")
+      }
+      const updated = await res.json()
+      setIncomingToken(updated.incomingToken ?? null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rotate token")
+    } finally {
+      setRotating(false)
+    }
   }
 
   const handleAgentChange = (newAgent: Agent) => {
@@ -636,6 +694,70 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 {isCustomInterval && effectiveIntervalMinutes < 10 && (
                   <p className="text-xs text-destructive">
                     Interval must be at least 10 minutes.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Incoming webhook URL panel — shown only for incoming triggers.
+                In edit mode (incomingToken exists) we render the URL with copy
+                + rotate; in create mode we tell the user the URL appears after
+                save. */}
+            {triggerType === "incoming" && (
+              <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-medium">Webhook URL</label>
+                  <span className="text-xs text-muted-foreground">
+                    Paste into your external app
+                  </span>
+                </div>
+
+                {incomingToken ? (
+                  <>
+                    <div className="flex items-stretch gap-1">
+                      <input
+                        type="text"
+                        readOnly
+                        value={incomingWebhookUrl}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="flex-1 min-w-0 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyUrl}
+                        className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-accent transition-colors cursor-pointer"
+                        title="Copy URL"
+                      >
+                        {copiedUrl ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            Copy
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRotateToken}
+                        disabled={rotating}
+                        className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
+                        title="Generate a new URL and invalidate the existing one"
+                      >
+                        <RefreshCw className={cn("h-3 w-3", rotating && "animate-spin")} />
+                        Rotate
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Anyone with this URL can fire this agent. If it leaks, click Rotate.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    The webhook URL will be generated once you save this agent. You can copy it from this dialog after.
                   </p>
                 )}
               </div>
