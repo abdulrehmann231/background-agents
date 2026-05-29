@@ -60,13 +60,13 @@ App is at http://localhost:4000.
 
 ### Database migration
 
-After editing `prisma/schema.prisma`, generate a migration file and apply it to your local DB. Commit the resulting files in `prisma/migrations/`.
+After editing `prisma/schema.prisma`, run:
 
 ```bash
 npx prisma migrate dev
 ```
 
-After pulling new migrations from git, run the same command to apply them.
+This creates a new migration file in `prisma/migrations/` (commit it) and applies it to your local DB. Run the same command after pulling to apply migrations others have added.
 
 ### Deployment
 
