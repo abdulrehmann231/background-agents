@@ -30,6 +30,11 @@ import {
 const DAYTONA_API_KEY =
   process.env.TEST_DAYTONA_API_KEY || process.env.DAYTONA_API_KEY
 
+// Optional: run the suite against a specific registered snapshot (e.g. the
+// production `background-agents` snapshot) instead of Daytona's default
+// image. Useful for catching image-specific failures.
+const TEST_SANDBOX_SNAPSHOT = process.env.TEST_SANDBOX_SNAPSHOT
+
 /**
  * Server-sent message shape (mirrors the protocol documented in README.md).
  */
@@ -155,7 +160,12 @@ describe.skipIf(!DAYTONA_API_KEY)("daytona-terminal end-to-end", () => {
 
   beforeAll(async () => {
     daytona = new Daytona({ apiKey: DAYTONA_API_KEY! })
-    sandbox = await daytona.create()
+    sandbox = await daytona.create(
+      TEST_SANDBOX_SNAPSHOT ? { snapshot: TEST_SANDBOX_SNAPSHOT } : undefined
+    )
+    if (TEST_SANDBOX_SNAPSHOT) {
+      console.log(`[test] using snapshot: ${TEST_SANDBOX_SNAPSHOT}`)
+    }
 
     // The PTY server hard-codes `cwd: '/home/daytona/project'` (see
     // src/server/pty-server.ts). In a freshly-created sandbox that directory
