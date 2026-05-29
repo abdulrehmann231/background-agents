@@ -35,7 +35,7 @@ npm run dev
 
 ## Run E2E tests
 
-Put the env block from [Testing (E2E)](packages/web/README.md#testing-e2e) in `packages/web/.env.test`. Your `DAYTONA_API_KEY` from `.env.local` is reused.
+Put the env block from [Testing](packages/web/README.md#testing) in `packages/web/.env.test`. Your `DAYTONA_API_KEY` from `.env.local` is reused.
 
 From `packages/web/`:
 

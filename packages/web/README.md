@@ -72,7 +72,7 @@ App is at http://localhost:4000. With `GITHUB_PAT` set you get auto-login — no
 
 After pulling, run `npx prisma migrate dev` to apply new migrations.
 
-### Deployment (production)
+### Deployment
 
 Env:
 
@@ -102,7 +102,7 @@ GITHUB_APP_PRIVATE_KEY="..."
 
 Deploys to Vercel via `vercel.json`. CI runs `npx prisma migrate deploy` to apply migrations to the production database.
 
-### Testing (E2E)
+### Testing
 
 Env (`.env.test` in this package) — overrides the dev env from `.env.local`:
 
