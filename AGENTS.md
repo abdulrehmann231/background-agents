@@ -8,11 +8,17 @@ For **architecture, env-by-situation, and deployment**, see [`packages/web/READM
 
 ## What the user has to provide
 
-The agent can handle everything else on its own, but cannot invent values for these — they have to come from the user:
+The agent can follow the setup and workflow instructions in this repo on its own, but cannot invent values for these env vars — they have to come from the user:
+
+**Required**
 
 - `DAYTONA_API_KEY` in `.env.local` (reused by `.env.test`).
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, or `GITHUB_PAT` as an alternative.
-- Anything under `SMITHERY_*` or `GITHUB_APP_*`, if those integrations are in scope.
+- Auth: either `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET`, or `GITHUB_PAT` as an alternative.
+
+**Optional** (only if those integrations are in scope)
+
+- `SMITHERY_*` — remote MCP servers from the Smithery registry.
+- `GITHUB_APP_*` — authenticated GitHub MCP server.
 
 ## After editing code
 
