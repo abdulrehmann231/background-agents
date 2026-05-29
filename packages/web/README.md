@@ -138,7 +138,7 @@ npm run test:e2e
 
 Each run resets the test database via `prisma migrate reset --force`.
 
-To debug a failing test against the same env profile (test DB, test-auth route, placeholder OAuth):
+To debug a failing test, start a dev server using the same env profile as Playwright (test DB, test-auth route, placeholder OAuth) so you can reproduce the failure manually in your browser:
 
 ```bash
 npm run dev:test
