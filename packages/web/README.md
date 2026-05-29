@@ -131,7 +131,7 @@ GITHUB_CLIENT_SECRET=placeholder
 ```
 
 > [!CAUTION]
-> `I_KNOW_THIS_IS_THE_TEST_DB=true` bypasses the safety check. Whatever `DATABASE_URL` points at will be wiped.
+> Whatever `DATABASE_URL` points at will be wiped.
 
 Tests create real sandboxes, so `DAYTONA_API_KEY` is inherited from your Development `.env.local`.
 
