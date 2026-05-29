@@ -46,12 +46,7 @@ GITHUB_CLIENT_SECRET="placeholder"
 GITHUB_PAT="ghp_your_token_here"   # enables auto-login; bypasses real OAuth
 ```
 
-To override the dev default encryption key (defaults to a built-in dev key otherwise):
-
-```bash
-# Optional: encrypts user-stored API credentials at rest. Generate with: openssl rand -hex 32
-ENCRYPTION_KEY="0000000000000000000000000000000000000000000000000000000000000000"
-```
+`ENCRYPTION_KEY` (encrypts user-stored API credentials at rest) defaults to a built-in dev key. To override, set it to a real value — generate with `openssl rand -hex 32`.
 
 Run:
 
