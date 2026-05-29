@@ -212,21 +212,28 @@ export async function setupTerminal(
     }
   }
 
-  // Start the PTY server
-  const startResult = await sandbox.process.executeCommand(
-    `cd /tmp && nohup node websocket-pty-server.js > /tmp/pty-server.log 2>&1 &`,
-    undefined,
-    undefined,
-    10
-  )
-
-  if (startResult.exitCode !== 0) {
-    console.error("[terminal] Failed to start server:", startResult.result)
+  // Start the PTY server via a session command with runAsync: true so the
+  // call returns immediately. The session is left in place — deleting it
+  // would reap the server.
+  const sessionId = `pty-server-bootstrap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  try {
+    await sandbox.process.createSession(sessionId)
+    await sandbox.process.executeSessionCommand(
+      sessionId,
+      {
+        command:
+          "cd /tmp && node websocket-pty-server.js > /tmp/pty-server.log 2>&1 < /dev/null",
+        runAsync: true,
+      },
+      30
+    )
+  } catch (err) {
+    console.error("[terminal] Failed to start server:", err)
     return {
       status: "error",
       port,
       error: "Failed to start terminal server",
-      details: startResult.result,
+      details: err instanceof Error ? err.message : String(err),
     }
   }
 
