@@ -23,6 +23,13 @@ The agent can follow the setup and workflow instructions in this repo on its own
 - `SMITHERY_*` — remote MCP servers from the Smithery registry.
 - `GITHUB_APP_*` — authenticated GitHub MCP server.
 
+## Debugging
+
+- Investigate with console logs first — add them liberally to narrow down where behavior diverges from expectation, then remove the ones that didn't pay off.
+- Prefer broad integration tests and end-to-end tests over narrow unit tests. They catch real bugs and survive refactors.
+- When debugging, write a new test that reproduces the failure before fixing it. The fix isn't trusted until the test goes red → green.
+- After fixing, keep only the broad tests. Delete narrow tests written just to isolate the bug — they become maintenance cost without adding coverage the broad tests don't already give.
+
 ## After editing code
 
 Before running typecheck for the first time (or after pulling new changes), ensure dependencies are installed:
