@@ -8,13 +8,9 @@
 
 import { execSync } from "child_process"
 import path from "path"
-import { config as loadEnv } from "dotenv"
 
 export default async function globalSetup() {
-  // Load test environment
-  loadEnv({ path: path.resolve(__dirname, "../.env.test") })
-  loadEnv({ path: path.resolve(__dirname, "../../../.env") })
-
+  // Env is already loaded by playwright.config.ts before this runs.
   const dbUrl = process.env.DATABASE_URL || ""
 
   // Safety check: refuse to run on production database

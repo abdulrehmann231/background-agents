@@ -2,9 +2,9 @@ import { defineConfig } from "@playwright/test"
 import { config as loadEnv } from "dotenv"
 import path from "node:path"
 
-// Load test environment first, then fall back to root .env
+// Load test environment first, then fall back to root .env.local (shared with dev)
 loadEnv({ path: path.resolve(__dirname, ".env.test") })
-loadEnv({ path: path.resolve(__dirname, "../../.env") })
+loadEnv({ path: path.resolve(__dirname, "../../.env.local") })
 
 const port = 4000
 
