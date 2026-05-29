@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { Daytona } from "@daytonaio/sdk"
 import { Prisma } from "@prisma/client"
 import { createSandboxGit } from "@background-agents/daytona-git"
@@ -209,7 +210,22 @@ export async function GET(req: Request) {
             sessionOpts
           )
 
-          const sig = `${lastSnap.status}|${lastSnap.content.length}|${lastSnap.toolCalls.length}|${lastSnap.contentBlocks.length}|${lastSnap.error ?? ""}`
+          // Hash the full wire payload so any mutation that would change
+          // what we'd send (including in-place tool_end output attachment,
+          // see buildContentBlocks) changes the signature. The previous
+          // length-tuple version skipped tool_end updates because tool
+          // output is attached in place without changing any array length.
+          const sig = createHash("sha1")
+            .update(
+              JSON.stringify({
+                status: lastSnap.status,
+                content: lastSnap.content,
+                toolCalls: lastSnap.toolCalls,
+                contentBlocks: lastSnap.contentBlocks,
+                error: lastSnap.error ?? "",
+              })
+            )
+            .digest("hex")
           if (sig !== lastSentSig) {
             lastSentSig = sig
             cursor += 1
