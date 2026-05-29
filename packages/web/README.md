@@ -91,20 +91,24 @@ CRON_SECRET="<random-secret>"
 
 Deploys to Vercel via `vercel.json`. CI runs `npx prisma migrate deploy` to apply migrations to the production database.
 
-Setting these enables remote MCP servers from the [Smithery](https://smithery.ai) registry. See [`@background-agents/mcp-providers`](../mcp-providers/README.md) for setup.
+To enable remote MCP servers from the [Smithery](https://smithery.ai) registry, set:
 
 ```bash
 SMITHERY_API_KEY="..."
 SMITHERY_NAMESPACE=""
 ```
 
-Setting these enables an authenticated GitHub MCP server (issues, pull requests, code search) for chats and scheduled jobs. See [`@background-agents/mcp-providers`](../mcp-providers/README.md) for setup.
+See [`@background-agents/mcp-providers`](../mcp-providers/README.md) for setup.
+
+To enable an authenticated GitHub MCP server (issues, pull requests, code search) for chats and scheduled jobs, set:
 
 ```bash
 GITHUB_APP_ID="..."
 GITHUB_APP_SLUG="..."
 GITHUB_APP_PRIVATE_KEY="..."
 ```
+
+See [`@background-agents/mcp-providers`](../mcp-providers/README.md) for setup.
 
 ### Testing
 
