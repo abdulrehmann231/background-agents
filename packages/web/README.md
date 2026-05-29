@@ -98,8 +98,6 @@ SMITHERY_API_KEY="..."
 SMITHERY_NAMESPACE=""
 ```
 
-See [`mcp-providers`](../mcp-providers/README.md) for setup.
-
 To enable an authenticated GitHub MCP server (issues, pull requests, code search) for chats and scheduled jobs, set:
 
 ```bash
