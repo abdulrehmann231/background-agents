@@ -28,9 +28,7 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 
 ### Development
 
-Runs the web app locally against a local Postgres database. `GITHUB_PAT` enables auto-login so no GitHub OAuth app is required for dev.
-
-Env (`.env.local`):
+Run the web app locally against a local Postgres database. Set the following in `.env.local`:
 
 ```bash
 DATABASE_URL="postgresql://user:pass@localhost:5432/background_agents"
@@ -43,8 +41,10 @@ GITHUB_CLIENT_ID="placeholder"
 GITHUB_CLIENT_SECRET="placeholder"
 
 # Option 2: GitHub PAT
-GITHUB_PAT="ghp_your_token_here"   # enables auto-login; bypasses real OAuth
+GITHUB_PAT="ghp_your_token_here"
 ```
+
+Setting `GITHUB_PAT` enables auto-login so no GitHub OAuth app is required for dev.
 
 `ENCRYPTION_KEY` (encrypts user-stored API credentials at rest) defaults to a built-in dev key. To override, set it to a real value — generate with `openssl rand -hex 32`.
 
@@ -56,7 +56,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-App is at http://localhost:4000. With `GITHUB_PAT` set you get auto-login — no GitHub OAuth app required.
+App is at http://localhost:4000.
 
 ### Database migration
 
