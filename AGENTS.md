@@ -2,8 +2,7 @@
 
 Primary reference for coding agents working in this repo.
 
-- **Tests** (build check, Playwright E2E, agent SDK tests): [TESTING.md](./TESTING.md)
-- **Development server** (`npm run dev`): [DEVELOPMENT.md](./DEVELOPMENT.md)
+- **Running dev / tests**: [DEVELOPMENT.md](./DEVELOPMENT.md)
 
 For **architecture, env-by-situation, and deployment**, see [`packages/web/README.md`](./packages/web/README.md).
 
