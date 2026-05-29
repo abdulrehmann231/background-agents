@@ -3,7 +3,7 @@
 Primary reference for coding agents working in this repo.
 
 - **Running dev / tests**: [DEVELOPMENT.md](./DEVELOPMENT.md)
-- **Architecture, env, deployment**: [`packages/web/README.md`](./packages/web/README.md)
+- **Repo overview / packages**: [README.md](./README.md)
 
 ## What the user has to provide
 
