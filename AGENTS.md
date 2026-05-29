@@ -36,6 +36,6 @@ Then run `npm run typecheck` to verify there are no type errors. This is much fa
 ## Debugging
 
 - Investigate with console logs.
-- Prefer broad integration and end-to-end tests over narrow unit tests.
+- Prefer integration and end-to-end tests over narrow unit tests.
 - Write a test that reproduces the bug before fixing it.
-- After fixing, keep only the broad tests.
+- After fixing, keep only the general-case tests — drop the one written to pin down this specific bug.
