@@ -24,14 +24,6 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 - **Sandbox**: Daytona SDK for isolated development environments
 - **State Management**: Server-first with localStorage as read cache for cross-device sync
 
-### Data flow
-
-1. All writes go through the server first (create chat, send message, update settings)
-2. Server responds with server-generated IDs
-3. Client updates localStorage cache
-4. On page load, client fetches fresh data from server and merges with cache
-5. Device-specific state (current chat, unseen notifications) stays local-only
-
 ## Usage
 
 ### Development
