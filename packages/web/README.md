@@ -91,14 +91,14 @@ CRON_SECRET="<random-secret>"
 
 Deploys to Vercel via `vercel.json`. CI runs `npx prisma migrate deploy` to apply migrations to the production database.
 
-**Smithery MCP server registry** — lets users browse and connect remote MCP servers from the [Smithery](https://smithery.ai) registry inside chats. Setup details in [../mcp-providers/README.md](../mcp-providers/README.md).
+Setting the Smithery variables below lets users browse and connect remote MCP servers from the [Smithery](https://smithery.ai) registry inside chats. See the [`@background-agents/mcp-providers`](../mcp-providers/README.md) package for setup instructions.
 
 ```bash
 SMITHERY_API_KEY="..."
 SMITHERY_NAMESPACE=""
 ```
 
-**GitHub App MCP server** — gives chats and scheduled jobs an authenticated GitHub MCP server scoped to the user's installations (issues, PRs, code search). Setup details in [../mcp-providers/README.md](../mcp-providers/README.md).
+Setting the GitHub App variables below gives chats and scheduled jobs an authenticated GitHub MCP server scoped to the user's installations, with access to issues, pull requests, and code search. See the [`@background-agents/mcp-providers`](../mcp-providers/README.md) package for setup instructions.
 
 ```bash
 GITHUB_APP_ID="..."
