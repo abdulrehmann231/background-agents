@@ -212,39 +212,12 @@ export async function setupTerminal(
     }
   }
 
-  // Start the PTY server.
-  //
-  // We need this command to launch a long-lived process and return
-  // immediately. `executeCommand("... &")` is *not* fit for purpose: it
-  // synchronously waits for the wrapping shell to exit, and on some
-  // sandbox images (notably the production `background-agents` snapshot)
-  // the shell sits there until the per-request timeout fires — yielding
-  // an HTTP 408 from setup.ts even though the server itself started fine.
-  // Variants with `setsid`, `< /dev/null`, `disown`, etc. did not fix it
-  // reliably. The intended Daytona primitive for fire-and-forget commands
-  // is a session with `runAsync: true`, which is what we use here.
+  // Start the PTY server via a session command with runAsync: true so the
+  // call returns immediately. The session is left in place — deleting it
+  // would reap the server.
   const sessionId = `pty-server-bootstrap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   try {
     await sandbox.process.createSession(sessionId)
-  } catch (err) {
-    console.error("[terminal] Failed to create bootstrap session:", err)
-    return {
-      status: "error",
-      port,
-      error: "Failed to create bootstrap session",
-      details: err instanceof Error ? err.message : String(err),
-    }
-  }
-
-  try {
-    // `runAsync: true` tells Daytona to launch this command and return
-    // immediately, without waiting for it to exit. We deliberately do
-    // *not* add `&` here — that combination caused the server to be
-    // reaped on a previous attempt. We also don't delete the session;
-    // the PTY server is the session's main command, and tearing the
-    // session down would kill it. The session is tiny (just metadata)
-    // and `stopTerminal` removes the node process directly via pkill,
-    // so leaving the session entry behind is harmless.
     await sandbox.process.executeSessionCommand(
       sessionId,
       {
