@@ -46,7 +46,7 @@ GITHUB_PAT="ghp_your_token_here"
 
 Option 1 uses the standard GitHub OAuth sign-in flow and requires a real OAuth app. Option 2 skips OAuth entirely — the app auto-logs you in as the owner of the PAT on first visit, so no OAuth app is needed.
 
-`ENCRYPTION_KEY` (encrypts user-stored API credentials at rest) defaults to a built-in dev key. To override, set it to a real value — generate with `openssl rand -hex 32`.
+`ENCRYPTION_KEY` encrypts user-stored API credentials and defaults to a built-in dev key. To use a real one, set it to the output of `openssl rand -hex 32`.
 
 Run:
 
