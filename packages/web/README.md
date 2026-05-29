@@ -28,47 +28,50 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 
 ### Development
 
-Runs the web app locally against a local Postgres database. `GITHUB_PAT` enables auto-login so no GitHub OAuth app is required for dev.
-
-Env (`.env.local`):
+Run the web app locally against a local Postgres database. Set the following in `.env.local`:
 
 ```bash
 DATABASE_URL="postgresql://user:pass@localhost:5432/background_agents"
 DAYTONA_API_KEY="dtn_your_key_here"
 NEXTAUTH_URL="http://localhost:4000"
 NEXTAUTH_SECRET="random-string-for-session-jwt"
-GITHUB_PAT="ghp_your_token_here"   # enables auto-login; bypasses real OAuth
 
-# Optional: encrypts user-stored API credentials at rest. Generate with: openssl rand -hex 32
-ENCRYPTION_KEY="0000000000000000000000000000000000000000000000000000000000000000"
-
-# Required by NextAuth but unused when GITHUB_PAT is set
+# Option 1: GitHub OAuth
 GITHUB_CLIENT_ID="placeholder"
 GITHUB_CLIENT_SECRET="placeholder"
+
+# Option 2: GitHub PAT
+GITHUB_PAT="ghp_your_token_here"
 ```
+
+Option 1 uses the standard GitHub OAuth sign-in flow and requires a real OAuth app. Option 2 skips OAuth entirely — the app auto-logs you in as the owner of the PAT on first visit, so no OAuth app is needed.
+
+> [!IMPORTANT]
+> `ENCRYPTION_KEY` defaults to a non-secret dev key. Override with `openssl rand -hex 32` before deploying.
 
 Run:
 
 ```bash
 npm install
-npx prisma generate
 npx prisma migrate dev
 npm run dev
 ```
 
-App is at http://localhost:4000. With `GITHUB_PAT` set you get auto-login — no GitHub OAuth app required.
+App is at http://localhost:4000.
 
-**Schema changes:**
+### Database migration
 
-1. Edit `prisma/schema.prisma`
-2. Run `npx prisma migrate dev --name my_change`
-3. Commit the new files in `prisma/migrations/`
+After editing `prisma/schema.prisma`, run:
 
-After pulling, run `npx prisma migrate dev` to apply new migrations.
+```bash
+npx prisma migrate dev
+```
+
+This creates a new migration file in `prisma/migrations/` (commit it) and applies it to your local DB. Run the same command after pulling to apply migrations others have added.
 
 ### Deployment
 
-Production deployment to Vercel. Uses a real GitHub OAuth app and requires `ENCRYPTION_KEY` so user-stored API credentials are encrypted at rest.
+Deploy the app to Vercel. Uses a real GitHub OAuth app and requires `ENCRYPTION_KEY` for at-rest encryption of user-stored API credentials.
 
 Env:
 
@@ -85,24 +88,35 @@ ENCRYPTION_KEY="<openssl rand -hex 32>"
 
 # Required for /api/cron/* endpoints (set in Vercel project env)
 CRON_SECRET="<random-secret>"
+```
 
-# Optional: Smithery MCP server registry — see ../mcp-providers/README.md
+Deploys to Vercel via `vercel.json`. CI runs `npx prisma migrate deploy` to apply migrations to the production database.
+
+To enable remote MCP servers from the [Smithery](https://smithery.ai) registry, set:
+
+```bash
 SMITHERY_API_KEY="..."
 SMITHERY_NAMESPACE=""
+```
 
-# Optional: GitHub App MCP server — see ../mcp-providers/README.md
+To enable an authenticated GitHub MCP server, set:
+
+```bash
 GITHUB_APP_ID="..."
 GITHUB_APP_SLUG="..."
 GITHUB_APP_PRIVATE_KEY="..."
 ```
 
-Deploys to Vercel via `vercel.json`. CI runs `npx prisma migrate deploy` to apply migrations to the production database.
+See [`mcp-providers`](../mcp-providers/README.md) for setup.
 
 ### Testing
 
-End-to-end tests run against a local test database. Each run resets the database via `prisma migrate reset --force`, so the safety check refuses any non-local `DATABASE_URL`.
+End-to-end tests run against a local test database.
 
-Env (`.env.test` in this package) — overrides the dev env from `.env.local`:
+> [!WARNING]
+> Each E2E run wipes the test database via `prisma migrate reset --force`. `DATABASE_URL` must contain `localhost` or `127.0.0.1`.
+
+Env (`packages/web/.env.test`) — overrides the dev env from `.env.local`:
 
 ```bash
 # DATABASE_URL MUST contain "localhost" or "127.0.0.1" (safety check)
@@ -114,12 +128,11 @@ NEXTAUTH_SECRET=test-secret-for-e2e-tests
 NEXTAUTH_URL=http://localhost:4000
 GITHUB_CLIENT_ID=placeholder
 GITHUB_CLIENT_SECRET=placeholder
-
-# Optional: bypass the "is this a test DB?" safety check
-# I_KNOW_THIS_IS_THE_TEST_DB=true
 ```
 
-`DAYTONA_API_KEY` comes from your Development `.env.local` — tests create real sandboxes.
+`ENABLE_TEST_AUTH=true` lets Playwright skip GitHub OAuth and sign in as a test user.
+
+Tests create real sandboxes, so `DAYTONA_API_KEY` is inherited from your Development `.env.local`.
 
 Run:
 
@@ -127,10 +140,10 @@ Run:
 npm run test:e2e
 ```
 
-Each run resets the test database via `prisma migrate reset --force`.
-
-To debug a failing test against the same env profile (test DB, test-auth route, placeholder OAuth):
+To start a dev server using the same env profile as the end-to-end tests:
 
 ```bash
 npm run dev:test
 ```
+
+This way, you can reproduce a failing test manually in your browser.
