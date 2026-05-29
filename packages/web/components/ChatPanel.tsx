@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react"
-import { Github, HelpCircle, Plus, X, Command } from "lucide-react"
+import { Github, HelpCircle, Plus, X, Command, ArrowDown } from "lucide-react"
 import { ErrorBanner, FilePreviewModal, ChatHeader, MobileConflictBar, ChatInput } from "./chat"
 import { cn } from "@/lib/utils"
 import { useModals, useGit } from "@/lib/contexts"
@@ -600,6 +600,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       )}
 
       {/* Messages */}
+      <div className="relative flex-1 flex flex-col min-h-0">
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
@@ -682,6 +683,23 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
           )}
           <div ref={messagesEndRef} />
         </div>
+      </div>
+        {/* Floating scroll-to-bottom button — only shown when the user has
+            scrolled away from the bottom of the conversation. */}
+        {userHasScrolledUp && (
+          <button
+            type="button"
+            onClick={() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+              setUserHasScrolledUp(false)
+            }}
+            aria-label="Scroll to bottom"
+            title="Scroll to bottom"
+            className="absolute bottom-3 right-4 z-10 h-9 w-9 flex items-center justify-center rounded-full border border-border bg-background/90 backdrop-blur shadow-md text-foreground/80 hover:text-foreground hover:bg-accent transition-colors cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Input - fixed at bottom on mobile */}
