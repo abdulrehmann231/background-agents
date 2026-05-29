@@ -111,7 +111,7 @@ Env (`.env.test`):
 DATABASE_URL="postgresql://sandboxed:sandboxed123@localhost:5432/sandboxed_agents_test"
 DAYTONA_API_KEY="dtn_..."           # real key — tests create real sandboxes
 
-# Test-mode constants (also set by playwright.config.ts; needed here for `npm run dev:test`)
+# Test-mode constants — Playwright and `npm run dev:test` both read these
 ENABLE_TEST_AUTH=true
 NEXTAUTH_SECRET=test-secret-for-e2e-tests
 NEXTAUTH_URL=http://localhost:4000
