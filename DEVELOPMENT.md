@@ -26,7 +26,7 @@ npm run prisma:migrate
 
 ## Run the dev server
 
-Put the env block from [Development](packages/web/README.md#development) in `.env.local` at the repo root.
+Put the env block from [Development](packages/web/README.md#development) in `.env.local` at the repo root — or `cp .env.example .env.local` and edit the placeholder values.
 
 ```bash
 npm install

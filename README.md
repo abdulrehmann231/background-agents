@@ -27,10 +27,6 @@ https://github.com/user-attachments/assets/ee6de7e9-a32e-45bd-acfa-3da1763b80ea
 
 - Node.js 18+
 
-## Configuration
-
-See [Usage](packages/web/README.md#usage) for environment setup and database configuration.
-
 ## Quick start (Web)
 
 Requires Postgres + env per [Development](packages/web/README.md#development).

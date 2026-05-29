@@ -30,7 +30,7 @@ From the repo root, this starts the local web dev server and launches the deskto
 npm run dev:electron
 ```
 
-### Standalone (this package only)
+### Standalone (from `packages/electron/`)
 
 Requires a backend already running at `http://localhost:4000` (or override `BACKGROUND_AGENTS_URL`):
 
