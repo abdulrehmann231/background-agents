@@ -7,6 +7,12 @@ import type { Chat } from "@/lib/types"
 interface UsePreviewOptions {
   currentChat: Chat | null
   updateCurrentChat: (updates: Partial<Chat>) => void
+  /**
+   * Polled list of dev servers in the current sandbox. When a new server appears
+   * we auto-open the preview pane to it — but only the *first* time a given port
+   * shows up in this sandbox, not on every subsequent poll.
+   */
+  availableServers?: ReadonlyArray<{ port: number; url: string }>
 }
 
 interface UsePreviewResult {
@@ -27,7 +33,7 @@ interface UsePreviewResult {
   startPreviewResize: (e: React.MouseEvent) => void
 }
 
-export function usePreview({ currentChat, updateCurrentChat }: UsePreviewOptions): UsePreviewResult {
+export function usePreview({ currentChat, updateCurrentChat, availableServers }: UsePreviewOptions): UsePreviewResult {
   const [previewWidth, setPreviewWidth] = useState(() => {
     if (typeof window === "undefined") return 520
     const stored = Number(window.localStorage.getItem("simple-chat-preview-width"))
@@ -161,6 +167,31 @@ export function usePreview({ currentChat, updateCurrentChat }: UsePreviewOptions
       window.removeEventListener("mouseup", up)
     }
   }, [])
+
+  // Track ports we've already auto-opened in each sandbox so the preview pane
+  // only pops open the *first* time a new server appears — not every poll.
+  const autoOpenedServersRef = useRef<Map<string, Set<number>>>(new Map())
+
+  useEffect(() => {
+    const sandboxId = currentChat?.sandboxId
+    const chatId = currentChat?.id
+    const servers = availableServers ?? []
+    if (!sandboxId || servers.length === 0) return
+
+    let seen = autoOpenedServersRef.current.get(sandboxId)
+    if (!seen) {
+      seen = new Set()
+      autoOpenedServersRef.current.set(sandboxId, seen)
+    }
+
+    const newServer = servers.find((s) => !seen!.has(s.port))
+    if (newServer) {
+      servers.forEach((s) => seen!.add(s.port))
+      if (chatId === currentChat?.id) {
+        openPreview({ type: "server", port: newServer.port, url: newServer.url })
+      }
+    }
+  }, [availableServers, currentChat?.sandboxId, currentChat?.id, openPreview])
 
   return {
     previewWidth,
