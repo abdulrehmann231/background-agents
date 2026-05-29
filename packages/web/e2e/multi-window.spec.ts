@@ -19,35 +19,47 @@ test.describe.serial("Multi-window streaming", () => {
    * `/api/agent/stream` EventSource (the "leader"); the other receives updates
    * via BroadcastChannel (or similar coordination in the stream store).
    *
-   * Current behavior: each window opens its own EventSource, causing N×
-   * sandbox load and N× concurrent auto-push on completion (the latter
-   * intermittently produces a spurious "Push failed — force push?" message).
+   * TDD red: this test is **expected to fail today** because client-side
+   * leader election is not implemented yet. `test.fail` lets the test run
+   * for real (vs. `test.fixme` which would skip it) and asserts the failure
+   * — so CI stays green while the feature is pending.
    *
-   * Marked `test.fixme` until leader election is implemented in
-   * `packages/web/lib/stores/stream-store.ts`. Remove the fixme when wired up
-   * — this test is the contract for the fix.
+   * When leader election lands in `packages/web/lib/stores/stream-store.ts`,
+   * this test will start passing → `test.fail` will flag it as
+   * "unexpectedly passed", and that's the signal to remove the `.fail`
+   * modifier and turn this into a regular regression test.
+   *
+   * Current failure mode (red): pageA + pageB each open their own
+   * EventSource → streamConnections === 2, so `expect(...).toBe(1)` fails.
+   *
+   * Side effects this test guards against once green: N× sandbox/DB load
+   * with multiple windows, and the spurious "Push failed — force push?"
+   * message produced by N concurrent auto-pushes from the per-connection
+   * completion block in `app/api/agent/stream/route.ts`.
    */
-  test.fixme(
+  test.fail(
     "opens only one EventSource across two same-browser windows",
     async ({ browser }) => {
       const context = await browser.newContext()
 
-      // Authenticate once on the context, then pin Eliza as the default agent
-      // so the test doesn't depend on any API keys.
+      // Authenticate once on the context, then pin Eliza as the default
+      // agent so the test doesn't depend on any API keys.
       const setupPage = await context.newPage()
       await setupTestAuth(setupPage, context)
       await setDefaultAgentEliza(setupPage)
       await setupPage.close()
 
-      // Open two pages in the SAME context — BroadcastChannel is per-context,
-      // so this mirrors a user with two real browser windows open.
+      // Two pages in the SAME context — BroadcastChannel is per-context, so
+      // this mirrors a user with two real windows open in one browser.
       const [pageA, pageB] = await Promise.all([
         context.newPage(),
         context.newPage(),
       ])
 
-      // Count GET requests to the SSE endpoint across BOTH pages. The
-      // leader-election invariant is that this stays at exactly 1.
+      // Count GET requests to /api/agent/stream across BOTH pages. The
+      // leader-election invariant is that this stays at exactly 1 — only
+      // the leader opens an EventSource; followers receive updates via the
+      // BroadcastChannel rebroadcast.
       let streamConnections = 0
       const countStream = (req: Request) => {
         if (req.method() === "GET" && req.url().includes("/api/agent/stream")) {
@@ -69,34 +81,36 @@ test.describe.serial("Multi-window streaming", () => {
       await inputA.fill("Hello?")
       await inputA.press("Enter")
 
-      // Wait until the chat has reached a state where SSE is in play
-      // (sandbox created and agent running, or already finished).
+      // Wait until pageA is actively streaming (sandbox created + agent
+      // running). Only at this point is the chat's DB row status === "running",
+      // which is the prerequisite for pageB's resume-streaming effect to
+      // fire on its initial chats query.
       await expect(pageA.getByTestId("chat-container")).toHaveAttribute(
         "data-chat-status",
-        /^(running|ready|error)$/,
+        "running",
         { timeout: 90000 }
       )
 
-      // Page B: load the app. Its resume-streaming effect sees a running chat
-      // and *would* (in current code) open its own EventSource. With leader
-      // election, it must NOT — Page A is already the leader for this chat.
+      // Page B: now load. Its initial chats query sees a running chat and
+      // (in current, pre-leader-election code) the resume effect in
+      // `useChatWithSync` opens its own EventSource.
       await pageB.goto("/")
       await expect(pageB.getByTestId("chat-input")).toBeVisible({ timeout: 15000 })
 
-      // Wait for Page A to fully complete so we capture every SSE attempt
-      // either page would have made (including any post-reconnect retries).
+      // Wait for pageA to finish so we've captured every attempt either
+      // page would have made (including any post-reconnect retries).
       await expect(pageA.getByTestId("chat-container")).toHaveAttribute(
         "data-chat-status",
         /^(ready|error)$/,
         { timeout: 120000 }
       )
 
-      // Brief settle window in case Page B's resume effect lags behind
-      // hydration; an incorrectly-implemented leader election would race
-      // here and we want to catch it.
+      // Settle window for any late retry on pageB.
       await pageB.waitForTimeout(2000)
 
-      // Invariant: exactly one EventSource was opened across the whole browser.
+      // Invariant: exactly one EventSource opened across the whole browser.
+      // Today this fails (count === 2). After leader election lands, it
+      // should pass (count === 1) — at which point remove `test.fail` above.
       expect(streamConnections).toBe(1)
 
       await context.close()
