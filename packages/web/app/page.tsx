@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
@@ -23,6 +23,8 @@ import { usePageTitle } from "@/lib/hooks/usePageTitle"
 import { ROUTES } from "@/lib/hooks/useUrlNavigation"
 import { useUrlSync } from "@/lib/hooks/useUrlSync"
 import { useSandboxActions } from "@/lib/hooks/useSandboxActions"
+import { useDraftChat } from "@/lib/hooks/useDraftChat"
+import { usePendingMessageReplay } from "@/lib/hooks/usePendingMessageReplay"
 import {
   ChatProvider,
   ModalProvider,
@@ -35,12 +37,11 @@ import {
   type ChatContextValue,
   type GitContextValue,
 } from "@/lib/contexts"
-import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent, type Agent, type Message, type Chat } from "@/lib/types"
+import { NEW_REPOSITORY, type Message, type Chat } from "@/lib/types"
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import type { GitHubRepo, GitHubBranch } from "@/lib/github"
 import {
   savePendingMessage,
-  loadAndClearPendingMessage,
   hasPendingMessage,
 } from "@/lib/pending-message"
 import { buildTreeOrderedChatIds, getNextChatIdAfterDeletion } from "@/lib/chat-tree"
@@ -151,10 +152,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   const [scheduledJobsRefreshKey, setScheduledJobsRefreshKey] = useState(0)
   // Track when a message send is initiated (for instant UI feedback before server responds)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
-  // Optimistic messages shown on a draft chat the instant the user sends, so the
-  // view leaves the "new chat" welcome screen immediately instead of waiting for
-  // the draft to be materialized on the server. Keyed by the draft's chat id.
-  const [optimisticDraft, setOptimisticDraft] = useState<{ chatId: string; messages: Message[] } | null>(null)
   // Rapid fire notification: timestamp of last background task creation, 0 means no notification
   const [rapidFireNotification, setRapidFireNotification] = useState(0)
   const [skillsModalOpen, setSkillsModalOpen] = useState(false)
@@ -180,16 +177,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     onOpenEnvVarsModal: () => modals.setEnvVarsModalOpen(true),
   })
 
-  // Preview state from hook
-  const preview = usePreview({
-    currentChat,
-    updateCurrentChat,
-  })
-
-  // Track ports we've already auto-opened in each sandbox so the preview pane
-  // only pops open the *first* time a new server appears — not every poll.
-  const autoOpenedServersRef = useRef<Map<string, Set<number>>>(new Map())
-
   // Use TanStack Query for server polling
   const serversQuery = useServersQuery(
     currentChat?.sandboxId,
@@ -197,18 +184,13 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   )
   const availableServers = serversQuery.data ?? []
 
-  // Track if we've already processed a pending message (to avoid double-sending)
-  const pendingMessageProcessed = useRef(false)
-
-  // Draft chat agent/model — only used when an unauthenticated user is
-  // composing a message before any real chat exists. Stored locally because
-  // the chat row that would normally hold these doesn't exist yet.
-  const [draftAgent, setDraftAgent] = useState<string | null>(null)
-  const [draftModel, setDraftModel] = useState<string | null>(null)
-
-  // Per-chat draft message text (stored in localStorage via useChatWithSync)
-  // For unauthenticated users (draft mode), we use local component state instead.
-  const [draftModeInput, setDraftModeInput] = useState("")
+  // Preview state from hook — also handles auto-opening the first new server
+  // that appears in the current sandbox.
+  const preview = usePreview({
+    currentChat,
+    updateCurrentChat,
+    availableServers,
+  })
 
   // Use TanStack Query for repos and branches
   const reposQuery = useReposQuery()
@@ -221,27 +203,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     currentChat?.repo !== NEW_REPOSITORY ? currentRepoName : ""
   )
   const branches = branchesQuery.data ?? []
-
-  // Auto-open the first *new* server we see in this sandbox
-  useEffect(() => {
-    const sandboxId = currentChat?.sandboxId
-    const chatId = currentChat?.id
-    if (!sandboxId || availableServers.length === 0) return
-
-    let seen = autoOpenedServersRef.current.get(sandboxId)
-    if (!seen) {
-      seen = new Set()
-      autoOpenedServersRef.current.set(sandboxId, seen)
-    }
-
-    const newServer = availableServers.find((s) => !seen!.has(s.port))
-    if (newServer) {
-      availableServers.forEach((s) => seen!.add(s.port))
-      if (chatId === currentChat?.id) {
-        preview.openPreview({ type: "server", port: newServer.port, url: newServer.url })
-      }
-    }
-  }, [availableServers, currentChat?.sandboxId, currentChat?.id, preview.openPreview])
 
   // Handler for adding messages to current chat
   const handleAddMessage = useCallback((message: Message) => {
@@ -363,80 +324,31 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   // =============================================================================
   // Draft Chat & Display Chat
   // =============================================================================
-  // For users without a real chat (either unauthenticated or authenticated
-  // with a draft chat ID), create a synthetic "draft" chat so the UI is
-  // interactive. This must be defined before handlers so they can use
-  // displayCurrentChat instead of checking isDraftChatId everywhere.
-  const unauthDraftIdRef = useRef<string>(`draft-${nanoid()}`)
-  const draftChat: Chat | null = useMemo(() => {
-    if (!isHydrated) return null
-
-    // Optimistic messages for a just-sent draft (so the conversation view shows
-    // instantly while the draft is materialized on the server).
-    const messagesFor = (id: string) =>
-      optimisticDraft && optimisticDraft.chatId === id ? optimisticDraft.messages : []
-
-    // Case 1: Unauthenticated user - use local draft state
-    // This applies when there's no session AND either no chat ID or the chat ID is a draft
-    if (!session && (!currentChatId || isDraftChatId(currentChatId))) {
-      const resolvedAgent = (draftAgent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
-      const resolvedModel = draftModel ?? settings.defaultModel ?? getDefaultModelForAgent(resolvedAgent, credentialFlags)
-      return {
-        id: currentChatId ?? unauthDraftIdRef.current,
-        repo: NEW_REPOSITORY,
-        baseBranch: "main",
-        branch: null,
-        sandboxId: null,
-        sessionId: null,
-        agent: resolvedAgent,
-        model: resolvedModel,
-        messages: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        status: "pending",
-        displayName: null,
-      }
-    }
-
-    // Case 2: Authenticated user with a draft chat ID - use draftChatConfig
-    if (session && currentChatId && isDraftChatId(currentChatId) && draftChatConfig) {
-      const resolvedAgent = (draftChatConfig.agent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
-      const resolvedModel = draftChatConfig.model ?? settings.defaultModel ?? getDefaultModelForAgent(resolvedAgent, credentialFlags)
-      const messages = messagesFor(currentChatId)
-      return {
-        id: currentChatId,
-        repo: draftChatConfig.repo,
-        baseBranch: draftChatConfig.baseBranch,
-        branch: null,
-        sandboxId: null,
-        sessionId: null,
-        agent: resolvedAgent,
-        model: resolvedModel,
-        planModeEnabled: draftChatConfig.planMode ?? false,
-        messages,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        status: messages.length > 0 ? "creating" : "pending",
-        displayName: null,
-      }
-    }
-
-    return null
-  }, [isHydrated, session, currentChatId, draftAgent, draftModel, settings.defaultAgent, settings.defaultModel, credentialFlags, isDraftChatId, draftChatConfig, optimisticDraft])
-
-  // Unified current chat - either a real chat or a draft chat
-  const displayCurrentChat = isHydrated ? (currentChat ?? draftChat) : null
-  const isDraftMode = !!draftChat
-  const isAuthenticatedDraft = isDraftMode && !!session
-
-  // Drop optimistic draft messages once we've navigated off that draft — e.g. the
-  // draft was materialized into a real chat (currentChatId changed) or the user
-  // switched chats. The real chat carries its own optimistic messages by then.
-  useEffect(() => {
-    if (optimisticDraft && optimisticDraft.chatId !== currentChatId) {
-      setOptimisticDraft(null)
-    }
-  }, [currentChatId, optimisticDraft])
+  // For users without a real chat (either unauthenticated or authenticated with
+  // a draft chat ID), useDraftChat synthesizes a "draft" chat so the UI is
+  // interactive. It also owns the draft-input state, the agent/model routing
+  // for unauth/auth drafts, and the optimistic-message bookkeeping shown the
+  // instant a draft is sent.
+  const {
+    displayCurrentChat,
+    isDraftMode,
+    handleUpdateChatProp,
+    currentDraft,
+    handleDraftChange,
+    setOptimisticDraft,
+  } = useDraftChat({
+    isHydrated,
+    currentChat,
+    currentChatId,
+    settings,
+    credentialFlags,
+    draftChatConfig,
+    isDraftChatId,
+    updateDraftChatConfig,
+    updateCurrentChat,
+    drafts,
+    updateDraft,
+  })
 
   // Dynamic page title based on current view
   const pageTitle = useMemo(() => {
@@ -664,55 +576,18 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     setRapidFireNotification(Date.now())
   }, [session, displayCurrentChat, startNewChat, sendMessage, modals, setRapidFireNotification])
 
-  // After sign-in, replay any pending message saved before the OAuth
-  // redirect. Two effects work together to avoid a stale-closure race:
-  //   (a) pending-replay: creates the chat, then stages a "pending send"
-  //       referencing the new chat ID.
-  //   (b) pending-send: fires once `chats` actually contains the new
-  //       chat (so sendMessage's state.chats is fresh enough to locate
-  //       it). Calls sendMessage and clears the staging state.
-  const [pendingSend, setPendingSend] = useState<
-    { chatId: string; message: string; agent: string; model: string } | null
-  >(null)
-
-  useEffect(() => {
-    if (!session || !isHydrated || pendingMessageProcessed.current) return
-
-    const pending = loadAndClearPendingMessage()
-    if (!pending) return
-
-    pendingMessageProcessed.current = true
-    modals.setSignInModalOpen(false)
-
-    void (async () => {
-      let chatId = currentChatId
-      if (!chatId) {
-        chatId = await startNewChat()
-        if (!chatId) return
-      }
-      // Persist the agent/model picked in draft mode so subsequent
-      // messages on this chat use them too. Best-effort.
-      updateChatById(chatId, {
-        agent: pending.agent,
-        model: pending.model,
-      }).catch(() => {})
-      setPendingSend({
-        chatId,
-        message: pending.message,
-        agent: pending.agent,
-        model: pending.model,
-      })
-    })()
-  }, [session, isHydrated, startNewChat, updateChatById, currentChatId, modals])
-
-  useEffect(() => {
-    if (!pendingSend) return
-    if (!chats.some((c) => c.id === pendingSend.chatId)) return
-    const { message, agent, model, chatId } = pendingSend
-    setPendingSend(null)
-    sendMessage(message, agent, model, undefined, chatId)
-  }, [pendingSend, chats, sendMessage])
-
+  // After sign-in, replay any pending message saved before the OAuth redirect.
+  // The hook handles the two-effect coordination (create chat → stage send →
+  // send once the chat appears in `chats`) and the once-per-session guard.
+  usePendingMessageReplay({
+    isHydrated,
+    chats,
+    currentChatId,
+    startNewChat,
+    sendMessage,
+    updateChatById,
+    onReplayBegin: () => modals.setSignInModalOpen(false),
+  })
 
   // Handler for slash commands - open the corresponding git dialog
   // Start a new chat off the current chat's branch. Defined before
@@ -877,48 +752,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   // Don't render chats until hydrated to avoid SSR mismatch
   const displayChats = isHydrated ? chats : []
   const displayCurrentChatId = isHydrated ? currentChatId : null
-
-  // When in draft mode, agent/model dropdowns route to local draft state
-  // because no real chat row exists to PATCH yet.
-  const handleUpdateChatProp = useCallback(
-    (updates: Partial<Chat>) => {
-      if (isDraftMode) {
-        if (isAuthenticatedDraft) {
-          // Authenticated draft - update via hook (updates both React state and localStorage)
-          // Only include defined values to avoid overwriting existing config fields
-          const draftUpdates: { agent?: string | null; model?: string | null; repo?: string; baseBranch?: string; planMode?: boolean } = {}
-          if (updates.agent !== undefined) draftUpdates.agent = updates.agent
-          if (updates.model !== undefined) draftUpdates.model = updates.model
-          if (updates.repo !== undefined) draftUpdates.repo = updates.repo
-          if (updates.baseBranch !== undefined) draftUpdates.baseBranch = updates.baseBranch
-          if (updates.planModeEnabled !== undefined) draftUpdates.planMode = updates.planModeEnabled
-          updateDraftChatConfig(draftUpdates)
-        } else {
-          // Unauthenticated draft - use local component state
-          if (updates.agent !== undefined) setDraftAgent(updates.agent)
-          if (updates.model !== undefined) setDraftModel(updates.model)
-        }
-        return
-      }
-      updateCurrentChat(updates)
-    },
-    [isDraftMode, isAuthenticatedDraft, updateDraftChatConfig, updateCurrentChat]
-  )
-
-  // Per-chat draft handling: in draft mode use local state, otherwise use
-  // localStorage-backed drafts keyed by chatId.
-  const currentDraft = isDraftMode
-    ? draftModeInput
-    : (currentChatId ? (drafts[currentChatId] ?? "") : "")
-
-  const handleDraftChange = useCallback((draft: string) => {
-    if (isDraftMode) {
-      setDraftModeInput(draft)
-      return
-    }
-    if (!currentChatId) return
-    updateDraft(currentChatId, draft)
-  }, [isDraftMode, currentChatId, updateDraft])
 
   // Build context values for child components
   const chatContextValue: ChatContextValue = useMemo(() => ({
