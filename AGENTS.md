@@ -2,7 +2,6 @@
 
 Primary reference for coding agents working in this repo.
 
-- **Running dev / tests**: [DEVELOPMENT.md](./DEVELOPMENT.md)
 - **Repo overview / packages**: [README.md](./README.md)
 
 ## What the user has to provide
@@ -21,6 +20,8 @@ The agent can follow the setup and workflow instructions in this repo on its own
 
 - `SMITHERY_*` — remote MCP servers from the Smithery registry.
 - `GITHUB_APP_*` — authenticated GitHub MCP server.
+
+Before running tests or a dev server, confirm the required env vars above are exported, then follow [DEVELOPMENT.md](./DEVELOPMENT.md).
 
 ## After editing code
 
