@@ -349,33 +349,15 @@ export function useChatWithSync() {
     }
   }, [updateSettingsMutation])
 
-  const updateCurrentChat = useCallback(async (updates: Partial<Chat>) => {
-    if (!currentChatId) return
+  // Split a Partial<Chat> into the local-only preview fields (handled by the
+  // sync store) and the server-bound fields (sent through the mutation). The
+  // `in`-check matters: destructuring would produce `undefined` whether the
+  // key was present or absent, and an all-undefined preview update is the
+  // store's "clear it" sentinel — so an unrelated update like { planModeEnabled:
+  // false } would otherwise wipe the preview pane.
+  const updateChatById = useCallback(async (chatId: string, updates: Partial<Chat>) => {
     const { previewItems, activePreviewIndex, previewPaneHidden, queuedMessages, queuePaused, ...serverUpdates } = updates
 
-    // Only touch preview state if the caller actually included one of the
-    // preview keys. Destructuring above produces `undefined` values whether the
-    // key was present or absent, so we have to check the original `updates`
-    // object with `in` to tell the two cases apart — otherwise an unrelated
-    // update (e.g. { planModeEnabled: false }) would be interpreted as "clear
-    // the preview state" by setPreviewStateForChat and wipe the pane.
-    if ("previewItems" in updates || "activePreviewIndex" in updates || "previewPaneHidden" in updates) {
-      useChatSyncStore.getState().setPreviewStateForChat(currentChatId, { previewItems, activePreviewIndex, previewPaneHidden })
-    }
-
-    if (Object.keys(serverUpdates).length > 0) {
-      try {
-        await updateChatMutation.mutateAsync({ chatId: currentChatId, data: serverUpdates as Parameters<typeof updateChatMutation.mutateAsync>[0]["data"] })
-      } catch (error) {
-        console.error("Failed to update chat:", error)
-      }
-    }
-  }, [currentChatId, updateChatMutation])
-
-  const updateChatById = useCallback(async (chatId: string, updates: Partial<Chat>) => {
-    const { previewItems, activePreviewIndex, previewPaneHidden, ...serverUpdates } = updates
-
-    // See updateCurrentChat for why this guard is necessary.
     if ("previewItems" in updates || "activePreviewIndex" in updates || "previewPaneHidden" in updates) {
       useChatSyncStore.getState().setPreviewStateForChat(chatId, { previewItems, activePreviewIndex, previewPaneHidden })
     }
@@ -388,6 +370,11 @@ export function useChatWithSync() {
       }
     }
   }, [updateChatMutation])
+
+  const updateCurrentChat = useCallback(async (updates: Partial<Chat>) => {
+    if (!currentChatId) return
+    await updateChatById(currentChatId, updates)
+  }, [currentChatId, updateChatById])
 
   // Send message
   const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string, planMode?: boolean) => {
