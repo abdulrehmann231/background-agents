@@ -3,8 +3,7 @@
 Primary reference for coding agents working in this repo.
 
 - **Running dev / tests**: [DEVELOPMENT.md](./DEVELOPMENT.md)
-
-For **architecture, env-by-situation, and deployment**, see [`packages/web/README.md`](./packages/web/README.md).
+- **Repo overview / packages**: [README.md](./README.md)
 
 ## What the user has to provide
 
@@ -33,3 +32,12 @@ npm run prisma:generate
 ```
 
 Then run `npm run typecheck` to verify there are no type errors. This is much faster than a full build (~5 seconds vs 2-3 minutes).
+
+Editing `prisma/schema.prisma`? See [Database migration](./packages/web/README.md#database-migration).
+
+## Debugging
+
+- Investigate with console logs.
+- Prefer integration and end-to-end tests over narrow unit tests.
+- Write a test that reproduces the bug before fixing it.
+- After fixing, keep only the general-case tests — drop the one written to pin down this specific bug.
