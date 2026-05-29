@@ -4,8 +4,6 @@ Primary reference for coding agents working in this repo.
 
 - **Running dev / tests**: [DEVELOPMENT.md](./DEVELOPMENT.md)
 
-For **architecture, env-by-situation, and deployment**, see [`packages/web/README.md`](./packages/web/README.md).
-
 ## What the user has to provide
 
 The agent can follow the setup and workflow instructions in this repo on its own, but the user must provide values for these env vars when required by setting them in the current environment.
