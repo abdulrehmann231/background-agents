@@ -87,22 +87,32 @@ const jsonResponse = (status: number, body: object) =>
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const sandboxId = url.searchParams.get("sandboxId")
-  const repoName = url.searchParams.get("repoName")
-  const previewUrlPattern = url.searchParams.get("previewUrlPattern")
-  const backgroundSessionId = url.searchParams.get("backgroundSessionId")
   const cursorParam = url.searchParams.get("cursor")
   const chatId = url.searchParams.get("chatId")
   const assistantMessageId = url.searchParams.get("assistantMessageId")
 
-  if (!sandboxId || !repoName || !backgroundSessionId) {
-    return jsonResponse(400, {
-      error: "Missing required fields: sandboxId, repoName, backgroundSessionId",
-    })
-  }
-
   const auth = await requireChatStreamAccess(chatId, assistantMessageId)
   if (isAuthError(auth)) return auth
+
+  // IDOR fix: derive sandbox/session/preview from the *chat row* we just
+  // authorized, NOT from query params. Previously the route used
+  // url.searchParams.get("sandboxId" / "backgroundSessionId" / ...) which any
+  // authenticated user could overwrite with another user's sandbox id —
+  // Daytona uses one app-wide API key (single org) so daytona.get(foreignId)
+  // would succeed. See packages/web/e2e tests for reproduction.
+  const { chat } = auth
+  const sandboxId = chat.sandboxId
+  const backgroundSessionId = chat.backgroundSessionId
+  const previewUrlPattern = chat.previewUrlPattern
+  // The sandbox clone directory is fixed per app convention; the client
+  // always passed "project" anyway, so the value lives here now.
+  const repoName = "project"
+
+  if (!sandboxId || !backgroundSessionId) {
+    return jsonResponse(400, {
+      error: "Chat has no active sandbox or background session",
+    })
+  }
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
   if (!daytonaApiKey) {
