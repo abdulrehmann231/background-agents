@@ -643,6 +643,45 @@ export function useChatWithSync() {
     }
   }, [chats, updateChatsCache])
 
+  // Re-check a chat's status against the backend. Used by the error banner
+  // refresh action: when the SSE connection drops we mark the chat as errored,
+  // but the backend may have actually finished. Pulls the authoritative
+  // status (+ any new messages) and reconciles the local cache.
+  // Returns the resulting status so callers can show feedback.
+  const refreshChat = useCallback(async (chatId: string): Promise<ChatStatus | null> => {
+    try {
+      const chat = chats.find((c) => c.id === chatId)
+      const lastMessageId = chat?.messages[chat.messages.length - 1]?.id
+
+      const chatData = await fetchChat(chatId, lastMessageId ? { afterMessageId: lastMessageId } : undefined)
+      const incomingMessages = chatData.messages.map(toMessageType)
+      const nextStatus = chatData.status as ChatStatus
+
+      updateChatsCache((old) =>
+        old.map((c) => {
+          if (c.id !== chatId) return c
+          const messages = incomingMessages.length > 0
+            ? mergeMessages(c.messages, incomingMessages)
+            : c.messages
+          return {
+            ...c,
+            status: nextStatus,
+            // Clear the inline error banner whenever the backend says the
+            // chat is no longer in an error state.
+            errorMessage: nextStatus === "error" ? c.errorMessage : undefined,
+            backgroundSessionId: chatData.backgroundSessionId ?? undefined,
+            messages,
+          }
+        })
+      )
+
+      return nextStatus
+    } catch (err) {
+      console.error("Failed to refresh chat:", err)
+      return null
+    }
+  }, [chats, updateChatsCache])
+
   // True when messages need to be loaded for current chat (to prevent flash of empty state)
   // A chat needs loading if: has no messages locally, but server says it has messages (messageCount > 0)
   const isLoadingMessages = currentChat
@@ -710,6 +749,7 @@ export function useChatWithSync() {
     removeQueuedMessage,
     resumeQueue,
     refetchMessages,
+    refreshChat,
     drafts: localChatState.drafts,
     updateDraft,
     clearDraft,
