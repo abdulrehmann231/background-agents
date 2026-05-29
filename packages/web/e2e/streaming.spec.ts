@@ -39,18 +39,6 @@ async function setupTestAuth(page: Page, context: BrowserContext) {
 // Use describe.serial so tests run in order and share state (same sandbox)
 test.describe.serial("Chat Streaming", () => {
   test.beforeEach(async ({ page, context }) => {
-    // The test session has no real GitHub OAuth token, so the app's
-    // /api/github/validate-token check would fire a "GitHub authorization
-    // expired" dialog whose backdrop intercepts clicks at a non-deterministic
-    // time. Stub the endpoint so the dialog never appears.
-    await page.route("**/api/github/validate-token", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ valid: true }),
-      })
-    })
-
     await setupTestAuth(page, context)
   })
 
