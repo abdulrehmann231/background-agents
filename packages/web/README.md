@@ -59,13 +59,15 @@ npm run dev
 
 App is at http://localhost:4000. With `GITHUB_PAT` set you get auto-login — no GitHub OAuth app required.
 
-### Schema changes
+### Database migration
 
-1. Edit `prisma/schema.prisma`
-2. Run `npx prisma migrate dev`
-3. Commit the new files in `prisma/migrations/`
+After editing `prisma/schema.prisma`, generate a migration file and apply it to your local DB. Commit the resulting files in `prisma/migrations/`.
 
-After pulling, run `npx prisma migrate dev` to apply new migrations.
+```bash
+npx prisma migrate dev
+```
+
+After pulling new migrations from git, run the same command to apply them.
 
 ### Deployment
 
