@@ -7,15 +7,15 @@ import { cn } from "@/lib/utils"
 interface ErrorBannerProps {
   message: string
   isMobile?: boolean
-  /** Re-check chat status from the backend. The banner unmounts on its own
-   *  when the parent sees `chat.status !== "error"`. */
-  onRefresh?: () => Promise<void> | void
+  /** Resend the last user message. The banner unmounts on its own when the
+   *  parent sees `chat.status !== "error"`. */
+  onRetry?: () => Promise<void> | void
 }
 
-export function ErrorBanner({ message, isMobile, onRefresh }: ErrorBannerProps) {
+export function ErrorBanner({ message, isMobile, onRetry }: ErrorBannerProps) {
   const [expanded, setExpanded] = useState(false)
   const [overflow, setOverflow] = useState(false)
-  const [isChecking, setIsChecking] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -24,10 +24,10 @@ export function ErrorBanner({ message, isMobile, onRefresh }: ErrorBannerProps) 
     setOverflow(el.scrollHeight > el.clientHeight + 1)
   }, [message, expanded])
 
-  const handleRefresh = async () => {
-    if (!onRefresh || isChecking) return
-    setIsChecking(true)
-    try { await onRefresh() } finally { setIsChecking(false) }
+  const handleRetry = async () => {
+    if (!onRetry || isRetrying) return
+    setIsRetrying(true)
+    try { await onRetry() } finally { setIsRetrying(false) }
   }
 
   return (
@@ -64,15 +64,15 @@ export function ErrorBanner({ message, isMobile, onRefresh }: ErrorBannerProps) 
               {expanded ? "Show less" : "Show more"}
             </button>
           )}
-          {onRefresh && (
+          {onRetry && (
             <button
               type="button"
-              data-testid="chat-error-refresh"
-              onClick={handleRefresh}
-              disabled={isChecking}
+              data-testid="chat-error-retry"
+              onClick={handleRetry}
+              disabled={isRetrying}
               className="underline underline-offset-2 hover:no-underline cursor-pointer disabled:cursor-default disabled:no-underline disabled:opacity-70"
             >
-              {isChecking ? "Checking…" : "Refresh"}
+              {isRetrying ? "Retrying…" : "Retry"}
             </button>
           )}
         </div>
