@@ -120,9 +120,12 @@ NEXTAUTH_SECRET=test-secret-for-e2e-tests
 NEXTAUTH_URL=http://localhost:4000
 GITHUB_CLIENT_ID=placeholder
 GITHUB_CLIENT_SECRET=placeholder
+```
 
-# Optional: bypass the "is this a test DB?" safety check
-# I_KNOW_THIS_IS_THE_TEST_DB=true
+To bypass the safety check (lets E2E run against a `DATABASE_URL` that isn't localhost — only do this if you know what you're doing):
+
+```bash
+I_KNOW_THIS_IS_THE_TEST_DB=true
 ```
 
 `DAYTONA_API_KEY` comes from your Development `.env.local` — tests create real sandboxes.
