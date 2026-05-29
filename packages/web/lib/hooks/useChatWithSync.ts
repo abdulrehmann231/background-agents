@@ -353,8 +353,15 @@ export function useChatWithSync() {
     if (!currentChatId) return
     const { previewItems, activePreviewIndex, previewPaneHidden, queuedMessages, queuePaused, ...serverUpdates } = updates
 
-    // Handle previewItems/activePreviewIndex/previewPaneHidden fields
-    useChatSyncStore.getState().setPreviewStateForChat(currentChatId, { previewItems, activePreviewIndex, previewPaneHidden })
+    // Only touch preview state if the caller actually included one of the
+    // preview keys. Destructuring above produces `undefined` values whether the
+    // key was present or absent, so we have to check the original `updates`
+    // object with `in` to tell the two cases apart — otherwise an unrelated
+    // update (e.g. { planModeEnabled: false }) would be interpreted as "clear
+    // the preview state" by setPreviewStateForChat and wipe the pane.
+    if ("previewItems" in updates || "activePreviewIndex" in updates || "previewPaneHidden" in updates) {
+      useChatSyncStore.getState().setPreviewStateForChat(currentChatId, { previewItems, activePreviewIndex, previewPaneHidden })
+    }
 
     if (Object.keys(serverUpdates).length > 0) {
       try {
@@ -368,8 +375,10 @@ export function useChatWithSync() {
   const updateChatById = useCallback(async (chatId: string, updates: Partial<Chat>) => {
     const { previewItems, activePreviewIndex, previewPaneHidden, ...serverUpdates } = updates
 
-    // Handle previewItems/activePreviewIndex/previewPaneHidden fields
-    useChatSyncStore.getState().setPreviewStateForChat(chatId, { previewItems, activePreviewIndex, previewPaneHidden })
+    // See updateCurrentChat for why this guard is necessary.
+    if ("previewItems" in updates || "activePreviewIndex" in updates || "previewPaneHidden" in updates) {
+      useChatSyncStore.getState().setPreviewStateForChat(chatId, { previewItems, activePreviewIndex, previewPaneHidden })
+    }
 
     if (Object.keys(serverUpdates).length > 0) {
       try {
