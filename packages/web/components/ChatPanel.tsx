@@ -22,7 +22,6 @@ interface ChatPanelProps {
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => void
   onStopAgent: () => void
-  onRefreshChat?: (chatId: string) => Promise<void>
   onUpdateChat?: (updates: Partial<Chat>) => void
   onSlashCommand?: (command: SlashCommandType) => void
   onOpenFile?: (filePath: string) => void
@@ -51,7 +50,7 @@ interface ChatPanelProps {
   rapidFireNotification?: number
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onRefreshChat, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, rapidFireMode = false, rapidFireNotification = 0 }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, rapidFireMode = false, rapidFireNotification = 0 }: ChatPanelProps) {
   // Get modal and git state from contexts
   const modals = useModals()
   const git = useGit()
@@ -638,15 +637,31 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
             </div>
           )}
           {/* Surface the latest agent/streaming error inline so users see why
-              their last run stopped. Cleared on the next send. */}
-          {chat.status === "error" && chat.errorMessage && (
-            <ErrorBanner
-              key={chat.id}
-              message={chat.errorMessage}
-              isMobile={isMobile}
-              onRefresh={onRefreshChat ? () => onRefreshChat(chat.id) : undefined}
-            />
-          )}
+              their last run stopped. Cleared on the next send. The Retry
+              action resends the last user message — note this leaves the
+              previously-failed assistant turn in the history (the user can
+              see what failed) and doesn't re-attach any originally-uploaded
+              files (those File objects are no longer in memory). */}
+          {chat.status === "error" && chat.errorMessage && (() => {
+            const lastUserMessage = [...chat.messages].reverse().find((m) => m.role === "user")
+            const onRetry = lastUserMessage
+              ? () => onSendMessage(
+                  lastUserMessage.content,
+                  (lastUserMessage.agent ?? currentAgent) as string,
+                  lastUserMessage.model ?? currentModel,
+                  undefined,
+                  planModeEnabled,
+                )
+              : undefined
+            return (
+              <ErrorBanner
+                key={chat.id}
+                message={chat.errorMessage}
+                isMobile={isMobile}
+                onRetry={onRetry}
+              />
+            )
+          })()}
           {/* Queue shelf — lives at the bottom of the scroll area so it
               scrolls out of view with the conversation. */}
           {chat.queuedMessages && chat.queuedMessages.length > 0 && (
