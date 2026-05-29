@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { usePathname } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
-import { signInWithGitHub } from "@/lib/auth-utils"
-import { nanoid } from "nanoid"
+import { useSession } from "next-auth/react"
 import { MobileHeader } from "@/components/MobileHeader"
 import { Sidebar } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
@@ -12,7 +10,6 @@ import { PreviewView } from "@/components/PreviewView"
 import { AppModals } from "@/components/AppModals"
 import { useGitDialogs } from "@/components/modals/GitDialogs"
 import { ScheduledJobsView } from "@/components/scheduled-jobs/ScheduledJobsView"
-import { clearAllStorage } from "@/lib/storage"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider, usePalette } from "@/components/search-palette"
 import { useChatWithSync } from "@/lib/hooks/useChatWithSync"
@@ -25,6 +22,8 @@ import { useUrlSync } from "@/lib/hooks/useUrlSync"
 import { useSandboxActions } from "@/lib/hooks/useSandboxActions"
 import { useDraftChat } from "@/lib/hooks/useDraftChat"
 import { usePendingMessageReplay } from "@/lib/hooks/usePendingMessageReplay"
+import { usePaletteProps } from "@/lib/hooks/usePaletteProps"
+import { useSendMessage } from "@/lib/hooks/useSendMessage"
 import {
   ChatProvider,
   ModalProvider,
@@ -150,10 +149,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
 
   // Additional state not in contexts
   const [scheduledJobsRefreshKey, setScheduledJobsRefreshKey] = useState(0)
-  // Track when a message send is initiated (for instant UI feedback before server responds)
-  const [isSendingMessage, setIsSendingMessage] = useState(false)
-  // Rapid fire notification: timestamp of last background task creation, 0 means no notification
-  const [rapidFireNotification, setRapidFireNotification] = useState(0)
   const [skillsModalOpen, setSkillsModalOpen] = useState(false)
 
   // Sandbox/repo actions (env vars, download, open in VS Code/GitHub, git clipboard)
@@ -366,18 +361,20 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
 
   usePageTitle(pageTitle)
 
-  // Clear isSendingMessage once the chat status changes (server responded with optimistic update)
-  // or when the user switches to a different chat
-  useEffect(() => {
-    if (displayCurrentChat?.status === "creating" || displayCurrentChat?.status === "running") {
-      setIsSendingMessage(false)
-    }
-  }, [displayCurrentChat?.status])
-
-  useEffect(() => {
-    // Reset sending state when switching chats
-    setIsSendingMessage(false)
-  }, [displayCurrentChat?.id])
+  // "User clicked send" flow — owns handleSendMessage, handleRapidFireSend,
+  // the isSendingMessage flag (with its auto-reset effects), and the
+  // rapidFireNotification timestamp.
+  const { handleSendMessage, isSendingMessage, rapidFireNotification } = useSendMessage({
+    rapidFireMode: settings.rapidFireMode,
+    sidebar,
+    displayCurrentChat,
+    currentChatId,
+    isDraftMode,
+    sendMessage,
+    startNewChat,
+    setOptimisticDraft,
+    openSignInModal: modals.setSignInModalOpen,
+  })
 
   // =============================================================================
   // Handlers
@@ -495,86 +492,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
 
     updateChatRepo(displayCurrentChat.id, repo, branch)
   }
-
-  // Handler for sending message
-  const handleSendMessage = (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => {
-    // Always require sign-in to send messages
-    if (!session) {
-      // Store the pending message in sessionStorage (persists across OAuth redirect)
-      // Note: files cannot be persisted, so we warn the user if they have attachments
-      savePendingMessage({ message, agent, model })
-      modals.setSignInModalOpen(true)
-      return
-    }
-
-    // Rapid fire mode: send as background task without switching
-    if (settings.rapidFireMode) {
-      handleRapidFireSend(message, agent, model, files, planMode)
-      return
-    }
-
-    // Update filter to match the chat's repo if this is the first message and repo differs from filter
-    // This ensures the filter follows the user's choice when starting a chat
-    if (displayCurrentChat && displayCurrentChat.messages.length === 0 &&
-        sidebar.repoFilter !== ALL_REPOSITORIES && sidebar.repoFilter !== displayCurrentChat.repo) {
-      // If chat has no repo, switch to "No repository" filter
-      // Otherwise, switch to the chat's repo
-      if (displayCurrentChat.repo === NEW_REPOSITORY) {
-        sidebar.setRepoFilter(NO_REPOSITORY)
-      } else {
-        sidebar.setRepoFilter(displayCurrentChat.repo)
-      }
-    }
-
-    // Set sending state immediately for instant UI feedback
-    setIsSendingMessage(true)
-
-    // In draft mode, optimistically render the conversation so the UI leaves the
-    // "new chat" welcome screen immediately rather than waiting for the draft to
-    // be materialized on the server. (sendMessage materializes the draft, which
-    // is a server round-trip, before it can add the real optimistic messages.)
-    const draftId = isDraftMode && currentChatId ? currentChatId : null
-    if (draftId) {
-      // Only the user message is needed to leave the welcome screen
-      // (messages.length > 0). The assistant's "thinking" state is shown by the
-      // separate `...` indicator driven by the chat's "creating" status.
-      setOptimisticDraft({
-        chatId: draftId,
-        messages: [
-          { id: `optimistic-user-${nanoid()}`, role: "user", content: message, timestamp: Date.now() },
-        ],
-      })
-    }
-
-    const sendResult = sendMessage(message, agent, model, files, undefined, planMode)
-
-    // Once the send settles, drop the optimistic draft messages. On success the
-    // real chat is already showing (currentChatId changed, so the effect above has
-    // cleared them); on failure this reverts the view to the welcome screen.
-    if (draftId) {
-      void Promise.resolve(sendResult).finally(() => {
-        setOptimisticDraft((cur) => (cur && cur.chatId === draftId ? null : cur))
-      })
-    }
-  }
-
-  // Rapid fire: send as a new background chat without switching
-  const handleRapidFireSend = useCallback(async (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => {
-    if (!session) {
-      savePendingMessage({ message, agent, model })
-      modals.setSignInModalOpen(true)
-      return
-    }
-
-    const repo = displayCurrentChat?.repo ?? NEW_REPOSITORY
-    const baseBranch = displayCurrentChat?.baseBranch ?? "main"
-
-    const chatId = await startNewChat(repo, baseBranch, undefined, false, "pending", agent, model)
-    if (!chatId) return
-
-    sendMessage(message, agent, model, files, chatId, planMode)
-    setRapidFireNotification(Date.now())
-  }, [session, displayCurrentChat, startNewChat, sendMessage, modals, setRapidFireNotification])
 
   // After sign-in, replay any pending message saved before the OAuth redirect.
   // The hook handles the two-effect coordination (create chat → stage send →
@@ -812,84 +729,45 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     isWeekly: claudeIsWeekly,
   }), [claudeLimitUsed, claudeLimitRemaining, claudeLimitTotal, claudeIsPro, claudeLimitResetAt, claudeIsWeekly])
 
+  // Assemble the (large) PaletteProvider props object — see usePaletteProps
+  // for the conditional-action wiring (terminal open/toggle, sign-in/out,
+  // git-command gating, etc.).
+  const paletteProps = usePaletteProps({
+    isMobile,
+    repos,
+    branches,
+    displayChats,
+    displayCurrentChatId,
+    currentChat,
+    availableServers,
+    canBranch,
+    rapidFireMode: settings.rapidFireMode,
+    githubBranchUrl,
+    isDownloading,
+    handleOpenInGitHub,
+    handleOpenInVSCode,
+    handleDownloadProject,
+    handleCopyCloneCommand,
+    handleCopyCheckoutCommand,
+    handleOpenEnvVars,
+    handlePaletteSelectRepo,
+    handlePaletteSelectBranch,
+    handleRunCommand,
+    handleNewChat,
+    handleBranchChat,
+    handleCreateRepo,
+    handleNavigateChat,
+    handleSelectChat,
+    modals,
+    sidebar,
+    preview,
+    onToggleRapidFire: () =>
+      updateSettings({ settings: { rapidFireMode: !settings.rapidFireMode } }),
+    onToggleSkillsModal: () => setSkillsModalOpen((prev) => !prev),
+  })
+
   return (
-    <PaletteProvider
-      repos={repos}
-      currentRepo={currentChat?.repo !== NEW_REPOSITORY ? currentChat?.repo ?? null : null}
-      branches={branches}
-      chats={displayChats.filter((c) => c.displayName !== null).map((c) => ({ id: c.id, displayName: c.displayName, repo: c.repo }))}
-      onSelectRepo={handlePaletteSelectRepo}
-      onSelectBranch={handlePaletteSelectBranch}
-      onRunCommand={handleRunCommand}
-      onNewChat={handleNewChat}
-      onBranchChat={canBranch ? handleBranchChat : undefined}
-      onCreateRepo={currentChat?.repo === NEW_REPOSITORY ? handleCreateRepo : undefined}
-      showGitCommands={!!currentChat && currentChat.repo !== NEW_REPOSITORY}
-      onOpenInGitHub={githubBranchUrl ? handleOpenInGitHub : undefined}
-      onOpenSettings={modals.openSettingsSection}
-      onToggleSidebar={!isMobile ? () => sidebar.toggleCollapse() : undefined}
-      onSignIn={!session ? () => signInWithGitHub() : undefined}
-      onSignOut={session ? () => {
-            clearAllStorage()
-            signOut()
-          } : undefined}
-      onDeleteChat={displayCurrentChatId ? () => modals.setDeleteConfirmChatId(displayCurrentChatId) : undefined}
-      onOpenInVSCode={currentChat?.sandboxId ? handleOpenInVSCode : undefined}
-      onOpenTerminal={
-        currentChat?.sandboxId
-          ? () => {
-              // Generate a unique terminal ID by finding the next available number
-              const existingTerminals = preview.previewItems.filter((i) => i.type === "terminal")
-              const terminalNumbers = existingTerminals.map((t) => {
-                if (t.type !== "terminal") return 0
-                const match = t.id.match(/-(\d+)$/)
-                return match ? parseInt(match[1], 10) : 1
-              })
-              const nextNumber = terminalNumbers.length === 0 ? 1 : Math.max(...terminalNumbers) + 1
-              preview.openPreview({ type: "terminal", id: `${currentChat.sandboxId}-${nextNumber}` })
-            }
-          : undefined
-      }
-      onToggleTerminal={
-        currentChat?.sandboxId
-          ? () => {
-              const existingTerminal = preview.previewItems.find((i) => i.type === "terminal")
-              if (existingTerminal) {
-                // Terminal exists — toggle pane visibility
-                if (preview.previewOpen) {
-                  preview.closePreview()
-                } else {
-                  preview.openPreview(existingTerminal)
-                }
-              } else {
-                // No terminal yet — create one and show it
-                preview.openPreview({ type: "terminal", id: `${currentChat.sandboxId}-1` })
-              }
-            }
-          : undefined
-      }
-      servers={availableServers}
-      onOpenServer={(port, url) => preview.openPreview({ type: "server", port, url })}
-      onClosePreview={preview.previewOpen ? preview.closePreview : undefined}
-      onShowPreview={preview.previewPaneHidden && preview.previewItems.length > 0 ? preview.showPreview : undefined}
-      onDownloadProject={currentChat?.sandboxId ? handleDownloadProject : undefined}
-      isDownloading={isDownloading}
-      onCopyCloneCommand={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? handleCopyCloneCommand : undefined}
-      onCopyCheckoutCommand={currentChat?.branch ? handleCopyCheckoutCommand : undefined}
-      onOpenEnvVars={currentChat ? handleOpenEnvVars : undefined}
-      onOpenMcpServers={displayCurrentChatId && session ? () => modals.setMcpServersModalOpen(true) : undefined}
-      onOpenSkills={
-        currentChat?.sandboxId && currentChat.repo !== NEW_REPOSITORY
-          ? () => setSkillsModalOpen((prev) => !prev)
-          : undefined
-      }
-      chatIds={displayChats.map((c) => c.id)}
-      onNavigateChat={handleNavigateChat}
-      currentChatId={displayCurrentChatId}
-      onSelectChat={handleSelectChat}
-      rapidFireMode={settings.rapidFireMode}
-      onToggleRapidFire={() => updateSettings({ settings: { rapidFireMode: !settings.rapidFireMode } })}
-    >
+    <PaletteProvider {...paletteProps}>
     <ChatProvider value={chatContextValue}>
     <GitProvider value={gitContextValue}>
     <div className={`flex overflow-hidden ${isMobile ? 'h-screen-mobile' : 'h-screen'}`}>
