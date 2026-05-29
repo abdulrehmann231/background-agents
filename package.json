@@ -23,7 +23,6 @@
     "test:ccauth": "dotenv -e packages/web/.env -e .env -c -- npm run test:ccauth -w @background-agents/web",
     "seed:ccauth": "dotenv -e packages/web/.env -e .env -c -- npm run seed:ccauth -w @background-agents/web",
     "start:electron": "dotenv -e packages/electron/.env -e packages/web/.env -e .env -c -- npm run start -w @background-agents/electron",
-    "lint": "npm run lint --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
