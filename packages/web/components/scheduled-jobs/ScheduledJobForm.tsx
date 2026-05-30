@@ -226,6 +226,14 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
     ? Math.max(1, Math.floor(customIntervalValue || 0) * UNIT_MINUTES[customIntervalUnit])
     : intervalMinutes
 
+  // Which Options-section toggles apply. The "continue" toggle is interval-only;
+  // auto-PR needs a repo to push to. The section header renders only when at
+  // least one applies — these same flags gate both the header and the toggles
+  // so they can't drift apart.
+  const showContinueOption = triggerType === "interval"
+  const showAutoPROption = !isRepoLess
+  const hasOptions = showContinueOption || showAutoPROption
+
   // Reset form state when job prop changes or modal opens
   useEffect(() => {
     if (open) {
@@ -695,13 +703,8 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 even before the job is saved. The fallback below only shows for
                 the brief moment before the mint effect runs. */}
             {triggerType === "incoming" && (
-              <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-medium">Webhook URL</label>
-                  <span className="text-xs text-muted-foreground">
-                    Paste into your external app
-                  </span>
-                </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Webhook URL</label>
 
                 {incomingToken ? (
                   <>
@@ -716,34 +719,23 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                       <button
                         type="button"
                         onClick={handleCopyUrl}
-                        className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-accent transition-colors cursor-pointer"
-                        title="Copy URL"
+                        className="inline-flex items-center justify-center rounded-md border border-border bg-background px-2 hover:bg-accent transition-colors cursor-pointer"
+                        title={copiedUrl ? "Copied" : "Copy URL"}
                       >
-                        {copiedUrl ? (
-                          <>
-                            <Check className="h-3 w-3" />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3 w-3" />
-                            Copy
-                          </>
-                        )}
+                        {copiedUrl ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
                       <button
                         type="button"
                         onClick={handleRotateToken}
                         disabled={rotating}
-                        className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center justify-center rounded-md border border-border bg-background px-2 hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
                         title="Generate a new URL and invalidate the existing one"
                       >
-                        <RefreshCw className={cn("h-3 w-3", rotating && "animate-spin")} />
-                        Rotate
+                        <RefreshCw className={cn("h-3.5 w-3.5", rotating && "animate-spin")} />
                       </button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Anyone with this URL can fire this agent. If it leaks, click Rotate.
+                      Anyone with this URL can fire this agent — rotate it if it leaks.
                     </p>
                   </>
                 ) : (
@@ -916,7 +908,10 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               </div>
             </div>
 
-            {/* Options Section */}
+            {/* Options Section — hidden when neither option applies (e.g. an
+                incoming, repo-less job has neither the interval-only
+                "continue" toggle nor the repo-only auto-PR toggle). */}
+            {hasOptions && (
             <div>
               <label className="block text-sm font-medium mb-2">Options</label>
               <div className="space-y-2">
@@ -924,7 +919,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                     the backend interprets it differently: with a repo it
                     reuses the prior branch; repo-less it prepends the prior
                     run's final output as prompt context. */}
-                {triggerType === "interval" && (
+                {showContinueOption && (
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -942,7 +937,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 )}
 
                 {/* Auto-PR has no target in repo-less mode (no remote to push to). */}
-                {!isRepoLess && (
+                {showAutoPROption && (
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -958,6 +953,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 )}
               </div>
             </div>
+            )}
 
           </form>
 
