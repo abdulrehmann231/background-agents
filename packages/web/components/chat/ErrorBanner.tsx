@@ -72,7 +72,7 @@ export function ErrorBanner({ message, isMobile, onRetry }: ErrorBannerProps) {
               disabled={isRetrying}
               className="underline underline-offset-2 hover:no-underline cursor-pointer disabled:cursor-default disabled:no-underline disabled:opacity-70"
             >
-              {isRetrying ? "Retrying…" : "Retry"}
+              {isRetrying ? "Reloading…" : "Reload"}
             </button>
           )}
         </div>
