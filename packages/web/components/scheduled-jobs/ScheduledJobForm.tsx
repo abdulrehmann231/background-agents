@@ -263,6 +263,12 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
     }
   }, [agent, model])
 
+  useEffect(() => {
+    if (triggerType === "incoming" && !incomingToken) {
+      setIncomingToken(crypto.randomUUID())
+    }
+  }, [triggerType, incomingToken])
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -348,6 +354,10 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
           agent,
           model: model || null,
           triggerType,
+          // Carry the client-minted token (if any) so the persisted URL matches
+          // what the panel is already showing. Null on interval drafts — the
+          // server mints a dormant one.
+          incomingToken: incomingToken ?? undefined,
           // intervalMinutes is required by the POST for "interval" — pass a
           // safe placeholder for incoming drafts so the validator doesn't
           // reject. Final submit overrides whichever value matters.
@@ -399,10 +409,15 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
       // For materialized rows we created with enabled: false + isDraft: true;
       // promote both on final Create. For real edits, we leave existing state
       // alone.
+      // On a pure create POST, send the client-minted token so the saved URL
+      // matches the one already shown in the panel. Materialized rows already
+      // persisted their token at materialize time, and edits leave it alone.
       const body =
         materializedJobId && !isEditing
           ? { ...payload, enabled: true, isDraft: false }
-          : payload
+          : isUpdate
+            ? payload
+            : { ...payload, incomingToken: incomingToken ?? undefined }
 
       const res = await fetch(url, {
         method,
@@ -452,7 +467,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   const incomingWebhookUrl = useMemo(() => {
     if (!incomingToken) return ""
     if (typeof window === "undefined") return ""
-    return `${window.location.origin}/api/webhooks/in/${incomingToken}`
+    return `${window.location.origin}/wh/${incomingToken}`
   }, [incomingToken])
 
   const handleCopyUrl = async () => {
@@ -675,9 +690,10 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
             )}
 
             {/* Incoming webhook URL panel — shown only for incoming triggers.
-                In edit mode (incomingToken exists) we render the URL with copy
-                + rotate; in create mode we tell the user the URL appears after
-                save. */}
+                The token is minted client-side as soon as the trigger is
+                picked, so the URL (with copy + rotate) renders immediately,
+                even before the job is saved. The fallback below only shows for
+                the brief moment before the mint effect runs. */}
             {triggerType === "incoming" && (
               <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -732,7 +748,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   </>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    The webhook URL will be generated once you save this agent. You can copy it from this dialog after.
+                    Preparing your webhook URL…
                   </p>
                 )}
               </div>

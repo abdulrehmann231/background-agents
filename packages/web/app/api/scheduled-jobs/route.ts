@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto"
+import { randomUUID } from "crypto"
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import {
@@ -48,6 +48,10 @@ export async function GET(): Promise<Response> {
 // POST - Create a new scheduled job
 // =============================================================================
 
+/** Matches any RFC-4122 UUID (the form sends crypto.randomUUID() v4 values). */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 interface CreateScheduledJobBody {
   name: string
   prompt: string
@@ -56,6 +60,8 @@ interface CreateScheduledJobBody {
   agent: string
   model?: string
   triggerType?: "interval" | "incoming"
+  /** Client-minted UUID so the form can show the webhook URL before saving. */
+  incomingToken?: string
   intervalMinutes?: number // Required for interval trigger
   autoPR?: boolean
   continueFromLastRun?: boolean
@@ -116,7 +122,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     // triggerType is "incoming"), but minting it up-front lets a user swap
     // a job from interval → incoming later — including mid-draft — without
     // a second round-trip to issue a URL.
-    const incomingToken = randomBytes(32).toString("hex")
+    //
+    // Honor a client-supplied token when it's a well-formed UUID: the form
+    // mints one so it can show the webhook URL before the job is saved, and we
+    // persist that same value so the pre-save URL keeps working. Anything
+    // malformed falls back to a server-minted UUID.
+    const incomingToken =
+      typeof body.incomingToken === "string" && UUID_RE.test(body.incomingToken)
+        ? body.incomingToken
+        : randomUUID()
 
     const job = await prisma.scheduledJob.create({
       data: {

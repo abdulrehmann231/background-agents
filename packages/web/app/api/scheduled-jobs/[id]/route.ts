@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto"
+import { randomUUID } from "crypto"
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import {
@@ -146,7 +146,7 @@ export async function PATCH(
         // for them. We don't rotate existing tokens here — that's what the
         // dedicated rotate-token endpoint is for.
         if (!job.incomingToken) {
-          updateData.incomingToken = randomBytes(32).toString("hex")
+          updateData.incomingToken = randomUUID()
         }
       } else if (body.triggerType === "interval") {
         // Switching back to interval needs intervalMinutes — fall back to

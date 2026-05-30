@@ -39,8 +39,8 @@ export async function POST(
     return new Response("Payload too large", { status: 413 })
   }
 
-  // Look up the job. A 404 on a wrong token leaks nothing — tokens are 32-byte
-  // random and the response is identical to "no such job".
+  // Look up the job. A 404 on a wrong token leaks nothing — tokens are random
+  // UUIDs and the response is identical to "no such job".
   const job = await prisma.scheduledJob.findUnique({
     where: { incomingToken: token },
     select: {

@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto"
+import { randomUUID } from "crypto"
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import {
@@ -14,7 +14,7 @@ import { toScheduledJobResponse } from "@/lib/scheduled-jobs/types"
 // POST - Rotate the incoming-webhook token for a scheduled job
 // =============================================================================
 //
-// Invalidates the existing /api/webhooks/in/<token> URL and issues a new one.
+// Invalidates the existing /wh/<token> URL and issues a new one.
 // Only valid on jobs with triggerType "incoming".
 
 export async function POST(
@@ -40,7 +40,7 @@ export async function POST(
       return badRequest("Token rotation is only available for incoming-webhook jobs")
     }
 
-    const incomingToken = randomBytes(32).toString("hex")
+    const incomingToken = randomUUID()
     const updated = await prisma.scheduledJob.update({
       where: { id },
       data: { incomingToken },
