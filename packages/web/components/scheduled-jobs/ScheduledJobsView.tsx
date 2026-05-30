@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { Clock, Plus, MoreHorizontal, Play, Pencil, Trash2, AlertCircle, Check, X, ArrowLeft, ChevronDown, ExternalLink, GitPullRequest, CheckCircle2, XCircle, Circle, RefreshCw } from "lucide-react"
+import { Clock, Plus, AlertCircle, Check, X, ChevronDown, GitPullRequest, CheckCircle2, XCircle, Circle, RefreshCw } from "lucide-react"
 import { format, formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
 import { ScheduledJobForm } from "@/components/scheduled-jobs/ScheduledJobForm"
+import { JobActionsMenu } from "@/components/scheduled-jobs/JobActionsMenu"
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import { MessageBubble } from "@/components/MessageBubble"
-import { type ScheduledJob, type ScheduledJobRun, formatInterval } from "@/lib/scheduled-jobs/types"
+import { type ScheduledJob, type ScheduledJobRun } from "@/lib/scheduled-jobs/types"
 import type { Message } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 
@@ -145,7 +146,6 @@ export function ScheduledJobsView({ onOpenForm, refreshKey, urlJobId, onNavigate
   const [formOpen, setFormOpen] = useState(false)
   const [editingJob, setEditingJob] = useState<ScheduledJob | null>(null)
   const [deleteJob, setDeleteJob] = useState<ScheduledJob | null>(null)
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
   // Detail view state
   const [selectedJob, setSelectedJob] = useState<ScheduledJob | null>(null)
@@ -263,7 +263,6 @@ export function ScheduledJobsView({ onOpenForm, refreshKey, urlJobId, onNavigate
   const handleEdit = (job: ScheduledJob) => {
     setEditingJob(job)
     setFormOpen(true)
-    setMenuOpenId(null)
   }
 
   const handleDelete = async () => {
@@ -286,7 +285,6 @@ export function ScheduledJobsView({ onOpenForm, refreshKey, urlJobId, onNavigate
   }
 
   const handleRunNow = async (job: ScheduledJob) => {
-    setMenuOpenId(null)
     try {
       const res = await fetch(`/api/scheduled-jobs/${job.id}/run`, {
         method: "POST",
@@ -515,62 +513,12 @@ export function ScheduledJobsView({ onOpenForm, refreshKey, urlJobId, onNavigate
                         </span>
                       )}
                     </div>
-                    <div className="relative shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setMenuOpenId(menuOpenId === job.id ? null : job.id)
-                        }}
-                        className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-
-                      {menuOpenId === job.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-40"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setMenuOpenId(null)
-                            }}
-                          />
-                          <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-md border border-border bg-popover py-1 shadow-lg">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEdit(job)
-                              }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleRunNow(job)
-                              }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                              Run Now
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setMenuOpenId(null)
-                                setDeleteJob(job)
-                              }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-accent"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    <JobActionsMenu
+                      job={job}
+                      onEdit={handleEdit}
+                      onRunNow={handleRunNow}
+                      onDelete={setDeleteJob}
+                    />
                   </div>
                   <div className="mt-3 space-y-1.5 text-sm text-muted-foreground">
                     <div className={cn("truncate", job.repo === NEW_REPOSITORY && "italic")}>{getRepoLabel(job.repo)}</div>
@@ -639,62 +587,12 @@ export function ScheduledJobsView({ onOpenForm, refreshKey, urlJobId, onNavigate
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="relative inline-block">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setMenuOpenId(menuOpenId === job.id ? null : job.id)
-                            }}
-                            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-
-                          {menuOpenId === job.id && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-40"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setMenuOpenId(null)
-                                }}
-                              />
-                              <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-md border border-border bg-popover py-1 shadow-lg">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleEdit(job)
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleRunNow(job)
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
-                                >
-                                  <Play className="h-3.5 w-3.5" />
-                                  Run Now
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setMenuOpenId(null)
-                                    setDeleteJob(job)
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-accent"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  Delete
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        <JobActionsMenu
+                          job={job}
+                          onEdit={handleEdit}
+                          onRunNow={handleRunNow}
+                          onDelete={setDeleteJob}
+                        />
                       </td>
                     </tr>
                   ))}
