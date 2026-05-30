@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, Folder, FolderOpen } from "lucide-react"
+import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
@@ -233,17 +233,17 @@ function FolderSyncButton({ repo }: { repo: string }) {
         "flex h-7 w-7 items-center justify-center rounded-md transition-colors cursor-pointer disabled:cursor-default",
         error
           ? "text-amber-500 hover:bg-amber-500/10"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+          : status === "ready"
+            ? "text-green-500 hover:bg-green-500/10"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground"
       )}
       title={title}
       aria-label={title}
     >
       {busy ? (
         <Loader2 className="h-4 w-4 animate-spin" />
-      ) : status === "ready" ? (
-        <FolderOpen className="h-4 w-4" />
       ) : (
-        <Folder className="h-4 w-4" />
+        <FolderDown className="h-4 w-4" />
       )}
     </button>
   )
