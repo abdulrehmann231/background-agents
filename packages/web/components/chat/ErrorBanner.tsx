@@ -7,12 +7,23 @@ import { cn } from "@/lib/utils"
 interface ErrorBannerProps {
   message: string
   isMobile?: boolean
-  /** Resend the last user message. The banner unmounts on its own when the
-   *  parent sees `chat.status !== "error"`. */
+  /** The recovery action (resend the message, or reload the chat history). The
+   *  banner unmounts on its own when the parent sees the chat leave its failed
+   *  status. */
   onRetry?: () => Promise<void> | void
+  /** Label for the action button. Defaults to "Retry". */
+  actionLabel?: string
+  /** Label shown while the action is running. Defaults to "Retrying…". */
+  actionPendingLabel?: string
 }
 
-export function ErrorBanner({ message, isMobile, onRetry }: ErrorBannerProps) {
+export function ErrorBanner({
+  message,
+  isMobile,
+  onRetry,
+  actionLabel = "Retry",
+  actionPendingLabel = "Retrying…",
+}: ErrorBannerProps) {
   const [expanded, setExpanded] = useState(false)
   const [overflow, setOverflow] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
@@ -72,7 +83,7 @@ export function ErrorBanner({ message, isMobile, onRetry }: ErrorBannerProps) {
               disabled={isRetrying}
               className="underline underline-offset-2 hover:no-underline cursor-pointer disabled:cursor-default disabled:no-underline disabled:opacity-70"
             >
-              {isRetrying ? "Retrying…" : "Retry"}
+              {isRetrying ? actionPendingLabel : actionLabel}
             </button>
           )}
         </div>

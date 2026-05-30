@@ -666,6 +666,33 @@ export function useChatWithSync() {
     }
   }, [chats, updateChatsCache])
 
+  // Reload a chat's full history after the SSE stream died ("disconnected").
+  // Unlike refetchMessages (delta sync), this re-fetches the entire history so a
+  // partially-streamed assistant turn is replaced by the fuller persisted copy
+  // (mergeMessages prefers the message with more content), then clears the
+  // disconnected banner so the user can continue.
+  const reloadChat = useCallback(async (chatId: string) => {
+    try {
+      const chatData = await fetchChat(chatId)
+      const incomingMessages = chatData.messages.map(toMessageType)
+      updateChatsCache((old) =>
+        old.map((c) => {
+          if (c.id !== chatId) return c
+          return {
+            ...c,
+            messages: incomingMessages.length > 0
+              ? mergeMessages(c.messages, incomingMessages)
+              : c.messages,
+            status: "ready",
+            errorMessage: undefined,
+          }
+        })
+      )
+    } catch (err) {
+      console.error("Failed to reload chat:", err)
+    }
+  }, [updateChatsCache])
+
   // True when messages need to be loaded for current chat (to prevent flash of empty state)
   // A chat needs loading if: has no messages locally, but server says it has messages (messageCount > 0)
   const isLoadingMessages = currentChat
@@ -733,6 +760,7 @@ export function useChatWithSync() {
     removeQueuedMessage,
     resumeQueue,
     refetchMessages,
+    reloadChat,
     drafts: localChatState.drafts,
     updateDraft,
     clearDraft,

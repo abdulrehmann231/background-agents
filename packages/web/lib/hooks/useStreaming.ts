@@ -221,8 +221,12 @@ export function useStreaming(options: UseStreamingOptions = {}) {
         try {
           const data = JSON.parse((event as MessageEvent).data)
           useStreamStore.getState().stopStream(chatId)
+          // This frame means the SSE stream itself failed (the route's poll loop
+          // threw), not that the agent returned an error. The agent may still be
+          // running in the background, so surface "disconnected" → Reload (refresh
+          // chat history) rather than "error" → Retry (resend the message).
           updateChatsCache((old) => old.map((c) =>
-            c.id === chatId ? { ...c, status: "error", backgroundSessionId: undefined, errorMessage: data.error || "Agent stream failed" } : c
+            c.id === chatId ? { ...c, status: "disconnected", backgroundSessionId: undefined, errorMessage: data.error || "Connection to the agent was lost." } : c
           ))
         } catch {}
       })

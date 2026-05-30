@@ -180,7 +180,9 @@ export interface Chat {
   // Status
   status: ChatStatus
 
-  /** Last agent/streaming error message, surfaced when status === "error". Cleared on the next send. */
+  /** Last agent/streaming error message, surfaced when status is "error"
+   *  (real agent error → Retry) or "disconnected" (SSE stream died → Reload).
+   *  Cleared on the next send. */
   errorMessage?: string
 
   /** Set when a merge targets this branch but sandbox was stopped. Triggers pull on next execute. */
@@ -192,7 +194,16 @@ export interface Chat {
   messagesLoadFailed?: boolean
 }
 
-export type ChatStatus = "pending" | "creating" | "ready" | "running" | "error"
+export type ChatStatus =
+  | "pending"
+  | "creating"
+  | "ready"
+  | "running"
+  /** The agent itself returned an error. Recovery: resend the last message (Retry). */
+  | "error"
+  /** The SSE stream died before the turn finished. The agent may still be
+   *  running in the background; recovery: refresh the chat history (Reload). */
+  | "disconnected"
 
 /** A message that the user submitted while the agent was busy. Files are not persisted. */
 export interface QueuedMessage {
