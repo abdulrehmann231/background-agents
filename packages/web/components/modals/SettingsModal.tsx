@@ -396,7 +396,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile
               ? "inset-x-0 bottom-0 top-0 rounded-none"
-              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl h-[600px] max-h-[85vh] border border-border rounded-xl shadow-xl",
+              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl h-[600px] max-h-[85vh] border border-border rounded-xl shadow-xl",
             !isDragging && isMobile && "transition-transform duration-300"
           )}
           style={isMobile ? {
