@@ -36,7 +36,7 @@ export function notify({ title, body, chatId }: NotifyOptions): void {
  * Convenience helper for "a new push that contains commits" notifications.
  */
 export function notifyPush(info: {
-  repo: string
+  repo?: string
   branch: string
   commits: number
   commitSha?: string
@@ -44,10 +44,11 @@ export function notifyPush(info: {
 }): void {
   const { repo, branch, commits, commitSha, chatId } = info
   const plural = commits === 1 ? "commit" : "commits"
+  const target = repo ? `${repo}@${branch}` : branch
   const shaSuffix = commitSha ? ` (${commitSha})` : ""
   notify({
     title: "New push",
-    body: `${commits} ${plural} pushed to ${repo}@${branch}${shaSuffix}`,
+    body: `${commits} ${plural} pushed to ${target}${shaSuffix}`,
     chatId,
   })
 }

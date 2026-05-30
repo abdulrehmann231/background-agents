@@ -186,6 +186,20 @@ export function useStreaming(options: UseStreamingOptions = {}) {
             onConflictStateChangeRef.current(data.conflictState)
           }
 
+          // A new push containing commits landed — raise a notification
+          // (native OS notification on desktop, in-app toast on web).
+          if (data.push && data.push.commits > 0) {
+            const chats = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())
+            const repo = chats?.find((c) => c.id === chatId)?.repo
+            notifyPush({
+              repo: repo && repo !== "__new__" ? repo : "",
+              branch: data.push.branch,
+              commits: data.push.commits,
+              commitSha: data.push.commitSha,
+              chatId,
+            })
+          }
+
           // Fetch any new messages created by the backend (delta sync)
           try {
             const chatData = await fetchChat(chatId, { afterMessageId: assistantMessageId })
