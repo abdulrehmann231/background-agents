@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { FolderSync, Folder } from "lucide-react"
+import { FolderDown, Folder } from "lucide-react"
 import { SettingsRow, MobileSectionHeader } from "./shared"
 import { useElectron } from "@/lib/hooks/useElectron"
 
@@ -40,7 +40,7 @@ export function LocalSyncSection({ isMobile }: LocalSyncSectionProps) {
 
   return (
     <div>
-      {isMobile && <MobileSectionHeader icon={FolderSync} label="Local Sync" />}
+      {isMobile && <MobileSectionHeader icon={FolderDown} label="Local Sync" />}
       <SettingsRow
         label="Backgrounder folder"
         description="Where repositories are synced on this computer for local testing. Stored on this device only."

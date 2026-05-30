@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FlaskConical, FolderSync } from "lucide-react"
+import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FlaskConical, FolderDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -58,7 +58,7 @@ const baseSections: SectionDef[] = [
   { key: "experimental", label: "Experimental", icon: FlaskConical },
 ]
 
-const localSyncSection: SectionDef = { key: "local-sync", label: "Local Sync", icon: FolderSync }
+const localSyncSection: SectionDef = { key: "local-sync", label: "Local Sync", icon: FolderDown }
 
 /** The "Local Sync" tab is desktop-only; the web app never shows it. */
 function getSections(isDesktopApp: boolean): SectionDef[] {
