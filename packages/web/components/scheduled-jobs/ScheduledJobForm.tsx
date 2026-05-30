@@ -2,27 +2,23 @@
 
 import { useState, useEffect, useMemo } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Clock, ChevronDown, X, Copy, RefreshCw, Check } from "lucide-react"
+import { Clock, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { RepoCombobox } from "@/components/chat/RepoCombobox"
 import { BranchCombobox } from "@/components/chat/BranchCombobox"
 import { McpServersCombobox } from "@/components/chat/McpServersCombobox"
+import { ScheduleEditor } from "@/components/scheduled-jobs/ScheduleEditor"
+import { WebhookUrlPanel } from "@/components/scheduled-jobs/WebhookUrlPanel"
+import { AgentModelControls } from "@/components/scheduled-jobs/AgentModelControls"
 import { type ScheduledJob } from "@/lib/scheduled-jobs/types"
-import { agentModels, agentLabels, getModelLabel, type Agent, NEW_REPOSITORY } from "@/lib/types"
-import { AgentIcon } from "@/components/icons/agent-icons"
+import { agentModels, type Agent, NEW_REPOSITORY } from "@/lib/types"
 import {
   getTimezoneName,
   localHourToUtc,
   inferIntervalMode,
   TRIGGER_TYPES,
-  INTERVAL_PRESETS,
-  CUSTOM_INTERVAL,
   UNIT_MINUTES,
-  INTERVAL_UNITS,
-  DAYS_OF_WEEK,
-  TIME_OPTIONS,
-  AVAILABLE_AGENTS,
   type IntervalUnit,
 } from "@/lib/scheduled-jobs/form-helpers"
 
@@ -79,18 +75,11 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   // them up before the user finishes; the final submit flips enabled back on.
   const [materializedJobId, setMaterializedJobId] = useState<string | null>(null)
 
-  // Dropdown state
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false)
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
-
   // Incoming-webhook URL state. The token comes from the saved job and can be
   // swapped out via the rotate-token endpoint without closing the modal.
   const [incomingToken, setIncomingToken] = useState<string | null>(job?.incomingToken ?? null)
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [rotating, setRotating] = useState(false)
-
-  // Get available models for selected agent
-  const availableModels = agentModels[agent] ?? []
 
   // Get timezone name for display
   const timezoneName = useMemo(() => getTimezoneName(), [])
@@ -150,19 +139,6 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
       setIncomingToken(crypto.randomUUID())
     }
   }, [triggerType, incomingToken])
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (!target.closest('[data-dropdown]')) {
-        setShowAgentDropdown(false)
-        setShowModelDropdown(false)
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [])
 
   /**
    * Build the request body for create/update from current form state.
@@ -395,16 +371,6 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
     }
   }
 
-  const handleAgentChange = (newAgent: Agent) => {
-    setAgent(newAgent)
-    setShowAgentDropdown(false)
-  }
-
-  const handleModelChange = (newModel: string) => {
-    setModel(newModel)
-    setShowModelDropdown(false)
-  }
-
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <Dialog.Portal>
@@ -477,156 +443,34 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
 
             {/* Schedule - only for scheduled trigger */}
             {triggerType === "interval" && (
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Run every</span>
-                  <select
-                    value={isCustomInterval ? CUSTOM_INTERVAL : intervalMinutes}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10)
-                      if (val === CUSTOM_INTERVAL) {
-                        // Seed custom inputs from the current preset so the
-                        // effective interval doesn't change just by toggling
-                        // into Custom mode.
-                        const mode = inferIntervalMode(intervalMinutes)
-                        setIsCustomInterval(true)
-                        setCustomIntervalValue(mode.customValue)
-                        setCustomIntervalUnit(mode.customUnit)
-                      } else {
-                        setIsCustomInterval(false)
-                        setIntervalMinutes(val)
-                      }
-                    }}
-                    className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {INTERVAL_PRESETS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                    <option value={CUSTOM_INTERVAL}>Custom…</option>
-                  </select>
-
-                  {isCustomInterval && (
-                    <>
-                      <input
-                        type="number"
-                        min={customIntervalUnit === "minutes" ? 10 : 1}
-                        step={1}
-                        value={customIntervalValue}
-                        onChange={(e) => {
-                          const n = parseInt(e.target.value, 10)
-                          setCustomIntervalValue(Number.isFinite(n) ? Math.max(1, n) : 1)
-                        }}
-                        className="w-16 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                      <select
-                        value={customIntervalUnit}
-                        onChange={(e) => setCustomIntervalUnit(e.target.value as IntervalUnit)}
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {INTERVAL_UNITS.map((u) => (
-                          <option key={u.value} value={u.value}>
-                            {u.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-
-                  {/* Day of week - only for exactly weekly */}
-                  {effectiveIntervalMinutes === 10080 && (
-                    <>
-                      <span className="text-muted-foreground">on</span>
-                      <select
-                        value={runAtDay}
-                        onChange={(e) => setRunAtDay(parseInt(e.target.value, 10))}
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {DAYS_OF_WEEK.map((d) => (
-                          <option key={d.value} value={d.value}>
-                            {d.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-
-                  {/* Time of day - for daily and weekly (preset or custom) */}
-                  {effectiveIntervalMinutes >= 1440 && (
-                    <>
-                      <span className="text-muted-foreground">at</span>
-                      <select
-                        value={runAtHourLocal}
-                        onChange={(e) => setRunAtHourLocal(parseInt(e.target.value, 10))}
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {TIME_OPTIONS.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-muted-foreground">{timezoneName}</span>
-                    </>
-                  )}
-                </div>
-
-                {isCustomInterval && effectiveIntervalMinutes < 10 && (
-                  <p className="text-xs text-destructive">
-                    Interval must be at least 10 minutes.
-                  </p>
-                )}
-              </div>
+              <ScheduleEditor
+                intervalMinutes={intervalMinutes}
+                isCustomInterval={isCustomInterval}
+                customIntervalValue={customIntervalValue}
+                customIntervalUnit={customIntervalUnit}
+                runAtDay={runAtDay}
+                runAtHourLocal={runAtHourLocal}
+                effectiveIntervalMinutes={effectiveIntervalMinutes}
+                timezoneName={timezoneName}
+                setIntervalMinutes={setIntervalMinutes}
+                setIsCustomInterval={setIsCustomInterval}
+                setCustomIntervalValue={setCustomIntervalValue}
+                setCustomIntervalUnit={setCustomIntervalUnit}
+                setRunAtDay={setRunAtDay}
+                setRunAtHourLocal={setRunAtHourLocal}
+              />
             )}
 
-            {/* Incoming webhook URL panel — shown only for incoming triggers.
-                The token is minted client-side as soon as the trigger is
-                picked, so the URL (with copy + rotate) renders immediately,
-                even before the job is saved. The fallback below only shows for
-                the brief moment before the mint effect runs. */}
+            {/* Incoming webhook URL panel — shown only for incoming triggers. */}
             {triggerType === "incoming" && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Webhook URL</label>
-
-                {incomingToken ? (
-                  <>
-                    <div className="flex items-stretch gap-1">
-                      <input
-                        type="text"
-                        readOnly
-                        value={incomingWebhookUrl}
-                        onFocus={(e) => e.currentTarget.select()}
-                        className="flex-1 min-w-0 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopyUrl}
-                        className="inline-flex items-center justify-center rounded-md border border-border bg-background px-2 hover:bg-accent transition-colors cursor-pointer"
-                        title={copiedUrl ? "Copied" : "Copy URL"}
-                      >
-                        {copiedUrl ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRotateToken}
-                        disabled={rotating}
-                        className="inline-flex items-center justify-center rounded-md border border-border bg-background px-2 hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
-                        title="Generate a new URL and invalidate the existing one"
-                      >
-                        <RefreshCw className={cn("h-3.5 w-3.5", rotating && "animate-spin")} />
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Anyone with this URL can fire this agent — rotate it if it leaks.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Preparing your webhook URL…
-                  </p>
-                )}
-              </div>
+              <WebhookUrlPanel
+                token={incomingToken}
+                url={incomingWebhookUrl}
+                copied={copiedUrl}
+                rotating={rotating}
+                onCopy={handleCopyUrl}
+                onRotate={handleRotateToken}
+              />
             )}
 
             {/* Prompt Field - styled like ChatInput */}
@@ -717,76 +561,13 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   {/* Spacer */}
                   <div className="flex-1" />
 
-                  {/* Agent selector */}
-                  <div className="relative" data-dropdown>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowAgentDropdown(!showAgentDropdown)
-                        setShowModelDropdown(false)
-                      }}
-                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title={agentLabels[agent]}
-                    >
-                      <AgentIcon agent={agent} className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{agentLabels[agent]}</span>
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                    {showAgentDropdown && (
-                      <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40">
-                        {AVAILABLE_AGENTS.map((a) => (
-                          <button
-                            key={a}
-                            type="button"
-                            onClick={() => handleAgentChange(a)}
-                            className={cn(
-                              "w-full text-left hover:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
-                              a === agent && "bg-accent"
-                            )}
-                          >
-                            <AgentIcon agent={a} className="h-3.5 w-3.5" />
-                            {agentLabels[a]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Model selector */}
-                  <div className="relative" data-dropdown>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowModelDropdown(!showModelDropdown)
-                        setShowAgentDropdown(false)
-                      }}
-                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title={getModelLabel(agent, model)}
-                    >
-                      <span className="hidden sm:inline">{getModelLabel(agent, model)}</span>
-                      <span className="sm:hidden">Model</span>
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                    {showModelDropdown && (
-                      <div className="absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52">
-                        {availableModels.map((m) => (
-                          <button
-                            key={m.value}
-                            type="button"
-                            onClick={() => handleModelChange(m.value)}
-                            className={cn(
-                              "w-full text-left hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer",
-                              m.value === model && "bg-accent"
-                            )}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {/* Agent + model pickers */}
+                  <AgentModelControls
+                    agent={agent}
+                    model={model}
+                    onAgentChange={setAgent}
+                    onModelChange={setModel}
+                  />
                 </div>
               </div>
             </div>
