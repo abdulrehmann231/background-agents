@@ -199,8 +199,9 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           // notifications fire. Each notify() consumes the flag.
           let soundPending = settings.notificationSound
 
-          // "Agent committed changes": a push delivered new commits.
-          if (settings.notifyOnAgentCommitted && data.push && data.push.commits > 0) {
+          // "Agent committed changes": the push advanced the remote. Gated on
+          // the push having happened, not on the (best-effort) commit count.
+          if (settings.notifyOnAgentCommitted && data.push) {
             const repo = notifyChat?.repo
             notifyPush({
               repo: repo && repo !== "__new__" ? repo : "",

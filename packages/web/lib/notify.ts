@@ -106,12 +106,14 @@ export function notifyPush(info: {
   sound?: boolean
 }): void {
   const { repo, branch, commits, commitSha, chatId, sound } = info
-  const plural = commits === 1 ? "commit" : "commits"
   const target = repo ? `${repo}@${branch}` : branch
   const shaSuffix = commitSha ? ` (${commitSha})` : ""
+  // `commits` is best-effort; show the count when known, otherwise a generic
+  // message (the push itself is confirmed by the git output).
+  const lead = commits > 0 ? `${commits} ${commits === 1 ? "commit" : "commits"} pushed` : "Changes pushed"
   notify({
     title: "New push",
-    body: `${commits} ${plural} pushed to ${target}${shaSuffix}`,
+    body: `${lead} to ${target}${shaSuffix}`,
     chatId,
     sound,
   })

@@ -59,7 +59,9 @@ async function autoPush(
   success: boolean
   error?: string
   skipped?: boolean
-  /** Number of commits this push actually delivered to the remote (0 = nothing new) */
+  /** True when the push actually advanced the remote (something was delivered) */
+  pushed?: boolean
+  /** Best-effort number of commits delivered (0 when unknown) */
   pushedCommits?: number
   branch?: string
   commitSha?: string
@@ -77,26 +79,30 @@ async function autoPush(
     )
     const branch = branchRes.result.trim()
 
-    // Count commits this push will deliver, measured BEFORE pushing.
-    // `HEAD --not --remotes=origin` = commits reachable from HEAD that are not
-    // yet on ANY origin remote-tracking branch — i.e. exactly what the push
-    // adds, regardless of branch name, new-vs-existing branch, or base branch.
-    // This must run before the push (the push advances origin/<branch>, which
-    // would then make the count 0).
-    const countRes = await sandbox.process.executeCommand(
-      `cd ${repoPath} && git rev-list --count HEAD --not --remotes=origin 2>/dev/null || echo 0`
-    )
-    const pushedCommits = parseInt(countRes.result.trim() || "0", 10) || 0
-
     const git = createSandboxGit(sandbox)
-    await git.push(repoPath, githubToken, { noVerify: options?.noVerify })
+    // The push result is the source of truth for "did anything get pushed":
+    // `--porcelain` reports whether the remote ref advanced or was up-to-date.
+    const pushResult = await git.push(repoPath, githubToken, { noVerify: options?.noVerify })
 
     const headRes = await sandbox.process.executeCommand(
       `cd ${repoPath} && git rev-parse --short HEAD 2>/dev/null || echo ""`
     )
     const commitSha = headRes.result.trim()
 
-    return { success: true, pushedCommits, branch, commitSha }
+    // Best-effort commit count for display. When the push reported an exact
+    // "<old>..<new>" range (existing branch), count that; otherwise fall back
+    // to commits not on any origin remote-tracking branch. Either way the
+    // notification is gated on `pushed`, not on this number.
+    let pushedCommits = 0
+    if (pushResult.updated) {
+      const range = pushResult.range ?? "HEAD --not --remotes=origin"
+      const countRes = await sandbox.process.executeCommand(
+        `cd ${repoPath} && git rev-list --count ${range} 2>/dev/null || echo 0`
+      )
+      pushedCommits = parseInt(countRes.result.trim() || "0", 10) || 0
+    }
+
+    return { success: true, pushed: pushResult.updated, pushedCommits, branch, commitSha }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
     return { success: false, error: message }
@@ -330,8 +336,8 @@ export async function GET(req: Request) {
                       true,
                       { action: "force-push" }
                     )
-                  } else if ((pushResult.pushedCommits ?? 0) > 0) {
-                    // The push actually contained commits — tell the client to notify.
+                  } else if (pushResult.pushed) {
+                    // The remote actually advanced — tell the client to notify.
                     pushInfo = {
                       branch: pushResult.branch || chat.branch,
                       commits: pushResult.pushedCommits ?? 0,
