@@ -179,6 +179,16 @@ async function remoteOid(dir: string, branch: string): Promise<string | null> {
   }
 }
 
+/** Whether a local branch ref already exists. */
+async function hasLocalBranch(dir: string, branch: string): Promise<boolean> {
+  try {
+    await git.resolveRef({ fs, dir, ref: `refs/heads/${branch}` });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Reconcile a local branch ref with an already-fetched remote oid.
  *
@@ -277,26 +287,34 @@ async function doOpenRepoFolder(
 
   fs.mkdirSync(settings.rootDirectory, { recursive: true });
 
-  const token = await getToken();
-  const onAuth = authCallback(token);
-
-  if (!isCloned(repo)) {
-    emitStatus(repo, "cloning");
-    fs.mkdirSync(dir, { recursive: true });
-    // singleBranch:false fetches every remote branch in one shot.
-    await git.clone({ fs, http, dir, url, singleBranch: false, onAuth });
-  } else {
-    // One fetch-all updates every remote-tracking ref (no per-branch round trips).
+  if (isCloned(repo)) {
+    // Already cloned — branches are kept fresh by push events, so opening is
+    // just a local checkout of the active chat's branch + reveal the folder.
+    // No network fetch here.
     emitStatus(repo, "syncing");
-    await git.fetch({ fs, http, dir, url, singleBranch: false, prune: true, tags: false, onAuth });
+    try {
+      if (activeBranch && (await hasLocalBranch(dir, activeBranch))) {
+        await safeCheckout(dir, activeBranch);
+      }
+    } catch (error) {
+      if (error instanceof DivergenceError) emitError(repo, activeBranch ?? "", error.message);
+      else throw error;
+    }
+    emitStatus(repo, "ready");
+    await shell.openPath(dir);
+    return;
   }
 
-  emitStatus(repo, "syncing");
+  // First open: clone (fetches every remote branch in one shot), then create a
+  // local ref for each agent branch that exists on origin — straight from the
+  // remote-tracking refs the clone populated, no extra network calls. Check out
+  // only the active one. Branches that never pushed are skipped quietly.
+  const token = await getToken();
+  emitStatus(repo, "cloning");
+  fs.mkdirSync(dir, { recursive: true });
+  await git.clone({ fs, http, dir, url, singleBranch: false, onAuth: authCallback(token) });
 
-  // Create/update a local ref for every agent branch that exists on origin,
-  // straight from the remote-tracking refs the clone/fetch just populated — no
-  // extra network calls. Check out only the active one. Branches that never
-  // pushed simply have no remote-tracking ref and are skipped quietly.
+  emitStatus(repo, "syncing");
   const wanted = Array.from(new Set(branches.filter(Boolean)));
   for (const branch of wanted) {
     const target = await remoteOid(dir, branch);
@@ -324,8 +342,14 @@ async function doSetActiveChat(repo: string, branch: string | null): Promise<voi
   const url = repoUrl(repo);
   emitStatus(repo, "syncing");
   try {
-    const token = await getToken();
-    await fetchAndReconcile(dir, url, token, branch, true);
+    if (await hasLocalBranch(dir, branch)) {
+      // Ref is kept fresh by push events — just switch the working tree locally.
+      await safeCheckout(dir, branch);
+    } else {
+      // First time we've seen this branch locally — fetch it once to self-heal.
+      const token = await getToken();
+      await fetchAndReconcile(dir, url, token, branch, true);
+    }
     emitStatus(repo, "ready");
   } catch (error) {
     handleOpError(repo, branch, error);
