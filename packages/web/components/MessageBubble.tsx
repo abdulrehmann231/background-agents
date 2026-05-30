@@ -135,6 +135,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
         icon={AlertTriangle}
         content={message.content || "Error"}
         variant="error"
+        redText
         isMobile={isMobile}
       />
     )

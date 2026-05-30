@@ -17,9 +17,12 @@ export interface SystemMessageProps {
   linkBranch?: string
   metadata?: MessageMetadata
   onForcePush?: () => void
+  /** Color the message text red to match the error icon. Used for agent errors
+   *  but not git errors (which keep the red icon with muted text). */
+  redText?: boolean
 }
 
-export function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch, metadata, onForcePush }: SystemMessageProps) {
+export function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch, metadata, onForcePush, redText = false }: SystemMessageProps) {
   const iconClasses = cn(
     "shrink-0",
     variant === "error" && "text-red-500 dark:text-red-400",
@@ -27,9 +30,9 @@ export function SystemMessage({ icon: Icon, content, variant = "success", isMobi
     isMobile ? "h-4 w-4" : "h-3.5 w-3.5"
   )
 
-  // Match the text colour to the (red) error icon; other variants keep the
-  // muted treatment.
-  const textClasses = variant === "error"
+  // Match the text colour to the (red) error icon only when explicitly opted in
+  // (agent errors); everything else keeps the muted treatment.
+  const textClasses = variant === "error" && redText
     ? "text-red-500 dark:text-red-400"
     : "text-muted-foreground"
 
