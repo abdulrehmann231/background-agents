@@ -282,6 +282,12 @@ export interface SSECompleteEvent {
     inMerge: boolean
     conflictedFiles: string[]
   }
+  /** Set when the post-completion auto-push transferred new commits to the remote */
+  push?: {
+    branch: string
+    commits: number
+    commitSha?: string
+  }
 }
 
 export interface SSEHeartbeatEvent {

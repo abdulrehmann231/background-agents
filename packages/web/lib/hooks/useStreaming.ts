@@ -13,6 +13,7 @@ import type { Chat, Message, SSEUpdateEvent, SSECompleteEvent } from "@/lib/type
 import { useStreamStore } from "@/lib/stores/stream-store"
 import { queryKeys } from "@/lib/query"
 import { fetchChat, toMessageType } from "@/lib/sync/api"
+import { notifyPush } from "@/lib/notify"
 
 const SSE_INITIAL_RETRY_DELAY = 1000
 const SSE_MAX_RETRY_DELAY = 30000
@@ -183,6 +184,20 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           // Notify about conflict state change
           if (data.conflictState && onConflictStateChangeRef.current) {
             onConflictStateChangeRef.current(data.conflictState)
+          }
+
+          // A new push containing commits landed — raise a notification
+          // (native OS notification on desktop, in-app toast on web).
+          if (data.push && data.push.commits > 0) {
+            const chats = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())
+            const repo = chats?.find((c) => c.id === chatId)?.repo
+            notifyPush({
+              repo: repo && repo !== "__new__" ? repo : "",
+              branch: data.push.branch,
+              commits: data.push.commits,
+              commitSha: data.push.commitSha,
+              chatId,
+            })
           }
 
           // Fetch any new messages created by the backend (delta sync)

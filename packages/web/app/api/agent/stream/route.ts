@@ -54,8 +54,16 @@ async function autoPush(
   sandbox: Awaited<ReturnType<Daytona["get"]>>,
   repoPath: string,
   githubToken: string,
-  options?: { noVerify?: boolean }
-): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
+  options?: { noVerify?: boolean; baseBranch?: string }
+): Promise<{
+  success: boolean
+  error?: string
+  skipped?: boolean
+  /** Number of commits this push actually delivered to the remote (0 = nothing new) */
+  pushedCommits?: number
+  branch?: string
+  commitSha?: string
+}> {
   try {
     // Skip auto-push if in conflict state (merge or rebase in progress)
     const inConflict = await isInConflictState(sandbox, repoPath)
@@ -63,9 +71,46 @@ async function autoPush(
       return { success: true, skipped: true }
     }
 
+    // Current branch name (best-effort).
+    const branchRes = await sandbox.process.executeCommand(
+      `cd ${repoPath} && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""`
+    )
+    const branch = branchRes.result.trim()
+
+    // Remote-tracking SHA *before* the push (empty if the branch isn't on the
+    // remote yet). `git push -u` advances this ref, so it must be read first.
+    const remoteBeforeRes = await sandbox.process.executeCommand(
+      `cd ${repoPath} && git rev-parse refs/remotes/origin/${branch} 2>/dev/null || echo ""`
+    )
+    const remoteBefore = remoteBeforeRes.result.trim()
+
     const git = createSandboxGit(sandbox)
-    await git.push(repoPath, githubToken, options)
-    return { success: true }
+    await git.push(repoPath, githubToken, { noVerify: options?.noVerify })
+
+    const headRes = await sandbox.process.executeCommand(
+      `cd ${repoPath} && git rev-parse --short HEAD 2>/dev/null || echo ""`
+    )
+    const commitSha = headRes.result.trim()
+
+    // Count the commits this push delivered. For an existing remote branch
+    // that's everything since the pre-push remote tip; for a brand-new branch
+    // it's everything since the base branch it was created from.
+    let range: string | null = null
+    if (remoteBefore) {
+      range = `${remoteBefore}..HEAD`
+    } else if (options?.baseBranch) {
+      range = `origin/${options.baseBranch}..HEAD`
+    }
+
+    let pushedCommits = 0
+    if (range) {
+      const countRes = await sandbox.process.executeCommand(
+        `cd ${repoPath} && git rev-list --count ${range} 2>/dev/null || echo 0`
+      )
+      pushedCommits = parseInt(countRes.result.trim() || "0", 10) || 0
+    }
+
+    return { success: true, pushedCommits, branch, commitSha }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
     return { success: false, error: message }
@@ -254,11 +299,15 @@ export async function GET(req: Request) {
             await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
 
+            // Populated when the auto-push below delivers new commits, so the
+            // client can raise a "new push" notification.
+            let pushInfo: { branch: string; commits: number; commitSha?: string } | undefined
+
             // Auto-push on successful completion if chat has a branch (GitHub repo)
             if (lastSnap.status === "completed" && chatId) {
               const chat = await prisma.chat.findUnique({
                 where: { id: chatId },
-                select: { branch: true, repo: true, userId: true },
+                select: { branch: true, repo: true, baseBranch: true, userId: true },
               })
 
               if (chat?.branch && chat.repo && chat.repo !== "__new__") {
@@ -284,7 +333,7 @@ export async function GET(req: Request) {
                     sandbox,
                     sessionOpts.repoPath,
                     account.access_token,
-                    { noVerify: !enablePrepushHooks }
+                    { noVerify: !enablePrepushHooks, baseBranch: chat.baseBranch ?? undefined }
                   )
 
                   if (!pushResult.success) {
@@ -295,6 +344,13 @@ export async function GET(req: Request) {
                       true,
                       { action: "force-push" }
                     )
+                  } else if ((pushResult.pushedCommits ?? 0) > 0) {
+                    // The push actually contained commits — tell the client to notify.
+                    pushInfo = {
+                      branch: pushResult.branch || chat.branch,
+                      commits: pushResult.pushedCommits ?? 0,
+                      commitSha: pushResult.commitSha,
+                    }
                   }
                 }
               }
@@ -333,6 +389,7 @@ export async function GET(req: Request) {
               error: lastSnap.error,
               cursor,
               conflictState,
+              push: pushInfo,
             })
             closeStream()
             return
