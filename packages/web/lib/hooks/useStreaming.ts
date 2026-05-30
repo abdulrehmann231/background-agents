@@ -13,6 +13,7 @@ import type { Chat, Message, SSEUpdateEvent, SSECompleteEvent } from "@/lib/type
 import { useStreamStore } from "@/lib/stores/stream-store"
 import { queryKeys } from "@/lib/query"
 import { fetchChat, toMessageType } from "@/lib/sync/api"
+import { notifyPush } from "@/lib/notify"
 
 const SSE_INITIAL_RETRY_DELAY = 1000
 const SSE_MAX_RETRY_DELAY = 30000
