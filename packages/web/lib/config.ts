@@ -3,7 +3,6 @@
  */
 
 export const APP_NAME = "Background Agents"
-export const APP_DESCRIPTION = "An AI coding agent chat interface"
 
 /**
  * Generate a page title with consistent formatting
