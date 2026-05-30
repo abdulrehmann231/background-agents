@@ -147,9 +147,12 @@ export function useRepoFolderButton(repo: string | undefined | null): FolderButt
     // Make sure the active chat's branch is in the set even if its chat row
     // isn't loaded into `chats` for some reason.
     if (activeBranch && !branches.includes(activeBranch)) branches.push(activeBranch)
-    setStatus(repo, "cloning")
+    // Optimistic feedback: only the very first open is a clone; re-clicks just
+    // refresh + re-open. (The main process emits the authoritative status next.)
+    const alreadyCloned = !!status && status.state !== "idle"
+    setStatus(repo, alreadyCloned ? "syncing" : "cloning")
     void api.openRepoFolder({ repo, branches, activeBranch })
-  }, [api, repo, chat, setStatus])
+  }, [api, repo, chat, setStatus, status])
 
   const state = status?.state ?? "idle"
   const busy = state === "cloning" || state === "syncing"
