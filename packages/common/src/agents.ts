@@ -145,6 +145,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode-go/glm-5.1", label: "GLM-5.1 (Go)", requiresKey: "opencode" },
     { value: "opencode-go/kimi-k2.5", label: "Kimi K2.5 (Go)", requiresKey: "opencode" },
     { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/mimo-v2.5", label: "MiMo v2.5 (Go)", requiresKey: "opencode" },
     { value: "opencode-go/mimo-v2.5-pro", label: "MiMo v2.5 Pro (Go)", requiresKey: "opencode" },
     { value: "opencode-go/minimax-m2.5", label: "MiniMax M2.5 (Go)", requiresKey: "opencode" },
     { value: "opencode-go/minimax-m2.7", label: "MiniMax M2.7 (Go)", requiresKey: "opencode" },
@@ -294,7 +295,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
 /** Default model per agent */
 export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "default",
-  "opencode": "opencode/big-pickle", // Free model, no API key needed
+  "opencode": "opencode-go/mimo-v2.5",
   "codex": "gpt-5.5",
   "copilot": "gpt-5-mini",
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
