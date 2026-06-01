@@ -70,6 +70,10 @@ export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // Free user has hit daily limit on shared Claude credentials. When true,
   // getDefaultAgent falls back to opencode even if shared pool is available.
   CLAUDE_DAILY_LIMIT_EXCEEDED?: boolean
+  // Whether the OPENCODE_API_KEY originates from the server environment (shared)
+  OPENCODE_API_KEY_SHARED?: boolean
+  // Whether the OPENCODE_API_KEY is a user-provided credential stored in DB
+  OPENCODE_API_KEY_USER?: boolean
 }
 export type Credentials = Partial<Record<CredentialId, string>>
 
@@ -93,6 +97,23 @@ export interface ModelOption {
   /** Which provider's API key is required for this model. "none" means no key needed. */
   requiresKey?: ProviderId | "none"
 }
+
+/** Models allowed to run on the server-shared OpenCode API key */
+const SHARED_OPENCODE_ALLOWED = new Set<string>([
+  "opencode/glm-5",
+  "opencode/glm-5.1",
+  "opencode/kimi-k2.5",
+  "opencode/kimi-k2.6",
+  "opencode/mimo-v2.5",
+  "opencode/mimo-v2.5-pro",
+  "opencode/minimax-m2.5",
+  "opencode/minimax-m2.7",
+  "opencode/minimax-m3",
+  "opencode/qwen3-6-plus",
+  "opencode/qwen3-7-max",
+  "opencode/deepseek-v4-pro",
+  "opencode/deepseek-v4-flash",
+])
 
 export const agentModels: Record<Agent, ModelOption[]> = {
   "claude-code": [
@@ -324,6 +345,16 @@ export function hasCredentialsForModel(
     }
     return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE)
   }
+  if (model.requiresKey === "opencode") {
+    // If the user has their own stored OpenCode key, allow all opencode models
+    if (flags?.OPENCODE_API_KEY_USER) return true
+    // If only the server-shared key is available, allow only a curated subset
+    if (flags?.OPENCODE_API_KEY_SHARED) {
+      return SHARED_OPENCODE_ALLOWED.has(model.value)
+    }
+    return false
+  }
+
   return PROVIDER_ENV[model.requiresKey].some((id) => flags?.[id])
 }
 
