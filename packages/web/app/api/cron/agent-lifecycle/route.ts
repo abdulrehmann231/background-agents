@@ -2,6 +2,7 @@ import { Daytona } from "@daytonaio/sdk"
 import { addMinutes, differenceInMinutes } from "date-fns"
 
 import { prisma } from "@/lib/db/prisma"
+import { resetDbMetrics, getDbMetrics } from "@/lib/db/metrics"
 
 import { INTERACTIVE_HARD_TIMEOUT, SCHEDULED_HARD_TIMEOUT } from "./_lib/constants"
 import { monitorAgent, stopAgent } from "./_lib/monitor"
@@ -35,6 +36,10 @@ export async function GET(req: Request) {
 
   const now = new Date()
   const daytona = new Daytona({ apiKey: daytonaApiKey })
+
+  // Diagnostic: measure how many reads vs. durable writes this tick performs,
+  // to decide whether offloading hot polling to Redis would let Neon sleep.
+  resetDbMetrics()
 
   const results = {
     dispatchedJobs: 0,
@@ -200,5 +205,15 @@ export async function GET(req: Request) {
     results.errors.push(`Top-level error: ${err}`)
   }
 
-  return Response.json(results)
+  // Diagnostic: report this tick's DB activity. A tick with writes === 0 is one
+  // a Redis/Daytona design could have served without waking Neon. Grep logs for
+  // "[db-metrics]" and compare neonRequired=false vs true across many ticks.
+  const db = getDbMetrics()
+  const neonRequired = db.writes > 0
+  console.log(
+    `[db-metrics] reads=${db.reads} writes=${db.writes} ` +
+      `neonRequired=${neonRequired} ops=${JSON.stringify(db.byOp)}`
+  )
+
+  return Response.json({ ...results, db: { ...db, neonRequired } })
 }
