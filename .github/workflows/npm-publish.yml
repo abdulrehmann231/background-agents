@@ -39,7 +39,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Publishing background-agents@${VERSION}"
-          npm version "${VERSION}" --no-git-tag-version -w background-agents
+          npm version "${VERSION}" --no-git-tag-version --allow-same-version -w background-agents
 
       - name: Publish to npm
         run: npm publish -w background-agents --access public
