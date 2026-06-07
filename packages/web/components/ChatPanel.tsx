@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react"
-import { Github, HelpCircle, Plus, X, Command } from "lucide-react"
+import { Github, HelpCircle, Plus, X, Command, ArrowDown } from "lucide-react"
 import { ErrorBanner, FilePreviewModal, ChatHeader, MobileConflictBar, ChatInput } from "./chat"
 import { cn } from "@/lib/utils"
 import { useModals, useGit } from "@/lib/contexts"
@@ -18,6 +18,8 @@ interface ChatPanelProps {
   credentialFlags: CredentialFlags
   showClaudeLimitDialog: () => void
   onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
+  /** Refresh the chat history after the SSE stream died (status === "disconnected"). */
+  onReload?: (chatId: string) => Promise<void> | void
   onEnqueueMessage?: (message: string, agent?: string, model?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => void
@@ -50,7 +52,7 @@ interface ChatPanelProps {
   rapidFireNotification?: number
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, rapidFireMode = false, rapidFireNotification = 0 }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, rapidFireMode = false, rapidFireNotification = 0 }: ChatPanelProps) {
   // Get modal and git state from contexts
   const modals = useModals()
   const git = useGit()
@@ -600,6 +602,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       )}
 
       {/* Messages */}
+      <div className="relative flex-1 flex flex-col min-h-0">
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
@@ -635,15 +638,48 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
               ...
             </div>
           )}
-          {/* Surface the latest agent/streaming error inline so users see why
-              their last run stopped. Cleared on the next send. */}
-          {chat.status === "error" && chat.errorMessage && (
+          {/* Surface the latest agent/streaming failure inline so users see why
+              their last run stopped. Cleared on the next send.
+
+              Two distinct failure modes, distinguished by chat.status:
+              - "error": the agent itself errored. The Retry action resends the
+                last user message — note this leaves the previously-failed
+                assistant turn in the history (the user can see what failed) and
+                doesn't re-attach any originally-uploaded files (those File
+                objects are no longer in memory).
+              - "disconnected": the SSE stream died before the turn finished. The
+                agent may still be running in the background, so the action is
+                Reload (refresh the chat history) rather than resending. */}
+          {chat.status === "disconnected" && (
             <ErrorBanner
               key={chat.id}
-              message={chat.errorMessage}
+              message={chat.errorMessage || "Connection to the agent was lost."}
               isMobile={isMobile}
+              onRetry={onReload ? () => onReload(chat.id) : undefined}
+              actionLabel="Reload"
+              actionPendingLabel="Reloading…"
             />
           )}
+          {chat.status === "error" && chat.errorMessage && (() => {
+            const lastUserMessage = [...chat.messages].reverse().find((m) => m.role === "user")
+            const onRetry = lastUserMessage
+              ? () => onSendMessage(
+                  lastUserMessage.content,
+                  (lastUserMessage.agent ?? currentAgent) as string,
+                  lastUserMessage.model ?? currentModel,
+                  undefined,
+                  planModeEnabled,
+                )
+              : undefined
+            return (
+              <ErrorBanner
+                key={chat.id}
+                message={chat.errorMessage}
+                isMobile={isMobile}
+                onRetry={onRetry}
+              />
+            )
+          })()}
           {/* Queue shelf — lives at the bottom of the scroll area so it
               scrolls out of view with the conversation. */}
           {chat.queuedMessages && chat.queuedMessages.length > 0 && (
@@ -682,6 +718,23 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
           )}
           <div ref={messagesEndRef} />
         </div>
+      </div>
+        {/* Floating scroll-to-bottom button — only shown when the user has
+            scrolled away from the bottom of the conversation. */}
+        {userHasScrolledUp && (
+          <button
+            type="button"
+            onClick={() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+              setUserHasScrolledUp(false)
+            }}
+            aria-label="Scroll to bottom"
+            title="Scroll to bottom"
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 h-9 w-9 flex items-center justify-center rounded-full border border-border bg-background/80 shadow-md text-foreground/70 hover:text-foreground hover:bg-background transition-colors cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-150"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Input - fixed at bottom on mobile */}

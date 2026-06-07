@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FlaskConical } from "lucide-react"
+import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FlaskConical, FolderDown, Bell } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -18,6 +18,8 @@ import {
   GeneralSection,
   ApiKeysSection,
   GitSection,
+  NotificationsSection,
+  LocalSyncSection,
   AppearanceSection,
   ExperimentalSection,
   initialCredValues,
@@ -29,7 +31,7 @@ import {
 export type { HighlightKey }
 
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "git" | "appearance" | "experimental"
+export type SectionKey = "general" | "api-keys" | "git" | "notifications" | "local-sync" | "appearance" | "experimental"
 
 interface SettingsModalProps {
   open: boolean
@@ -47,17 +49,34 @@ interface SettingsModalProps {
   isMobile?: boolean
 }
 
-const sections: { key: SectionKey; label: string; icon: typeof Bot }[] = [
+type SectionDef = { key: SectionKey; label: string; icon: typeof Bot }
+
+const baseSections: SectionDef[] = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "api-keys", label: "API Keys", icon: Key },
-  { key: "git", label: "Git", icon: GitBranch },
   { key: "appearance", label: "Appearance", icon: Sun },
+  { key: "git", label: "Git", icon: GitBranch },
+  { key: "notifications", label: "Notifications", icon: Bell },
   { key: "experimental", label: "Experimental", icon: FlaskConical },
 ]
+
+const localSyncSection: SectionDef = { key: "local-sync", label: "Local Sync", icon: FolderDown }
+
+/** The "Local Sync" tab is desktop-only; the web app never shows it. */
+function getSections(isDesktopApp: boolean): SectionDef[] {
+  if (!isDesktopApp) return baseSections
+  const out = [...baseSections]
+  const gitIndex = out.findIndex((s) => s.key === "git")
+  out.splice(gitIndex + 1, 0, localSyncSection)
+  return out
+}
 
 export function SettingsModal({ open, onClose, settings, credentialFlags, onSave, highlightKey, defaultSection = "general", isMobile = false }: SettingsModalProps) {
   const { setTheme } = useTheme()
   const { isDesktopApp, getClaudeLicenseAutoDetect, getLicenseDetectSettings, setLicenseDetectSettings } = useElectron()
+
+  // The "Local Sync" tab only exists in the desktop app.
+  const sections = useMemo(() => getSections(isDesktopApp), [isDesktopApp])
 
   // License auto-detect state (desktop only)
   const [licenseAutoDetectEnabled, setLicenseAutoDetectEnabled] = useState(true)
@@ -97,6 +116,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   const [selectedTheme, setSelectedTheme] = useState<Theme>(settings.theme)
   const [rapidFireMode, setRapidFireMode] = useState(settings.rapidFireMode)
   const [enablePrepushHooks, setEnablePrepushHooks] = useState(settings.enablePrepushHooks)
+  const [notifyOnAgentFinished, setNotifyOnAgentFinished] = useState(settings.notifyOnAgentFinished)
+  const [notifyOnAgentCommitted, setNotifyOnAgentCommitted] = useState(settings.notifyOnAgentCommitted)
+  const [notificationSound, setNotificationSound] = useState(settings.notificationSound)
   const [activeSection, setActiveSection] = useState<SectionKey>(defaultSection)
 
   // Drag to dismiss (mobile only)
@@ -124,6 +146,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
       setSelectedTheme(settings.theme)
       setRapidFireMode(settings.rapidFireMode)
       setEnablePrepushHooks(settings.enablePrepushHooks)
+      setNotifyOnAgentFinished(settings.notifyOnAgentFinished)
+      setNotifyOnAgentCommitted(settings.notifyOnAgentCommitted)
+      setNotificationSound(settings.notificationSound)
       setActiveSection(defaultSection)
     }
   }, [open, settings, credentialFlags, initialDefaultAgent, initialDefaultModel, defaultSection])
@@ -225,7 +250,10 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     defaultModel !== initialDefaultModel ||
     selectedTheme !== settings.theme ||
     rapidFireMode !== settings.rapidFireMode ||
-    enablePrepushHooks !== settings.enablePrepushHooks
+    enablePrepushHooks !== settings.enablePrepushHooks ||
+    notifyOnAgentFinished !== settings.notifyOnAgentFinished ||
+    notifyOnAgentCommitted !== settings.notifyOnAgentCommitted ||
+    notificationSound !== settings.notificationSound
 
   // Check if auto-detected credentials should be saved (desktop only)
   const autoDetectHasNewCredentials = isDesktopApp &&
@@ -245,6 +273,9 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     if (selectedTheme !== settings.theme) settingsPatch.theme = selectedTheme
     if (rapidFireMode !== settings.rapidFireMode) settingsPatch.rapidFireMode = rapidFireMode
     if (enablePrepushHooks !== settings.enablePrepushHooks) settingsPatch.enablePrepushHooks = enablePrepushHooks
+    if (notifyOnAgentFinished !== settings.notifyOnAgentFinished) settingsPatch.notifyOnAgentFinished = notifyOnAgentFinished
+    if (notifyOnAgentCommitted !== settings.notifyOnAgentCommitted) settingsPatch.notifyOnAgentCommitted = notifyOnAgentCommitted
+    if (notificationSound !== settings.notificationSound) settingsPatch.notificationSound = notificationSound
 
     // Only send credential fields the user actually changed. Sending the
     // mask back ("***") would otherwise overwrite the real key.
@@ -342,6 +373,20 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             setEnablePrepushHooks={setEnablePrepushHooks}
           />
         )
+      case "notifications":
+        return (
+          <NotificationsSection
+            isMobile={isMobile}
+            notifyOnAgentFinished={notifyOnAgentFinished}
+            setNotifyOnAgentFinished={setNotifyOnAgentFinished}
+            notifyOnAgentCommitted={notifyOnAgentCommitted}
+            setNotifyOnAgentCommitted={setNotifyOnAgentCommitted}
+            notificationSound={notificationSound}
+            setNotificationSound={setNotificationSound}
+          />
+        )
+      case "local-sync":
+        return <LocalSyncSection isMobile={isMobile} />
       case "appearance":
         return (
           <AppearanceSection
@@ -377,7 +422,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile
               ? "inset-x-0 bottom-0 top-0 rounded-none"
-              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl h-[600px] max-h-[85vh] border border-border rounded-xl shadow-xl",
+              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl h-[600px] max-h-[85vh] border border-border rounded-xl shadow-xl",
             !isDragging && isMobile && "transition-transform duration-300"
           )}
           style={isMobile ? {

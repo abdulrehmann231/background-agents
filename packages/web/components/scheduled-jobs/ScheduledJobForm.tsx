@@ -1,50 +1,18 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Clock, ChevronDown, X } from "lucide-react"
+import { Clock, ChevronDown, X, Copy, RefreshCw, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { RepoCombobox } from "@/components/chat/RepoCombobox"
 import { BranchCombobox } from "@/components/chat/BranchCombobox"
 import { McpServersCombobox } from "@/components/chat/McpServersCombobox"
 import { type ScheduledJob } from "@/lib/scheduled-jobs/types"
-import { agentModels, agentLabels, getModelLabel, type Agent, NEW_REPOSITORY } from "@/lib/types"
+import { agentLabels, getModelLabel } from "@/lib/types"
 import { AgentIcon } from "@/components/icons/agent-icons"
-
-// =============================================================================
-// Timezone Helpers
-// =============================================================================
-
-/** Get the user's timezone offset in hours (e.g., -8 for PST) */
-function getTimezoneOffset(): number {
-  return -new Date().getTimezoneOffset() / 60
-}
-
-/** Get short timezone name (e.g., "PST", "EST") */
-function getTimezoneName(): string {
-  return new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
-    .formatToParts(new Date())
-    .find(part => part.type === 'timeZoneName')?.value ?? 'Local'
-}
-
-/** Convert local hour (0-23) to UTC hour */
-function localHourToUtc(localHour: number): number {
-  const offset = getTimezoneOffset()
-  let utcHour = localHour - offset
-  if (utcHour < 0) utcHour += 24
-  if (utcHour >= 24) utcHour -= 24
-  return Math.floor(utcHour)
-}
-
-/** Convert UTC hour (0-23) to local hour */
-function utcHourToLocal(utcHour: number): number {
-  const offset = getTimezoneOffset()
-  let localHour = utcHour + offset
-  if (localHour < 0) localHour += 24
-  if (localHour >= 24) localHour -= 24
-  return Math.floor(localHour)
-}
+import { ScheduleFields } from "@/components/scheduled-jobs/ScheduleFields"
+import { TRIGGER_TYPES, AVAILABLE_AGENTS } from "@/components/scheduled-jobs/form-config"
+import { useScheduledJobForm } from "@/lib/hooks/useScheduledJobForm"
 
 // =============================================================================
 // Types
@@ -59,402 +27,67 @@ interface ScheduledJobFormProps {
 }
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-const TRIGGER_TYPES = [
-  {
-    label: "On a schedule",
-    value: "interval",
-    description: "Run at regular intervals"
-  },
-  {
-    label: "When CI/CD fails",
-    value: "webhook",
-    description: "Triggered by GitHub Actions failure"
-  },
-] as const
-
-const INTERVAL_PRESETS = [
-  { label: "10 minutes", value: 10 },
-  { label: "15 minutes", value: 15 },
-  { label: "30 minutes", value: 30 },
-  { label: "Hour", value: 60 },
-  { label: "6 hours", value: 360 },
-  { label: "Day", value: 1440 },
-  { label: "Week", value: 10080 },
-]
-
-const CUSTOM_INTERVAL = -1
-
-type IntervalUnit = "minutes" | "hours" | "days" | "weeks"
-
-const UNIT_MINUTES: Record<IntervalUnit, number> = {
-  minutes: 1,
-  hours: 60,
-  days: 1440,
-  weeks: 10080,
-}
-
-const INTERVAL_UNITS: { label: string; value: IntervalUnit }[] = [
-  { label: "minutes", value: "minutes" },
-  { label: "hours", value: "hours" },
-  { label: "days", value: "days" },
-  { label: "weeks", value: "weeks" },
-]
-
-/** Express a stored intervalMinutes as either a preset or a (value, unit) pair. */
-function inferIntervalMode(minutes: number): {
-  isCustom: boolean
-  intervalMinutes: number
-  customValue: number
-  customUnit: IntervalUnit
-} {
-  if (INTERVAL_PRESETS.some((p) => p.value === minutes)) {
-    return { isCustom: false, intervalMinutes: minutes, customValue: 10, customUnit: "minutes" }
-  }
-  if (minutes % 10080 === 0) {
-    return { isCustom: true, intervalMinutes: minutes, customValue: minutes / 10080, customUnit: "weeks" }
-  }
-  if (minutes % 1440 === 0) {
-    return { isCustom: true, intervalMinutes: minutes, customValue: minutes / 1440, customUnit: "days" }
-  }
-  if (minutes % 60 === 0) {
-    return { isCustom: true, intervalMinutes: minutes, customValue: minutes / 60, customUnit: "hours" }
-  }
-  return { isCustom: true, intervalMinutes: minutes, customValue: minutes, customUnit: "minutes" }
-}
-
-const DAYS_OF_WEEK = [
-  { label: "Monday", value: 1 },
-  { label: "Tuesday", value: 2 },
-  { label: "Wednesday", value: 3 },
-  { label: "Thursday", value: 4 },
-  { label: "Friday", value: 5 },
-  { label: "Saturday", value: 6 },
-  { label: "Sunday", value: 0 },
-]
-
-const TIME_OPTIONS = [
-  { label: "12:00 AM", value: 0 },
-  { label: "1:00 AM", value: 1 },
-  { label: "2:00 AM", value: 2 },
-  { label: "3:00 AM", value: 3 },
-  { label: "4:00 AM", value: 4 },
-  { label: "5:00 AM", value: 5 },
-  { label: "6:00 AM", value: 6 },
-  { label: "7:00 AM", value: 7 },
-  { label: "8:00 AM", value: 8 },
-  { label: "9:00 AM", value: 9 },
-  { label: "10:00 AM", value: 10 },
-  { label: "11:00 AM", value: 11 },
-  { label: "12:00 PM", value: 12 },
-  { label: "1:00 PM", value: 13 },
-  { label: "2:00 PM", value: 14 },
-  { label: "3:00 PM", value: 15 },
-  { label: "4:00 PM", value: 16 },
-  { label: "5:00 PM", value: 17 },
-  { label: "6:00 PM", value: 18 },
-  { label: "7:00 PM", value: 19 },
-  { label: "8:00 PM", value: 20 },
-  { label: "9:00 PM", value: 21 },
-  { label: "10:00 PM", value: 22 },
-  { label: "11:00 PM", value: 23 },
-]
-
-const AVAILABLE_AGENTS: Agent[] = ["opencode", "claude-code", "codex"]
-
-// =============================================================================
 // Component
 // =============================================================================
 
 export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = false }: ScheduledJobFormProps) {
-  const isEditing = !!job
-
-  // Form state
-  const [name, setName] = useState(job?.name ?? "")
-  const [prompt, setPrompt] = useState(job?.prompt ?? "")
-  // Empty string means "no repo" in form state; on submit we send NEW_REPOSITORY.
-  const [repo, setRepo] = useState(
-    job?.repo && job.repo !== NEW_REPOSITORY ? job.repo : ""
-  )
-  const [baseBranch, setBaseBranch] = useState(job?.baseBranch ?? "main")
-  const isRepoLess = !repo
-  const [agent, setAgent] = useState<Agent>((job?.agent as Agent) ?? "opencode")
-  const [model, setModel] = useState(job?.model ?? "")
-  const [triggerType, setTriggerType] = useState<"interval" | "webhook">(job?.triggerType ?? "interval")
-  const initialIntervalMode = inferIntervalMode(job?.intervalMinutes ?? 1440)
-  const [intervalMinutes, setIntervalMinutes] = useState(initialIntervalMode.intervalMinutes)
-  const [isCustomInterval, setIsCustomInterval] = useState(initialIntervalMode.isCustom)
-  const [customIntervalValue, setCustomIntervalValue] = useState(initialIntervalMode.customValue)
-  const [customIntervalUnit, setCustomIntervalUnit] = useState<IntervalUnit>(initialIntervalMode.customUnit)
-  const [runAtHourLocal, setRunAtHourLocal] = useState(9) // Local time, default to 9 AM
-  const [runAtDay, setRunAtDay] = useState(1) // Default to Monday
-  const [autoPR, setAutoPR] = useState(job?.autoPR ?? true)
-  const [continueFromLastRun, setContinueFromLastRun] = useState(job?.continueFromLastRun ?? false)
-
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // In create mode, the form may "materialize" the job into the DB the first
-  // time the user clicks the MCP picker, so MCP server connections have a real
-  // job id to hang off of. If the user then cancels, we DELETE the row so we
-  // don't leave a half-configured job behind. On final submit this id is what
-  // we PATCH (instead of POSTing again).
-  // Materialized rows are created with enabled: false so the cron doesn't pick
-  // them up before the user finishes; the final submit flips enabled back on.
-  const [materializedJobId, setMaterializedJobId] = useState<string | null>(null)
-
-  // Once we materialize, the trigger/schedule fields lock — the PATCH endpoint
-  // doesn't accept triggerType / runAtHour / runAtDay, so allowing edits after
-  // materialize would silently drop changes. Cancelling resets via DELETE.
-  const isLocked = isEditing || !!materializedJobId
-
-  // Dropdown state
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false)
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
-
-  // Get available models for selected agent
-  const availableModels = agentModels[agent] ?? []
-
-  // Get timezone name for display
-  const timezoneName = useMemo(() => getTimezoneName(), [])
-
-  // What we actually send to the API (preset value, or custom value × unit).
-  const effectiveIntervalMinutes = isCustomInterval
-    ? Math.max(1, Math.floor(customIntervalValue || 0) * UNIT_MINUTES[customIntervalUnit])
-    : intervalMinutes
-
-  // Reset form state when job prop changes or modal opens
-  useEffect(() => {
-    if (open) {
-      const initialAgent = (job?.agent as Agent) ?? "opencode"
-      const initialModels = agentModels[initialAgent] ?? []
-      setName(job?.name ?? "")
-      setPrompt(job?.prompt ?? "")
-      setRepo(job?.repo && job.repo !== NEW_REPOSITORY ? job.repo : "")
-      setBaseBranch(job?.baseBranch ?? "main")
-      setAgent(initialAgent)
-      setModel(job?.model ?? initialModels[0]?.value ?? "")
-      setTriggerType(job?.triggerType ?? "interval")
-      const mode = inferIntervalMode(job?.intervalMinutes ?? 1440)
-      setIntervalMinutes(mode.intervalMinutes)
-      setIsCustomInterval(mode.isCustom)
-      setCustomIntervalValue(mode.customValue)
-      setCustomIntervalUnit(mode.customUnit)
-      setRunAtHourLocal(9)
-      setRunAtDay(1)
-      setAutoPR(job?.autoPR ?? true)
-      setContinueFromLastRun(job?.continueFromLastRun ?? false)
-      setError(null)
-      setMaterializedJobId(null)
-    }
-  }, [open, job])
-
-  // Update model when agent changes
-  useEffect(() => {
-    const models = agentModels[agent] ?? []
-    if (models.length > 0 && !models.find(m => m.value === model)) {
-      setModel(models[0].value)
-    }
-  }, [agent, model])
-
-  // Webhook triggers require a real GitHub repo — snap back to interval if the
-  // user clears the repo while webhook was selected.
-  useEffect(() => {
-    if (isRepoLess && triggerType === "webhook") {
-      setTriggerType("interval")
-    }
-  }, [isRepoLess, triggerType])
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (!target.closest('[data-dropdown]')) {
-        setShowAgentDropdown(false)
-        setShowModelDropdown(false)
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [])
-
-  /**
-   * Build the request body for create/update from current form state.
-   * Returns `null` and sets the visible error if required fields are missing.
-   */
-  function buildPayload(): Record<string, unknown> | null {
-    if (!name.trim()) {
-      setError("Name is required")
-      return null
-    }
-    if (!prompt.trim()) {
-      setError("Prompt is required")
-      return null
-    }
-    if (isRepoLess && triggerType === "webhook") {
-      setError("Webhook triggers require a repository")
-      return null
-    }
-    if (triggerType === "interval" && effectiveIntervalMinutes < 10) {
-      setError("Interval must be at least 10 minutes")
-      return null
-    }
-    const runAtHourUtc = localHourToUtc(runAtHourLocal)
-    return {
-      name: name.trim(),
-      prompt: prompt.trim(),
-      // Empty form value means repo-less; send the NEW_REPOSITORY sentinel so
-      // the backend can route through its existing no-clone sandbox path.
-      repo: repo || NEW_REPOSITORY,
-      baseBranch,
-      agent,
-      model: model || null,
-      triggerType,
-      intervalMinutes: triggerType === "interval" ? effectiveIntervalMinutes : undefined,
-      runAtHour: triggerType === "interval" && effectiveIntervalMinutes >= 1440 ? runAtHourUtc : undefined,
-      runAtDay: triggerType === "interval" && effectiveIntervalMinutes === 10080 ? runAtDay : undefined,
-      // Auto-PR has nothing to push to in repo-less mode.
-      autoPR: isRepoLess ? false : autoPR,
-      continueFromLastRun,
-    }
-  }
-
-  /**
-   * Materialize callback for the MCP picker — fired on the first MCP click
-   * during create mode. POSTs the job (with enabled: false so the cron won't
-   * pick it up mid-config) and returns the new id to the picker. Uses
-   * placeholders for name/prompt if the user hasn't typed them yet; the
-   * final-submit validation in handleSubmit enforces real values before the
-   * row goes live. The form stays open and continues acting like create mode
-   * until the user hits "Create" (PATCH to flip enabled on) or "Cancel"
-   * (DELETE the row).
-   *
-   * Only allowed for interval-triggered jobs — webhook jobs require a real
-   * GitHub webhook setup at create time, which can't be deferred.
-   */
-  async function materializeJob(_draftId: string): Promise<string | null> {
-    setError(null)
-    if (triggerType === "webhook") {
-      setError("Save the job first to attach MCP servers to webhook-triggered jobs.")
-      return null
-    }
-    try {
-      const res = await fetch("/api/scheduled-jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Placeholders only exist on disk while isDraft = true. They're never
-          // shown in the UI list (the GET filters drafts out) and the cron
-          // skips drafts. The final submit PATCH replaces them with real
-          // values before flipping isDraft to false.
-          name: name.trim() || "(draft)",
-          prompt: prompt.trim() || "(draft)",
-          // Drafts default to the repo-less sentinel so the row passes the
-          // backend's repo check before the user fills the form in fully.
-          repo: repo || NEW_REPOSITORY,
-          baseBranch: baseBranch || "main",
-          agent,
-          model: model || null,
-          triggerType: "interval",
-          intervalMinutes: effectiveIntervalMinutes,
-          autoPR,
-          continueFromLastRun,
-          enabled: false,
-          isDraft: true,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        setError(data.error || "Failed to save job")
-        return null
-      }
-      const created = await res.json()
-      setMaterializedJobId(created.id)
-      return created.id
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save job")
-      return null
-    }
-  }
-
-  // Handle form submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    const payload = buildPayload()
-    if (!payload) return
-
-    setLoading(true)
-
-    try {
-      const targetId = materializedJobId ?? job?.id
-      const isUpdate = !!targetId
-      const url = isUpdate
-        ? `/api/scheduled-jobs/${targetId}`
-        : "/api/scheduled-jobs"
-      const method = isUpdate ? "PATCH" : "POST"
-
-      // For materialized rows we created with enabled: false + isDraft: true;
-      // promote both on final Create. For real edits, we leave existing state
-      // alone.
-      const body =
-        materializedJobId && !isEditing
-          ? { ...payload, enabled: true, isDraft: false }
-          : payload
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to save job")
-      }
-
-      const savedJob = await res.json()
-      // Clear the materialized marker so the close handler doesn't try to
-      // delete what we just successfully saved.
-      setMaterializedJobId(null)
-      onSuccess(savedJob)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save job")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  /**
-   * Close handler: if we materialized a job in create mode and the user is
-   * walking away without saving, drop the row so we don't leak draft jobs.
-   * Best-effort — even if cleanup fails we still close the modal.
-   */
-  const handleClose = async () => {
-    if (materializedJobId && !isEditing) {
-      const idToDelete = materializedJobId
-      setMaterializedJobId(null)
-      try {
-        await fetch(`/api/scheduled-jobs/${idToDelete}`, { method: "DELETE" })
-      } catch (err) {
-        console.error("[ScheduledJobForm] cleanup delete failed:", err)
-      }
-    }
-    onClose()
-  }
-
-  const handleAgentChange = (newAgent: Agent) => {
-    setAgent(newAgent)
-    setShowAgentDropdown(false)
-  }
-
-  const handleModelChange = (newModel: string) => {
-    setModel(newModel)
-    setShowModelDropdown(false)
-  }
+  const {
+    isEditing,
+    jobId,
+    name,
+    prompt,
+    repo,
+    baseBranch,
+    isRepoLess,
+    agent,
+    model,
+    triggerType,
+    intervalMinutes,
+    isCustomInterval,
+    customIntervalValue,
+    customIntervalUnit,
+    runAtHourLocal,
+    runAtDay,
+    autoPR,
+    continueFromLastRun,
+    loading,
+    error,
+    materializedJobId,
+    showAgentDropdown,
+    showModelDropdown,
+    incomingToken,
+    copiedUrl,
+    rotating,
+    availableModels,
+    timezoneName,
+    effectiveIntervalMinutes,
+    showContinueOption,
+    showAutoPROption,
+    hasOptions,
+    incomingWebhookUrl,
+    setName,
+    setPrompt,
+    setRepo,
+    setBaseBranch,
+    setTriggerType,
+    setIntervalMinutes,
+    setIsCustomInterval,
+    setCustomIntervalValue,
+    setCustomIntervalUnit,
+    setRunAtHourLocal,
+    setRunAtDay,
+    setAutoPR,
+    setContinueFromLastRun,
+    setShowAgentDropdown,
+    setShowModelDropdown,
+    materializeJob,
+    handleSubmit,
+    handleClose,
+    handleCopyUrl,
+    handleRotateToken,
+    handleAgentChange,
+    handleModelChange,
+  } = useScheduledJobForm({ open, job, onClose, onSuccess })
 
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -502,140 +135,94 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               />
             </div>
 
-            {/* Trigger Type - Segmented Control */}
+            {/* Trigger Type - Segmented Control. Always editable — PATCH
+                handles the swap for both still-open drafts and existing
+                jobs. */}
             <div>
               <label className="block text-sm font-medium mb-2">Trigger</label>
-              <div className={cn(
-                "inline-flex rounded-md bg-muted p-0.5",
-                isLocked && "opacity-50"
-              )}>
-                {TRIGGER_TYPES.map((t) => {
-                  // Webhook triggers attach to a GitHub repo, so they're not
-                  // available in repo-less mode.
-                  const isWebhookDisabled = t.value === "webhook" && isRepoLess
-                  const disabled = isLocked || isWebhookDisabled
-                  return (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => !disabled && setTriggerType(t.value)}
-                      disabled={disabled}
-                      title={isWebhookDisabled ? "Select a repository to use webhook triggers" : undefined}
-                      className={cn(
-                        "px-3 py-1 text-sm rounded-md transition-colors cursor-pointer",
-                        triggerType === t.value
-                          ? "bg-background shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                        isWebhookDisabled && "opacity-50 cursor-not-allowed"
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  )
-                })}
+              <div className="inline-flex rounded-md bg-muted p-0.5">
+                {TRIGGER_TYPES.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setTriggerType(t.value)}
+                    className={cn(
+                      "px-3 py-1 text-sm rounded-md transition-colors cursor-pointer",
+                      triggerType === t.value
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Schedule - only for scheduled trigger */}
             {triggerType === "interval" && (
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Run every</span>
-                  <select
-                    value={isCustomInterval ? CUSTOM_INTERVAL : intervalMinutes}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10)
-                      if (val === CUSTOM_INTERVAL) {
-                        // Seed custom inputs from the current preset so the
-                        // effective interval doesn't change just by toggling
-                        // into Custom mode.
-                        const mode = inferIntervalMode(intervalMinutes)
-                        setIsCustomInterval(true)
-                        setCustomIntervalValue(mode.customValue)
-                        setCustomIntervalUnit(mode.customUnit)
-                      } else {
-                        setIsCustomInterval(false)
-                        setIntervalMinutes(val)
-                      }
-                    }}
-                    className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {INTERVAL_PRESETS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                    <option value={CUSTOM_INTERVAL}>Custom…</option>
-                  </select>
+              <ScheduleFields
+                isCustomInterval={isCustomInterval}
+                intervalMinutes={intervalMinutes}
+                customIntervalValue={customIntervalValue}
+                customIntervalUnit={customIntervalUnit}
+                runAtDay={runAtDay}
+                runAtHourLocal={runAtHourLocal}
+                effectiveIntervalMinutes={effectiveIntervalMinutes}
+                timezoneName={timezoneName}
+                setIsCustomInterval={setIsCustomInterval}
+                setIntervalMinutes={setIntervalMinutes}
+                setCustomIntervalValue={setCustomIntervalValue}
+                setCustomIntervalUnit={setCustomIntervalUnit}
+                setRunAtDay={setRunAtDay}
+                setRunAtHourLocal={setRunAtHourLocal}
+              />
+            )}
 
-                  {isCustomInterval && (
-                    <>
+            {/* Incoming webhook URL panel — shown only for incoming triggers.
+                The token is minted client-side as soon as the trigger is
+                picked, so the URL (with copy + rotate) renders immediately,
+                even before the job is saved. The fallback below only shows for
+                the brief moment before the mint effect runs. */}
+            {triggerType === "incoming" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Webhook URL</label>
+
+                {incomingToken ? (
+                  <>
+                    <div className="flex items-stretch gap-1">
                       <input
-                        type="number"
-                        min={customIntervalUnit === "minutes" ? 10 : 1}
-                        step={1}
-                        value={customIntervalValue}
-                        onChange={(e) => {
-                          const n = parseInt(e.target.value, 10)
-                          setCustomIntervalValue(Number.isFinite(n) ? Math.max(1, n) : 1)
-                        }}
-                        className="w-16 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        type="text"
+                        readOnly
+                        value={incomingWebhookUrl}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="flex-1 min-w-0 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                       />
-                      <select
-                        value={customIntervalUnit}
-                        onChange={(e) => setCustomIntervalUnit(e.target.value as IntervalUnit)}
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      <button
+                        type="button"
+                        onClick={handleCopyUrl}
+                        className="inline-flex items-center justify-center rounded-md border border-border bg-background px-2 hover:bg-accent transition-colors cursor-pointer"
+                        title={copiedUrl ? "Copied" : "Copy URL"}
                       >
-                        {INTERVAL_UNITS.map((u) => (
-                          <option key={u.value} value={u.value}>
-                            {u.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-
-                  {/* Day of week - only for exactly weekly */}
-                  {effectiveIntervalMinutes === 10080 && (
-                    <>
-                      <span className="text-muted-foreground">on</span>
-                      <select
-                        value={runAtDay}
-                        onChange={(e) => setRunAtDay(parseInt(e.target.value, 10))}
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        {copiedUrl ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRotateToken}
+                        disabled={rotating}
+                        className="inline-flex items-center justify-center rounded-md border border-border bg-background px-2 hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
+                        title="Generate a new URL and invalidate the existing one"
                       >
-                        {DAYS_OF_WEEK.map((d) => (
-                          <option key={d.value} value={d.value}>
-                            {d.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-
-                  {/* Time of day - for daily and weekly (preset or custom) */}
-                  {effectiveIntervalMinutes >= 1440 && (
-                    <>
-                      <span className="text-muted-foreground">at</span>
-                      <select
-                        value={runAtHourLocal}
-                        onChange={(e) => setRunAtHourLocal(parseInt(e.target.value, 10))}
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {TIME_OPTIONS.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-muted-foreground">{timezoneName}</span>
-                    </>
-                  )}
-                </div>
-
-                {isCustomInterval && effectiveIntervalMinutes < 10 && (
-                  <p className="text-xs text-destructive">
-                    Interval must be at least 10 minutes.
+                        <RefreshCw className={cn("h-3.5 w-3.5", rotating && "animate-spin")} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Anyone with this URL can fire this agent — rotate it if it leaks.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Preparing your webhook URL…
                   </p>
                 )}
               </div>
@@ -718,7 +305,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                         materializes the job so the picker has a real id;
                         cancel cleans up. */}
                     <McpServersCombobox
-                      entityId={materializedJobId ?? job?.id ?? "draft"}
+                      entityId={materializedJobId ?? jobId ?? "draft"}
                       apiBase="/api/scheduled-jobs"
                       isDraft={!isEditing && !materializedJobId}
                       onMaterializeDraft={materializeJob}
@@ -803,7 +390,10 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
               </div>
             </div>
 
-            {/* Options Section */}
+            {/* Options Section — hidden when neither option applies (e.g. an
+                incoming, repo-less job has neither the interval-only
+                "continue" toggle nor the repo-only auto-PR toggle). */}
+            {hasOptions && (
             <div>
               <label className="block text-sm font-medium mb-2">Options</label>
               <div className="space-y-2">
@@ -811,7 +401,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                     the backend interprets it differently: with a repo it
                     reuses the prior branch; repo-less it prepends the prior
                     run's final output as prompt context. */}
-                {triggerType === "interval" && (
+                {showContinueOption && (
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -829,7 +419,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 )}
 
                 {/* Auto-PR has no target in repo-less mode (no remote to push to). */}
-                {!isRepoLess && (
+                {showAutoPROption && (
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -845,6 +435,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                 )}
               </div>
             </div>
+            )}
 
           </form>
 

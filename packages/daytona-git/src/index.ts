@@ -28,6 +28,7 @@ export type {
   FileStatus,
   FileStatusType,
   GitCommitResponse,
+  PushResult,
   ExecuteResult,
 } from "./types"
 

@@ -13,6 +13,9 @@ import type { Chat, Message, SSEUpdateEvent, SSECompleteEvent } from "@/lib/type
 import { useStreamStore } from "@/lib/stores/stream-store"
 import { queryKeys } from "@/lib/query"
 import { fetchChat, toMessageType } from "@/lib/sync/api"
+import { notifyCompletion } from "@/lib/notify"
+import type { SettingsData } from "@/lib/query/hooks/useSettingsQuery"
+import { DEFAULT_SETTINGS } from "@/lib/storage"
 
 const SSE_INITIAL_RETRY_DELAY = 1000
 const SSE_MAX_RETRY_DELAY = 30000
@@ -103,8 +106,11 @@ export function useStreaming(options: UseStreamingOptions = {}) {
       const currentStore = useStreamStore.getState()
       if (!currentStore.getStream(chatId)) return
 
-      const params = new URLSearchParams({ sandboxId, repoName, backgroundSessionId, chatId, assistantMessageId })
-      if (previewUrlPattern) params.set("previewUrlPattern", previewUrlPattern)
+      // IDOR fix: the server now derives sandboxId / backgroundSessionId /
+      // previewUrlPattern / repoName from the chat row (which is auth-checked
+      // for ownership), so we no longer pass them on the wire. Sending them
+      // would only be misleading — they'd be silently ignored.
+      const params = new URLSearchParams({ chatId, assistantMessageId })
       if (cursor > 0) params.set("cursor", cursor.toString())
 
       const eventSource = new EventSource(`/api/agent/stream?${params}`)
@@ -182,6 +188,42 @@ export function useStreaming(options: UseStreamingOptions = {}) {
             onConflictStateChangeRef.current(data.conflictState)
           }
 
+          // Raise notifications (native OS notification on desktop, in-app toast
+          // on web), gated by the user's notification preferences.
+          const settings =
+            queryClient.getQueryData<SettingsData>(queryKeys.settings.all)?.settings ?? DEFAULT_SETTINGS
+          const chatsCache = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())
+          const notifyChat = chatsCache?.find((c) => c.id === chatId)
+
+          // "Agent committed changes": the push advanced the remote (gated on
+          // the push having happened, not the best-effort commit count).
+          const committed = settings.notifyOnAgentCommitted && !!data.push
+          // "Agent finished": the turn ended (completed or error).
+          const finished = settings.notifyOnAgentFinished
+
+          // Emit a SINGLE notification covering both facts. Firing two separate
+          // OS notifications in the same tick makes macOS coalesce them, so the
+          // second would silently replace the first.
+          if (committed || finished) {
+            const repo = notifyChat?.repo
+            notifyCompletion({
+              chatName: notifyChat?.displayName ?? undefined,
+              status: data.status === "error" ? "error" : "completed",
+              finished,
+              push:
+                committed && data.push
+                  ? {
+                      repo: repo && repo !== "__new__" ? repo : "",
+                      branch: data.push.branch,
+                      commits: data.push.commits,
+                      commitSha: data.push.commitSha,
+                    }
+                  : undefined,
+              chatId,
+              sound: settings.notificationSound,
+            })
+          }
+
           // Fetch any new messages created by the backend (delta sync)
           try {
             const chatData = await fetchChat(chatId, { afterMessageId: assistantMessageId })
@@ -218,8 +260,12 @@ export function useStreaming(options: UseStreamingOptions = {}) {
         try {
           const data = JSON.parse((event as MessageEvent).data)
           useStreamStore.getState().stopStream(chatId)
+          // This frame means the SSE stream itself failed (the route's poll loop
+          // threw), not that the agent returned an error. The agent may still be
+          // running in the background, so surface "disconnected" → Reload (refresh
+          // chat history) rather than "error" → Retry (resend the message).
           updateChatsCache((old) => old.map((c) =>
-            c.id === chatId ? { ...c, status: "error", backgroundSessionId: undefined, errorMessage: data.error || "Agent stream failed" } : c
+            c.id === chatId ? { ...c, status: "disconnected", backgroundSessionId: undefined, errorMessage: data.error || "Connection to the agent was lost." } : c
           ))
         } catch {}
       })

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { Daytona } from "@daytonaio/sdk"
 import { Prisma } from "@prisma/client"
 import { createSandboxGit } from "@background-agents/daytona-git"
@@ -54,7 +55,17 @@ async function autoPush(
   repoPath: string,
   githubToken: string,
   options?: { noVerify?: boolean }
-): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
+): Promise<{
+  success: boolean
+  error?: string
+  skipped?: boolean
+  /** True when the push actually advanced the remote (something was delivered) */
+  pushed?: boolean
+  /** Best-effort number of commits delivered (0 when unknown) */
+  pushedCommits?: number
+  branch?: string
+  commitSha?: string
+}> {
   try {
     // Skip auto-push if in conflict state (merge or rebase in progress)
     const inConflict = await isInConflictState(sandbox, repoPath)
@@ -62,9 +73,36 @@ async function autoPush(
       return { success: true, skipped: true }
     }
 
+    // Current branch name (best-effort).
+    const branchRes = await sandbox.process.executeCommand(
+      `cd ${repoPath} && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""`
+    )
+    const branch = branchRes.result.trim()
+
     const git = createSandboxGit(sandbox)
-    await git.push(repoPath, githubToken, options)
-    return { success: true }
+    // The push result is the source of truth for "did anything get pushed":
+    // `--porcelain` reports whether the remote ref advanced or was up-to-date.
+    const pushResult = await git.push(repoPath, githubToken, { noVerify: options?.noVerify })
+
+    const headRes = await sandbox.process.executeCommand(
+      `cd ${repoPath} && git rev-parse --short HEAD 2>/dev/null || echo ""`
+    )
+    const commitSha = headRes.result.trim()
+
+    // Best-effort commit count for display. When the push reported an exact
+    // "<old>..<new>" range (existing branch), count that; otherwise fall back
+    // to commits not on any origin remote-tracking branch. Either way the
+    // notification is gated on `pushed`, not on this number.
+    let pushedCommits = 0
+    if (pushResult.updated) {
+      const range = pushResult.range ?? "HEAD --not --remotes=origin"
+      const countRes = await sandbox.process.executeCommand(
+        `cd ${repoPath} && git rev-list --count ${range} 2>/dev/null || echo 0`
+      )
+      pushedCommits = parseInt(countRes.result.trim() || "0", 10) || 0
+    }
+
+    return { success: true, pushed: pushResult.updated, pushedCommits, branch, commitSha }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
     return { success: false, error: message }
@@ -86,22 +124,32 @@ const jsonResponse = (status: number, body: object) =>
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const sandboxId = url.searchParams.get("sandboxId")
-  const repoName = url.searchParams.get("repoName")
-  const previewUrlPattern = url.searchParams.get("previewUrlPattern")
-  const backgroundSessionId = url.searchParams.get("backgroundSessionId")
   const cursorParam = url.searchParams.get("cursor")
   const chatId = url.searchParams.get("chatId")
   const assistantMessageId = url.searchParams.get("assistantMessageId")
 
-  if (!sandboxId || !repoName || !backgroundSessionId) {
-    return jsonResponse(400, {
-      error: "Missing required fields: sandboxId, repoName, backgroundSessionId",
-    })
-  }
-
   const auth = await requireChatStreamAccess(chatId, assistantMessageId)
   if (isAuthError(auth)) return auth
+
+  // IDOR fix: derive sandbox/session/preview from the *chat row* we just
+  // authorized, NOT from query params. Previously the route used
+  // url.searchParams.get("sandboxId" / "backgroundSessionId" / ...) which any
+  // authenticated user could overwrite with another user's sandbox id —
+  // Daytona uses one app-wide API key (single org) so daytona.get(foreignId)
+  // would succeed. See packages/web/e2e tests for reproduction.
+  const { chat } = auth
+  const sandboxId = chat.sandboxId
+  const backgroundSessionId = chat.backgroundSessionId
+  const previewUrlPattern = chat.previewUrlPattern
+  // The sandbox clone directory is fixed per app convention; the client
+  // always passed "project" anyway, so the value lives here now.
+  const repoName = "project"
+
+  if (!sandboxId || !backgroundSessionId) {
+    return jsonResponse(400, {
+      error: "Chat has no active sandbox or background session",
+    })
+  }
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
   if (!daytonaApiKey) {
@@ -209,7 +257,22 @@ export async function GET(req: Request) {
             sessionOpts
           )
 
-          const sig = `${lastSnap.status}|${lastSnap.content.length}|${lastSnap.toolCalls.length}|${lastSnap.contentBlocks.length}|${lastSnap.error ?? ""}`
+          // Hash the full wire payload so any mutation that would change
+          // what we'd send (including in-place tool_end output attachment,
+          // see buildContentBlocks) changes the signature. The previous
+          // length-tuple version skipped tool_end updates because tool
+          // output is attached in place without changing any array length.
+          const sig = createHash("sha1")
+            .update(
+              JSON.stringify({
+                status: lastSnap.status,
+                content: lastSnap.content,
+                toolCalls: lastSnap.toolCalls,
+                contentBlocks: lastSnap.contentBlocks,
+                error: lastSnap.error ?? "",
+              })
+            )
+            .digest("hex")
           if (sig !== lastSentSig) {
             lastSentSig = sig
             cursor += 1
@@ -227,6 +290,10 @@ export async function GET(req: Request) {
           if (lastSnap.status === "completed" || lastSnap.status === "error") {
             await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
+
+            // Populated when the auto-push below delivers new commits, so the
+            // client can raise a "new push" notification.
+            let pushInfo: { branch: string; commits: number; commitSha?: string } | undefined
 
             // Auto-push on successful completion if chat has a branch (GitHub repo)
             if (lastSnap.status === "completed" && chatId) {
@@ -269,6 +336,13 @@ export async function GET(req: Request) {
                       true,
                       { action: "force-push" }
                     )
+                  } else if (pushResult.pushed) {
+                    // The remote actually advanced — tell the client to notify.
+                    pushInfo = {
+                      branch: pushResult.branch || chat.branch,
+                      commits: pushResult.pushedCommits ?? 0,
+                      commitSha: pushResult.commitSha,
+                    }
                   }
                 }
               }
@@ -307,6 +381,7 @@ export async function GET(req: Request) {
               error: lastSnap.error,
               cursor,
               conflictState,
+              push: pushInfo,
             })
             closeStream()
             return

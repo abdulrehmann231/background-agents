@@ -17,7 +17,6 @@ import { useMobile } from "@/lib/hooks/useMobile"
 import { useGitHubTokenCheck } from "@/lib/hooks/useGitHubTokenCheck"
 import { usePreview } from "@/lib/hooks/usePreview"
 import { usePageTitle } from "@/lib/hooks/usePageTitle"
-import { ROUTES } from "@/lib/hooks/useUrlNavigation"
 import { useUrlSync } from "@/lib/hooks/useUrlSync"
 import { useSandboxActions } from "@/lib/hooks/useSandboxActions"
 import { useDraftChat } from "@/lib/hooks/useDraftChat"
@@ -25,6 +24,9 @@ import { usePendingMessageReplay } from "@/lib/hooks/usePendingMessageReplay"
 import { usePaletteProps } from "@/lib/hooks/usePaletteProps"
 import { useSendMessage } from "@/lib/hooks/useSendMessage"
 import { useBranching } from "@/lib/hooks/useBranching"
+import { useChatNavigation } from "@/lib/hooks/useChatNavigation"
+import { useRepoSelectHandler } from "@/lib/hooks/useRepoSelectHandler"
+import { LocalSyncManager } from "@/lib/hooks/useLocalSync"
 import {
   ChatProvider,
   ModalProvider,
@@ -32,16 +34,13 @@ import {
   GitProvider,
   SidebarProvider,
   useSidebar,
-  ALL_REPOSITORIES,
-  NO_REPOSITORY,
   type ChatContextValue,
   type GitContextValue,
 } from "@/lib/contexts"
-import { NEW_REPOSITORY, type Message, type Chat } from "@/lib/types"
+import { NEW_REPOSITORY, type Message } from "@/lib/types"
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import type { GitHubRepo, GitHubBranch } from "@/lib/github"
 import { hasPendingMessage } from "@/lib/pending-message"
-import { buildTreeOrderedChatIds, getNextChatIdAfterDeletion } from "@/lib/chat-tree"
 
 function ChatPanelWithPalette(props: React.ComponentProps<typeof ChatPanel>) {
   const { openCommand } = usePalette()
@@ -85,7 +84,7 @@ interface HomePageContentProps {
 function HomePageContent({ isMobile }: HomePageContentProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
-  const { githubTokenInvalid } = useGitHubTokenCheck()
+  const { githubTokenInvalid, dismissReAuthBanner } = useGitHubTokenCheck()
   const modals = useModals()
   const sidebar = useSidebar()
 
@@ -112,6 +111,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     claudeIsPro,
     claudeIsWeekly,
     isHydrated,
+    isLoading,
     isLoadingMessages,
     deletingChatIds,
     unseenChatIds,
@@ -130,6 +130,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     resumeQueue,
     updateChatById,
     refetchMessages,
+    reloadChat,
     drafts,
     updateDraft,
     clearDraft,
@@ -148,14 +149,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   // Additional state not in contexts
   const [scheduledJobsRefreshKey, setScheduledJobsRefreshKey] = useState(0)
   const [skillsModalOpen, setSkillsModalOpen] = useState(false)
-  // Transient error toast (e.g. setup-remote failure). Auto-dismisses after 5s.
-  const [errorBanner, setErrorBanner] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!errorBanner) return
-    const id = setTimeout(() => setErrorBanner(null), 5000)
-    return () => clearTimeout(id)
-  }, [errorBanner])
 
   // Sandbox/repo actions (env vars, download, open in VS Code/GitHub, git clipboard)
   const {
@@ -269,7 +262,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     isHydrated,
     currentChatId,
     isDraftChatId,
-    draftChatConfig,
     selectChat,
     startNewChat,
     setViewMode: sidebar.setViewMode,
@@ -307,6 +299,42 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     updateDraft,
   })
 
+  // Chat/job navigation: view-switching handlers, keyboard traversal,
+  // merge/rebase requests, and the URL-reconciliation effects (draft promotion,
+  // stale-chat redirect).
+  const {
+    handleNewChat,
+    handleSelectChat,
+    handleOpenScheduledJobs,
+    handleNavigateToJob,
+    handleNavigateChat,
+    handleRequestMergeChats,
+    handleRequestRebaseChat,
+    getNextChatId,
+  } = useChatNavigation({
+    isHydrated,
+    isLoading,
+    session,
+    modals,
+    sidebar,
+    chats,
+    currentChatId,
+    displayCurrentChat,
+    repos,
+    isDraftChatId,
+    selectChat,
+    startNewChat,
+    gitDialogs,
+  })
+
+  // Repo selection for the current chat (+ the transient setup-remote error toast).
+  const { errorBanner, handleRepoSelect } = useRepoSelectHandler({
+    displayCurrentChat,
+    isDraftMode,
+    updateDraftChatConfig,
+    updateChatRepo,
+  })
+
   // Dynamic page title based on current view
   const pageTitle = useMemo(() => {
     if (isJobsRoute) {
@@ -342,70 +370,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   // Handlers
   // =============================================================================
 
-  // Handler for new chat - uses current chat's repo/branch if available, otherwise repo filter
-  const handleNewChat = useCallback(async () => {
-    if (!session) {
-      modals.setSignInModalOpen(true)
-      return
-    }
-    // Switch to chat view
-    sidebar.setViewMode("chat")
-    sidebar.setSelectedScheduledJob(null) // Clear selected job when switching to chat
-    // If there's a current chat (real or draft) with a repo selected, inherit its repo and base branch.
-    // Sibling chat — no parentChatId, and use baseBranch (not the working branch) so the
-    // new chat starts from the same point the current one did.
-    let newChatId: string | null = null
-    if (displayCurrentChat && displayCurrentChat.repo !== NEW_REPOSITORY) {
-      newChatId = await startNewChat(displayCurrentChat.repo, displayCurrentChat.baseBranch)
-    } else if (sidebar.repoFilter !== ALL_REPOSITORIES && sidebar.repoFilter !== NO_REPOSITORY) {
-      // If a specific repo is selected in the filter, use it for the new chat
-      // Find the repo to get the default branch
-      const repo = repos.find(r => `${r.owner.login}/${r.name}` === sidebar.repoFilter)
-      newChatId = await startNewChat(sidebar.repoFilter, repo?.default_branch ?? "main")
-    } else {
-      // Default to NEW_REPOSITORY (no repo)
-      newChatId = await startNewChat()
-    }
-    // Navigate to the new chat URL
-    if (newChatId) {
-      // Update URL without triggering Next.js navigation
-      window.history.pushState(null, "", ROUTES.chat.build(newChatId))
-    }
-  }, [session, modals, sidebar, displayCurrentChat, repos, startNewChat])
-
-  // Handler for selecting a chat - switch to chat view and update URL
-  const handleSelectChat = useCallback((chatId: string) => {
-    // Update state
-    selectChat(chatId)
-    sidebar.setViewMode("chat")
-    sidebar.setSelectedScheduledJob(null)
-    // Update URL without triggering Next.js navigation (which causes remount)
-    // Using window.history.pushState avoids the component remount that router.push causes
-    window.history.pushState(null, "", ROUTES.chat.build(chatId))
-  }, [selectChat, sidebar])
-
-  // Handler for opening scheduled jobs view
-  const handleOpenScheduledJobs = useCallback(() => {
-    // Update state
-    sidebar.setViewMode("scheduled-jobs")
-    sidebar.setSelectedScheduledJob(null)
-    selectChat(null)
-    // Update URL without triggering Next.js navigation
-    window.history.pushState(null, "", ROUTES.jobs.build())
-  }, [sidebar, selectChat])
-
-  // Handler for navigating to a job (updates URL and sidebar state)
-  const handleNavigateToJob = useCallback((jobId: string | null, jobName?: string) => {
-    if (jobId) {
-      // Update sidebar state - use jobName if provided, otherwise use jobId as placeholder
-      sidebar.setSelectedScheduledJob({ id: jobId, name: jobName ?? jobId })
-      window.history.pushState(null, "", ROUTES.job.build(jobId))
-    } else {
-      sidebar.setSelectedScheduledJob(null)
-      window.history.pushState(null, "", ROUTES.jobs.build())
-    }
-  }, [sidebar])
-
   // Handler for the Create Repository palette/slash command.
   const handleCreateRepo = () => {
     if (!session) {
@@ -413,49 +377,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       return
     }
     modals.setRepoCreateOpen(true)
-  }
-
-  // Handler for repo selection - updates the current chat's repo
-  // For draft chats, updates the draft config. For real chats, updates the database.
-  // If sandbox already exists (chat started without repo), also set up remote and push
-  const handleRepoSelect = async (repo: string, branch: string) => {
-    if (!displayCurrentChat) return
-
-    // For draft chats, just update the draft config
-    if (isDraftMode) {
-      updateDraftChatConfig({ repo, baseBranch: branch })
-      return
-    }
-
-    // For real chats - if sandbox exists, we need to set up the remote and push
-    if (displayCurrentChat.sandboxId && displayCurrentChat.repo === NEW_REPOSITORY) {
-      try {
-        const response = await fetch("/api/git/setup-remote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sandboxId: displayCurrentChat.sandboxId,
-            repoFullName: repo,
-            branch: displayCurrentChat.branch,
-          }),
-        })
-
-        if (!response.ok) {
-          const errJson = await response.json().catch(() => ({}))
-          const detail = typeof errJson?.error === "string" ? errJson.error : `HTTP ${response.status}`
-          console.error("Failed to set up remote:", errJson)
-          setErrorBanner(`Couldn't set up remote for ${repo}: ${detail}`)
-          return
-        }
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : "Unknown error"
-        console.error("Failed to set up remote:", error)
-        setErrorBanner(`Couldn't set up remote for ${repo}: ${detail}`)
-        return
-      }
-    }
-
-    updateChatRepo(displayCurrentChat.id, repo, branch)
   }
 
   // After sign-in, replay any pending message saved before the OAuth redirect.
@@ -524,62 +445,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   const handleRunCommand = useCallback((command: string) => {
     handleSlashCommand(command as SlashCommandType)
   }, [handleSlashCommand])
-
-  // Build the full tree-ordered id list matching the sidebar (ignoring
-  // collapsed state — so Alt+Up/Down can reach every chat, expanding
-  // collapsed ancestors along the way).
-  const treeOrderedChatIds = useMemo(
-    () => buildTreeOrderedChatIds(chats, sidebar.repoFilter),
-    [chats, sidebar.repoFilter]
-  )
-
-  const handleRequestMergeChats = useCallback((sourceId: string, targetId?: string) => {
-    const source = chats.find((c) => c.id === sourceId)
-    const target = targetId ? chats.find((c) => c.id === targetId) : null
-    if (!source) return
-    selectChat(source.id)
-    setTimeout(() => {
-      if (target?.branch) {
-        gitDialogs.setSelectedBranch(target.branch)
-      } else {
-        gitDialogs.setSelectedBranch("")
-      }
-      gitDialogs.setMergeOpen(true)
-    }, 0)
-  }, [chats, selectChat, gitDialogs])
-
-  const handleRequestRebaseChat = useCallback((sourceId: string) => {
-    const source = chats.find((c) => c.id === sourceId)
-    if (!source) return
-    selectChat(source.id)
-    setTimeout(() => {
-      gitDialogs.setSelectedBranch("")
-      gitDialogs.setRebaseOpen(true)
-    }, 0)
-  }, [chats, selectChat, gitDialogs])
-
-  const handleNavigateChat = useCallback((direction: "up" | "down") => {
-    if (treeOrderedChatIds.length === 0) return
-    const idx = currentChatId ? treeOrderedChatIds.indexOf(currentChatId) : -1
-    let nextIdx: number
-    if (direction === "up") {
-      nextIdx = idx <= 0 ? treeOrderedChatIds.length - 1 : idx - 1
-    } else {
-      nextIdx = idx >= treeOrderedChatIds.length - 1 ? 0 : idx + 1
-    }
-    const nextId = treeOrderedChatIds[nextIdx]
-    if (!nextId) return
-    // If the target is inside a collapsed parent, expand up the chain.
-    const byId = new Map(chats.map((c) => [c.id, c]))
-    sidebar.expandChatAndAncestors(nextId, byId)
-    handleSelectChat(nextId)
-  }, [treeOrderedChatIds, currentChatId, chats, sidebar])
-
-  // Compute the next chat to select after deletion (following chat, or previous if last)
-  const getNextChatId = useCallback(
-    (deletedIds: string[]) => getNextChatIdAfterDeletion(treeOrderedChatIds, deletedIds),
-    [treeOrderedChatIds]
-  )
 
   // Don't render chats until hydrated to avoid SSR mismatch
   const displayChats = isHydrated ? chats : []
@@ -685,6 +550,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     <PaletteProvider {...paletteProps}>
     <ChatProvider value={chatContextValue}>
     <GitProvider value={gitContextValue}>
+    <LocalSyncManager />
     <div className={`flex overflow-hidden ${isMobile ? 'h-screen-mobile' : 'h-screen'}`}>
       {/* Sidebar — desktop renders inline, mobile renders as a drawer.
           The Sidebar component branches on isMobile internally, so the only
@@ -723,7 +589,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         }
         scheduledJobsActive={sidebar.viewMode === "scheduled-jobs"}
         selectedScheduledJob={sidebar.viewMode === "scheduled-jobs" ? sidebar.selectedScheduledJob : null}
-        isLoadingChats={!isHydrated}
+        isLoadingChats={!isHydrated || (isLoading && displayChats.length === 0)}
         claudeUsage={claudeUsage}
       />
 
@@ -762,6 +628,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                     })
                   }}
                   onSendMessage={handleSendMessage}
+                  onReload={reloadChat}
                   onEnqueueMessage={enqueueMessage}
                   onRemoveQueuedMessage={removeQueuedMessage}
                   onResumeQueue={resumeQueue}
@@ -833,6 +700,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       <AppModals
         isMobile={isMobile}
         githubTokenInvalid={githubTokenInvalid}
+        onDismissReAuthBanner={dismissReAuthBanner}
         onRepoSelect={handleRepoSelect}
         onSaveSettings={updateSettings}
         onSaveEnvVars={handleSaveEnvVars}

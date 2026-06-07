@@ -43,6 +43,9 @@ function readSettings(raw: unknown): Settings {
     theme: s.theme ?? DEFAULT_SETTINGS.theme,
     rapidFireMode: s.rapidFireMode ?? DEFAULT_SETTINGS.rapidFireMode,
     enablePrepushHooks: s.enablePrepushHooks ?? DEFAULT_SETTINGS.enablePrepushHooks,
+    notifyOnAgentFinished: s.notifyOnAgentFinished ?? DEFAULT_SETTINGS.notifyOnAgentFinished,
+    notifyOnAgentCommitted: s.notifyOnAgentCommitted ?? DEFAULT_SETTINGS.notifyOnAgentCommitted,
+    notificationSound: s.notificationSound ?? DEFAULT_SETTINGS.notificationSound,
   }
 }
 

@@ -25,6 +25,8 @@ export const SNAPSHOT_RESOURCES = {
 export const AGENT_PACKAGES = {
   claude: "@anthropic-ai/claude-code",
   codex: "@openai/codex",
+  copilot: "@github/copilot",
+  kilo: "@kilocode/cli",
   opencode: "opencode-ai",
   gemini: "@google/gemini-cli",
   pi: "@mariozechner/pi-coding-agent",
@@ -86,6 +88,14 @@ export function getAgentSandboxImage(): Image {
         // Install Pi CLI
         "npm install -g @mariozechner/pi-coding-agent"
       )
+      .runCommands(
+        // Install GitHub Copilot CLI
+        "npm install -g @github/copilot"
+      )
+      .runCommands(
+        // Install Kilo CLI
+        "npm install -g @kilocode/cli"
+      )
       // Create daytona user (non-root) - Claude Code refuses to run as root
       .runCommands(
         "useradd -m -s /bin/bash daytona || true && " +
@@ -104,6 +114,17 @@ export function getAgentSandboxImage(): Image {
       .runCommands(
         "mkdir -p /home/daytona/.gemini /home/daytona/.config/goose /home/daytona/project && " +
           "chown -R daytona:daytona /home/daytona"
+      )
+      // Pre-install ws + node-pty for @background-agents/daytona-terminal so
+      // setupTerminal() finds them already present at /opt/pty-server and
+      // skips its runtime install step. Path and versions must match what
+      // daytona-terminal/src/sandbox/setup.ts and
+      // daytona-terminal/src/server/pty-server.ts expect.
+      .runCommands(
+        "mkdir -p /opt/pty-server && " +
+          "cd /opt/pty-server && " +
+          "npm install --prefix /opt/pty-server ws@^8.18.0 node-pty@^1.0.0 && " +
+          "chown -R daytona:daytona /opt/pty-server"
       )
       .runCommands(
         'echo \'export PATH="$HOME/.local/bin:$PATH"\' >> /home/daytona/.bashrc'

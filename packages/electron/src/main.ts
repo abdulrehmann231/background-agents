@@ -189,8 +189,13 @@ app.whenReady().then(async () => {
   createTray(window);
   registerShortcuts(window);
   setupDeepLinks(handleDeepLink);
-  setupGitSync();
-  setupAutoUpdater(window);
+  setupGitSync({ getWindow: () => mainWindow, backendUrl: BACKEND_URL });
+  // Auto-update only works in a packaged build (it reads app-update.yml,
+  // which electron-builder bakes in from the "publish" config). Running it
+  // from source just throws a "dev-app-update.yml not found" error.
+  if (app.isPackaged) {
+    setupAutoUpdater(window);
+  }
   setupLicenseDetect();
 
   // macOS: recreate window if dock icon clicked

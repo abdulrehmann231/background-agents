@@ -62,6 +62,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   rapidFireMode: false,
   enablePrepushHooks: false,
+  notifyOnAgentFinished: true,
+  notifyOnAgentCommitted: true,
+  notificationSound: true,
 }
 
 const DEFAULT_LOCAL_STATE: LocalState = {

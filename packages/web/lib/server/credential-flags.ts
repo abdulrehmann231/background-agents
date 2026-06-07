@@ -39,18 +39,32 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
     select: { credentials: true, isPro: true },
   })
 
-  const decryptedCreds = decryptUserCredentials(
+  // Decrypt stored credentials (only those the user has saved)
+  const storedCreds = decryptUserCredentials(
     user?.credentials as Record<string, unknown> | null
   )
 
-  // Fallback: check process.env for any missing credentials
+  // Build the full credentials map by falling back to process.env for any
+  // missing values. This map is used elsewhere (not for origin detection).
+  const decryptedCreds = { ...storedCreds }
   for (const { id } of CREDENTIAL_KEYS) {
     if (!decryptedCreds[id] && process.env[id]) {
       decryptedCreds[id] = process.env[id]
     }
   }
 
-  const flags = flagsFromCredentials(decryptedCreds)
+  // Build flags from the stored (user-provided) credentials so we can
+  // distinguish between user-owned keys and server-shared env keys.
+  const flags = flagsFromCredentials(storedCreds)
+
+  // Special-case: mark whether OPENCODE_API_KEY comes from the user's stored
+  // credentials (user-owned) or only from the server environment (shared).
+  const opencodeFromDb = !!storedCreds.OPENCODE_API_KEY
+  const opencodeFromEnv = !opencodeFromDb && !!process.env.OPENCODE_API_KEY
+  flags.OPENCODE_API_KEY_USER = opencodeFromDb
+  flags.OPENCODE_API_KEY_SHARED = opencodeFromEnv
+  // Preserve the conventional boolean presence flag for callers that expect it
+  flags.OPENCODE_API_KEY = opencodeFromDb || opencodeFromEnv
 
   if (await isSharedPoolAvailable()) {
     flags.CLAUDE_SHARED_POOL_AVAILABLE = true

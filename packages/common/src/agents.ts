@@ -70,6 +70,10 @@ export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // Free user has hit daily limit on shared Claude credentials. When true,
   // getDefaultAgent falls back to opencode even if shared pool is available.
   CLAUDE_DAILY_LIMIT_EXCEEDED?: boolean
+  // Whether the OPENCODE_API_KEY originates from the server environment (shared)
+  OPENCODE_API_KEY_SHARED?: boolean
+  // Whether the OPENCODE_API_KEY is a user-provided credential stored in DB
+  OPENCODE_API_KEY_USER?: boolean
 }
 export type Credentials = Partial<Record<CredentialId, string>>
 
@@ -94,6 +98,30 @@ export interface ModelOption {
   requiresKey?: ProviderId | "none"
 }
 
+/**
+ * Models allowed to run on the server-shared OpenCode API key.
+ *
+ * The shared key is an OpenCode **Go** subscription key, so these must use the
+ * `opencode-go/` prefix to route through Go (the $10/mo pool the key pays for).
+ * The `opencode/` prefix would route through OpenCode **Zen** (pay-as-you-go),
+ * where the Go key has no balance — that yields an "insufficient balance" error.
+ */
+const SHARED_OPENCODE_ALLOWED = new Set<string>([
+  "opencode-go/glm-5",
+  "opencode-go/glm-5.1",
+  "opencode-go/kimi-k2.5",
+  "opencode-go/kimi-k2.6",
+  "opencode-go/mimo-v2.5",
+  "opencode-go/mimo-v2.5-pro",
+  "opencode-go/minimax-m2.5",
+  "opencode-go/minimax-m2.7",
+  "opencode-go/minimax-m3",
+  "opencode-go/qwen3.6-plus",
+  "opencode-go/qwen3.7-max",
+  "opencode-go/deepseek-v4-pro",
+  "opencode-go/deepseek-v4-flash",
+])
+
 export const agentModels: Record<Agent, ModelOption[]> = {
   "claude-code": [
     { value: "default", label: "Default", requiresKey: "anthropic" },
@@ -110,26 +138,43 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode/nemotron-3-super-free", label: "Nemotron 3 Super (Free)", requiresKey: "none" },
     { value: "opencode/deepseek-v4-flash-free", label: "DeepSeek V4 Flash (Free)", requiresKey: "none" },
     { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5 (Free)", requiresKey: "none" },
-    // Paid opencode/ models (requires OpenCode API key)
-    { value: "opencode/claude-sonnet-4", label: "Claude Sonnet 4", requiresKey: "opencode" },
-    { value: "opencode/claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "opencode" },
-    { value: "opencode/claude-sonnet-4-6", label: "Claude Sonnet 4.6", requiresKey: "opencode" },
-    { value: "opencode/claude-haiku-4-5", label: "Claude Haiku 4.5", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-5", label: "Claude Opus 4.5", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-6", label: "Claude Opus 4.6", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "opencode" },
-    { value: "opencode/gpt-5", label: "GPT-5", requiresKey: "opencode" },
-    { value: "opencode/gpt-5-codex", label: "GPT-5 Codex", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.1-codex", label: "GPT-5.1 Codex", requiresKey: "opencode" },
-    { value: "opencode/gpt-5-nano", label: "GPT-5 Nano", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.4", label: "GPT-5.4", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.5", label: "GPT-5.5", requiresKey: "opencode" },
-    { value: "opencode/gemini-3-flash", label: "Gemini 3 Flash", requiresKey: "opencode" },
-    { value: "opencode/gemini-3.5-flash", label: "Gemini 3.5 Flash", requiresKey: "opencode" },
-    { value: "opencode/gemini-3.1-pro", label: "Gemini 3.1 Pro", requiresKey: "opencode" },
-    { value: "opencode/kimi-k2.5", label: "Kimi K2.5", requiresKey: "opencode" },
-    // Anthropic direct models (requires Anthropic API key)
+    // Curated OpenCode Go models (opencode-go/ prefix), runnable on the
+    // server-shared Go subscription key. Shown first when OPENCODE_API_KEY is
+    // available. These route through Go, not Zen — see SHARED_OPENCODE_ALLOWED.
+    { value: "opencode-go/glm-5", label: "GLM-5 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/glm-5.1", label: "GLM-5.1 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/kimi-k2.5", label: "Kimi K2.5 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/mimo-v2.5", label: "MiMo v2.5 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/mimo-v2.5-pro", label: "MiMo v2.5 Pro (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/minimax-m2.5", label: "MiniMax M2.5 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/minimax-m2.7", label: "MiniMax M2.7 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/minimax-m3", label: "MiniMax M3 (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/qwen3.6-plus", label: "Qwen3.6 Plus (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/qwen3.7-max", label: "Qwen3.7 Max (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/deepseek-v4-pro", label: "DeepSeek V4 Pro (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/deepseek-v4-flash", label: "DeepSeek V4 Flash (Go)", requiresKey: "opencode" },
+
+    // Remaining paid models — route through OpenCode Zen (pay-as-you-go credits).
+    // Preserve original order, excluding duplicates.
+    { value: "opencode/claude-sonnet-4", label: "Claude Sonnet 4 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-sonnet-4-5", label: "Claude Sonnet 4.5 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-haiku-4-5", label: "Claude Haiku 4.5 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-5", label: "Claude Opus 4.5 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-6", label: "Claude Opus 4.6 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-7", label: "Claude Opus 4.7 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-8", label: "Claude Opus 4.8 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gpt-5", label: "GPT-5 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gpt-5-codex", label: "GPT-5 Codex (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gpt-5.1-codex", label: "GPT-5.1 Codex (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gpt-5-nano", label: "GPT-5 Nano (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gpt-5.4", label: "GPT-5.4 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gpt-5.5", label: "GPT-5.5 (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gemini-3-flash", label: "Gemini 3 Flash (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gemini-3.5-flash", label: "Gemini 3.5 Flash (Zen)", requiresKey: "opencode" },
+    { value: "opencode/gemini-3.1-pro", label: "Gemini 3.1 Pro (Zen)", requiresKey: "opencode" },
+    // Anthropic direct models — route to Anthropic on the user's own Anthropic key
     { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
     { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6", requiresKey: "anthropic" },
     { value: "anthropic/claude-haiku-4-5", label: "Claude Haiku 4.5", requiresKey: "anthropic" },
@@ -137,7 +182,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "anthropic/claude-opus-4-6", label: "Claude Opus 4.6", requiresKey: "anthropic" },
     { value: "anthropic/claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "anthropic" },
     { value: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "anthropic" },
-    // OpenAI direct models (requires OpenAI API key)
+    // OpenAI direct models — route to OpenAI on the user's own OpenAI key
     { value: "openai/gpt-3.5-turbo", label: "GPT-3.5 Turbo", requiresKey: "openai" },
     { value: "openai/gpt-4", label: "GPT-4", requiresKey: "openai" },
     { value: "openai/gpt-4-turbo", label: "GPT-4 Turbo", requiresKey: "openai" },
@@ -165,9 +210,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gpt-5.5", label: "GPT-5.5 (Recommended)", requiresKey: "openai" },
     { value: "gpt-5.4", label: "GPT-5.4", requiresKey: "openai" },
     { value: "gpt-5.4-mini", label: "GPT-5.4 Mini", requiresKey: "openai" },
-    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "openai" },
     { value: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", requiresKey: "openai" },
-    { value: "gpt-5.2", label: "GPT-5.2", requiresKey: "openai" },
   ],
   "copilot": [
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", requiresKey: "github" },
@@ -250,7 +293,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
 /** Default model per agent */
 export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "default",
-  "opencode": "opencode/big-pickle", // Free model, no API key needed
+  "opencode": "opencode-go/mimo-v2.5-pro",
   "codex": "gpt-5.5",
   "copilot": "gpt-5-mini",
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
@@ -278,18 +321,9 @@ export const agentSupportsPlanMode: Record<Agent, boolean> = {
 // =============================================================================
 
 /**
- * Get the default agent based on user credentials.
- * If user has Anthropic credentials, default to Claude Code.
- * Otherwise, default to OpenCode (which has free models).
+ * Get the default agent. Always defaults to OpenCode.
  */
 export function getDefaultAgent(flags: CredentialFlags | null | undefined): Agent {
-  // If daily limit exceeded on shared Claude, skip to opencode
-  if (flags?.CLAUDE_DAILY_LIMIT_EXCEEDED) {
-    return "opencode"
-  }
-  if (flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE) {
-    return "claude-code"
-  }
   return "opencode"
 }
 
@@ -312,6 +346,16 @@ export function hasCredentialsForModel(
     }
     return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE)
   }
+  if (model.requiresKey === "opencode") {
+    // If the user has their own stored OpenCode key, allow all opencode models
+    if (flags?.OPENCODE_API_KEY_USER) return true
+    // If only the server-shared key is available, allow only a curated subset
+    if (flags?.OPENCODE_API_KEY_SHARED) {
+      return SHARED_OPENCODE_ALLOWED.has(model.value)
+    }
+    return false
+  }
+
   return PROVIDER_ENV[model.requiresKey].some((id) => flags?.[id])
 }
 

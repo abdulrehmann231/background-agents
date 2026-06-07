@@ -195,9 +195,12 @@ const { executionId, pid, outputFile } = await session.start("Your task here")
 Polls for new events since last call.
 
 ```typescript
-const { events, running } = await session.getEvents()
-// events: Event[] - new events since last poll
-// running: boolean - true if agent is still running
+const { events, running, sessionId, cursor, runPhase } = await session.getEvents()
+// events:    Event[]        - new events since last poll
+// running:   boolean        - true if the agent is still running
+// sessionId: string | null  - provider session id (once known)
+// cursor:    string         - opaque pagination cursor for the next poll
+// runPhase:  "idle" | "starting" | "running" | "stopped"
 ```
 
 ### `session.isRunning()`
