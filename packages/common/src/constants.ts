@@ -11,6 +11,8 @@ export const PATHS = {
   SANDBOX_HOME: "/home/daytona",
   /** Directory where the repository is cloned */
   PROJECT_DIR: "/home/daytona/project",
+  /** Directory for user-uploaded files, kept separate from the repo clone */
+  UPLOADS_DIR: "/home/daytona/uploads",
   /** Directory for agent log files */
   LOGS_DIR: "/tmp/logs",
   /** Marker file created after clone completes, used as baseline for modified file detection */

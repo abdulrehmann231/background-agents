@@ -357,7 +357,7 @@ export async function POST(
     let uploadedFilePaths: string[] = []
     if (files.length > 0) {
       try {
-        uploadedFilePaths = await uploadFilesToSandbox(sandbox, repoPath, files)
+        uploadedFilePaths = await uploadFilesToSandbox(sandbox, PATHS.UPLOADS_DIR, files)
       } catch (err) {
         // Match the legacy behavior: file-upload errors don't abort the
         // send. The agent simply runs without seeing the files.

@@ -216,18 +216,20 @@ export async function createSandboxForChat(
 }
 
 /**
- * Upload files to an existing sandbox under repoPath, resolving filename
- * conflicts with -1, -2, …, -timestamp suffixes. Returns the destination paths.
+ * Upload files to an existing sandbox under destDir, resolving filename
+ * conflicts with -1, -2, …, -timestamp suffixes. The directory is created if
+ * it doesn't exist. Returns the destination paths.
  */
 export async function uploadFilesToSandbox(
   sandbox: Awaited<ReturnType<Daytona["get"]>>,
-  repoPath: string,
+  destDir: string,
   files: File[]
 ): Promise<string[]> {
+  await sandbox.process.executeCommand(`mkdir -p '${destDir}'`)
   const paths: string[] = []
   for (const file of files) {
-    const resolvedName = await resolveFilename(sandbox, repoPath, file.name)
-    const destPath = `${repoPath}/${resolvedName}`
+    const resolvedName = await resolveFilename(sandbox, destDir, file.name)
+    const destPath = `${destDir}/${resolvedName}`
     const buffer = Buffer.from(await file.arrayBuffer())
     await sandbox.fs.uploadFile(buffer, destPath)
     paths.push(destPath)
@@ -237,10 +239,10 @@ export async function uploadFilesToSandbox(
 
 async function resolveFilename(
   sandbox: Awaited<ReturnType<Daytona["get"]>>,
-  repoPath: string,
+  destDir: string,
   filename: string
 ): Promise<string> {
-  if (!(await fileExists(sandbox, `${repoPath}/${filename}`))) return filename
+  if (!(await fileExists(sandbox, `${destDir}/${filename}`))) return filename
 
   const lastDot = filename.lastIndexOf(".")
   const hasExt = lastDot > 0
@@ -249,7 +251,7 @@ async function resolveFilename(
 
   for (let counter = 1; counter < 100; counter++) {
     const candidate = `${base}-${counter}${ext}`
-    if (!(await fileExists(sandbox, `${repoPath}/${candidate}`))) return candidate
+    if (!(await fileExists(sandbox, `${destDir}/${candidate}`))) return candidate
   }
   return `${base}-${Date.now()}${ext}`
 }
