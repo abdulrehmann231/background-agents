@@ -152,17 +152,17 @@ const sessionId = session.id  // Save this to reattach later
 // --- After restart ---
 
 // Reattach to existing session
-const sandbox = await daytona.get(sandboxId)
-const session = await getSession(sessionId, { sandbox })
+const restoredSandbox = await daytona.get(sandboxId)
+const restoredSession = await getSession(sessionId, { sandbox: restoredSandbox })
 
 // Continue polling
-const { events, running } = await session.getEvents()
+const { events, running } = await restoredSession.getEvents()
 for (const event of events) {
   if (event.type === "token") process.stdout.write(event.text)
 }
 
 // Cancel if needed
-await session.cancel()
+await restoredSession.cancel()
 ```
 
 ---
@@ -184,7 +184,7 @@ const session = await createSession("claude", {
 
 ### `session.start(prompt)`
 
-Starts a background task. Returns immediately with process info.
+Starts a background task. Returns immediately with a `TurnHandle` (`{ executionId, pid, outputFile }`).
 
 ```typescript
 const { executionId, pid, outputFile } = await session.start("Your task here")
