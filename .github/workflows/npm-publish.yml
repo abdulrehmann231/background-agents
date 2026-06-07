@@ -34,6 +34,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       - name: Set package version from tag
         run: |
