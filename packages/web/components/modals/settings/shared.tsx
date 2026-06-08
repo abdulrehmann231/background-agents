@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Eye, EyeOff, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useCopyToClipboard } from "@/lib/hooks/useCopyToClipboard"
 import { Input } from "@/components/ui/input"
 import { CREDENTIAL_KEYS, type CredentialId } from "@/lib/credentials"
 import type { CredentialFlags } from "@/lib/types"
@@ -105,14 +106,10 @@ export function PasswordInput({
 
 /** Inline clickable <code> that copies to clipboard and shows a brief check. */
 export function CopyCode({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard(1500)
   return (
     <code
-      onClick={() => {
-        navigator.clipboard.writeText(text).catch(() => {})
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-      }}
+      onClick={() => copy(text)}
       className="cursor-pointer inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] hover:bg-accent"
     >
       {copied ? <Check className="h-2.5 w-2.5 text-green-500" /> : <Copy className="h-2.5 w-2.5" />}
