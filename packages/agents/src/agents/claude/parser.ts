@@ -76,7 +76,10 @@ type ClaudeEvent =
 /**
  * Extract output from a tool result object
  */
-function toolResultOutput(obj: ClaudeToolResult): string | undefined {
+function toolResultOutput(obj: {
+  result?: string
+  content?: string | Array<{ text?: string }>
+}): string | undefined {
   let out = obj.result
   if (out === undefined && obj.content !== undefined) {
     if (typeof obj.content === "string") out = obj.content
@@ -138,11 +141,7 @@ export function parseClaudeLine(
   if (json.type === "user" && json.message?.content) {
     for (const block of json.message.content) {
       if (block.type === "tool_result") {
-        let out: string | undefined
-        if (typeof block.content === "string") out = block.content
-        else if (Array.isArray(block.content) && block.content[0]?.text)
-          out = block.content[0].text
-        return { type: "tool_end", output: out }
+        return { type: "tool_end", output: toolResultOutput(block) }
       }
     }
   }
