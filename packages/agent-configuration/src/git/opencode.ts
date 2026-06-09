@@ -22,12 +22,16 @@
  * - git checkout (use "git restore" for file operations)
  * - git switch (branch switching)
  *
- * `edit` and `webfetch` are explicitly allowed. Without these, opencode falls
- * back to its built-in default ("ask"), which in headless/scheduled mode
- * becomes an auto-rejection — see the `external_directory` denial that crashes
- * scheduled runs the first time the agent (or opencode itself) touches
- * `/tmp/logs/*`. `webfetch` is opened up so MCP servers and the agent's own
- * web tooling work in scheduled jobs.
+ * `edit`, `webfetch`, and `external_directory` are explicitly allowed. Without
+ * these, opencode falls back to its built-in default ("ask"), which in
+ * headless/scheduled mode becomes an auto-rejection. `external_directory`
+ * specifically guards access to paths outside the project working directory
+ * (e.g. `/home/daytona/*`, the parent of the repo, or `/tmp/logs/*`): the first
+ * time the agent (or opencode itself) touches such a path, the unconfigured
+ * "ask" default auto-rejects and crashes the run with
+ * `permission requested: external_directory (...); auto-rejecting`. `webfetch`
+ * is opened up so MCP servers and the agent's own web tooling work in
+ * scheduled jobs.
  */
 export const OPENCODE_PERMISSIONS = {
   bash: {
@@ -53,6 +57,9 @@ export const OPENCODE_PERMISSIONS = {
     "*": "allow",
   },
   webfetch: {
+    "*": "allow",
+  },
+  external_directory: {
     "*": "allow",
   },
 } as const
