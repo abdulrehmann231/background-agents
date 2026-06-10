@@ -57,6 +57,9 @@ const GOOSE_INSTALL_CMD = `
  * - Pi (@mariozechner/pi-coding-agent)
  * - Goose (binary from GitHub releases)
  *
+ * Also pre-installs:
+ * - tokscale (per-turn token usage & cost reporting across providers)
+ *
  * Note: Eliza is built-in to the agents package (no CLI installation needed).
  */
 export function getAgentSandboxImage(): Image {
@@ -96,6 +99,13 @@ export function getAgentSandboxImage(): Image {
         // Install Kilo CLI
         "npm install -g @kilocode/cli"
       )
+      .runCommands(
+        // Install tokscale - per-turn token usage & cost across all providers.
+        // The SDK runs `tokscale --json` in the sandbox after each turn to read
+        // each provider's native session logs and price them via LiteLLM.
+        // TODO(token-usage): pin to a known-good version after Phase 0 validation.
+        "npm install -g tokscale"
+      )
       // Create daytona user (non-root) - Claude Code refuses to run as root
       .runCommands(
         "useradd -m -s /bin/bash daytona || true && " +
@@ -110,9 +120,13 @@ export function getAgentSandboxImage(): Image {
           "chmod +x /home/daytona/.local/bin/goose && " +
           "rm -rf /tmp/goose_tmp"
       )
-      // Create required directories and set up PATH for daytona user
+      // Create required directories and set up PATH for daytona user.
+      // .config/tokscale + .cache/tokscale hold tokscale's settings and its
+      // 1-hour LiteLLM pricing cache (written at runtime by the daytona user).
       .runCommands(
-        "mkdir -p /home/daytona/.gemini /home/daytona/.config/goose /home/daytona/project && " +
+        "mkdir -p /home/daytona/.gemini /home/daytona/.config/goose " +
+          "/home/daytona/.config/tokscale /home/daytona/.cache/tokscale " +
+          "/home/daytona/project && " +
           "chown -R daytona:daytona /home/daytona"
       )
       // Pre-install ws + node-pty for @background-agents/daytona-terminal so

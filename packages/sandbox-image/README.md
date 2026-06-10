@@ -17,6 +17,10 @@ Pre-installed agents:
 - **Pi** (`@mariozechner/pi-coding-agent`)
 - **Goose** (binary from GitHub releases)
 
+Also pre-installed:
+
+- **tokscale** — per-turn token usage & cost reporting across providers. The agents SDK runs `tokscale --json` in the sandbox after each turn to read each provider's native session logs and price them via LiteLLM. Pricing is fetched at runtime and cached for 1 hour under `~/.cache/tokscale`; for fully offline cost, bake a `~/.config/tokscale/custom-pricing.json` into the image.
+
 The image is based on `node:22-bookworm` and runs as a non-root `daytona` user (Claude Code refuses to run as root).
 
 ## Installation
