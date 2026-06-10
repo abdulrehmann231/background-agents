@@ -25,10 +25,9 @@
  * `edit`, `webfetch`, and `external_directory` are explicitly allowed. Without
  * these, opencode falls back to its built-in default ("ask"), which in
  * headless/scheduled mode becomes an auto-rejection. `external_directory` is
- * needed whenever the agent or opencode itself touches paths outside the
- * project root — e.g. `/tmp/logs/*` for log output or `/home/daytona/uploads/*`
- * for user-uploaded files. `webfetch` is opened up so MCP servers and the
- * agent's own web tooling work in scheduled jobs.
+ * scoped to `/home/daytona/uploads/*` so the agent can read user-uploaded
+ * files without granting access to all external paths. `webfetch` is opened
+ * up so MCP servers and the agent's own web tooling work in scheduled jobs.
  */
 export const OPENCODE_PERMISSIONS = {
   bash: {
@@ -57,7 +56,7 @@ export const OPENCODE_PERMISSIONS = {
     "*": "allow",
   },
   external_directory: {
-    "*": "allow",
+    "/home/daytona/uploads/*": "allow",
   },
 } as const
 
