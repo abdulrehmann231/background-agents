@@ -143,6 +143,40 @@ export interface AgentCrashedEvent {
   output?: string
 }
 
+/**
+ * Usage event - per-turn token usage and cost for the completed turn.
+ *
+ * Populated from the `tokscale` CLI running inside the sandbox (which reads
+ * each provider's native session logs and prices them via LiteLLM), so no
+ * per-provider token parsing or pricing table is maintained here.
+ *
+ * Emitted at most once per turn, on completion, as a best-effort signal: if
+ * tokscale is unavailable or the provider is unsupported (e.g. eliza, or
+ * copilot which reports premium-request counts rather than tokens), no event
+ * is emitted.
+ */
+export interface UsageEvent {
+  type: "usage"
+  /** Agent/provider name (e.g. "claude"). */
+  provider: string
+  /** Model id, when reported by tokscale. */
+  model?: string
+  /** Non-cached input tokens for this turn. */
+  inputTokens: number
+  /** Output (completion) tokens for this turn. */
+  outputTokens: number
+  /** Cache-read input tokens for this turn. */
+  cacheReadTokens: number
+  /** Cache-write/creation input tokens for this turn. */
+  cacheWriteTokens: number
+  /** Total tokens for this turn. */
+  totalTokens: number
+  /** Cost in USD for this turn, when priceable (undefined otherwise). */
+  costUSD?: number
+  /** Origin of the usage data. */
+  source: "tokscale"
+}
+
 /** Union type of all possible events */
 export type Event =
   | SessionEvent
@@ -152,6 +186,7 @@ export type Event =
   | ToolEndEvent
   | EndEvent
   | AgentCrashedEvent
+  | UsageEvent
 
 /** Event type discriminator */
 export type EventType = Event["type"]

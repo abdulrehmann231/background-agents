@@ -3,6 +3,7 @@
  */
 
 import type { Event } from "../types/events"
+import type { CumulativeUsage } from "./usage"
 
 /**
  * Run phase for background sessions
@@ -43,6 +44,17 @@ export interface SessionMeta {
   startedAt?: string
   provider?: string
   sessionId?: string | null
+  /**
+   * Cumulative usage already attributed to prior turns, used as the baseline
+   * for diffing the next turn's usage. Updated each time usage is computed.
+   */
+  usageCum?: CumulativeUsage
+  /**
+   * Usage delta for the most recently completed turn, plus the turn index it
+   * belongs to. Cached so getTurnUsage() is idempotent per turn and so the
+   * read-only snapshot path can surface usage without re-running tokscale.
+   */
+  lastTurnUsage?: { turn: number; usage: CumulativeUsage }
 }
 
 /**

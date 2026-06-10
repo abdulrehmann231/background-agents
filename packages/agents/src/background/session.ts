@@ -7,8 +7,15 @@
 
 import { randomUUID } from "node:crypto"
 import type { AgentDefinition, ParseContext, RunOptions } from "../core/agent"
-import type { AgentCrashedEvent, Event } from "../types/events"
+import type { AgentCrashedEvent, Event, UsageEvent } from "../types/events"
 import type { CodeAgentSandbox } from "../types/provider"
+import type { CumulativeUsage } from "./usage"
+import {
+  diffUsage,
+  normalizeTokscaleUsage,
+  providerToTokscaleClient,
+  usageToEvent,
+} from "./usage"
 import type {
   HistoryMessage,
   PollResult,
@@ -84,6 +91,15 @@ export interface BackgroundSession {
 
   /** Cancel the current turn */
   cancel(): Promise<void>
+
+  /**
+   * Compute token usage and cost for the most recently completed turn by
+   * running the `tokscale` CLI in the sandbox and diffing against the cumulative
+   * baseline. Best-effort: returns null when the turn is still running, the
+   * provider is unsupported, or tokscale is unavailable. Idempotent per turn
+   * (cached in session meta).
+   */
+  getTurnUsage(): Promise<UsageEvent | null>
 }
 
 /**
@@ -383,9 +399,83 @@ class BackgroundSessionImpl implements BackgroundSession {
     }
   }
 
+  async getTurnUsage(): Promise<UsageEvent | null> {
+    const meta = await this.readMeta()
+    if (!meta) return null
+
+    // Index of the turn that just finished. After a normal completion the
+    // meta's currentTurn has already been advanced, so the finished turn is
+    // currentTurn - 1; otherwise it is the current turn.
+    const finishedTurn = meta.sawEnd
+      ? Math.max(0, (meta.currentTurn ?? 0) - 1)
+      : meta.currentTurn ?? 0
+
+    // Return the cached delta when we've already computed this turn.
+    if (meta.lastTurnUsage && meta.lastTurnUsage.turn === finishedTurn) {
+      return usageToEvent(meta.provider ?? this.agent.name, meta.lastTurnUsage.usage)
+    }
+
+    // Don't measure mid-turn (tokscale would report a partial cumulative).
+    if (await this.isRunning()) return null
+
+    const computed = await this.measureTurnUsage(meta, finishedTurn)
+    if (!computed) return null
+
+    // Persist the new baseline + cached delta (force-write; field-level
+    // change detection in writeMetaIfChanged does not track usage fields).
+    await this.writeMeta({
+      ...meta,
+      usageCum: computed.cumulative,
+      lastTurnUsage: { turn: finishedTurn, usage: computed.delta },
+    })
+    return usageToEvent(meta.provider ?? this.agent.name, computed.delta)
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Private helpers
   // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Run tokscale in the sandbox for this session's provider and diff against
+   * the stored cumulative baseline. Returns both the new cumulative snapshot
+   * (to persist as the next baseline) and this turn's delta. Best-effort:
+   * returns null on any failure or for unsupported providers.
+   */
+  private async measureTurnUsage(
+    meta: SessionMeta,
+    _finishedTurn: number
+  ): Promise<{ cumulative: CumulativeUsage; delta: CumulativeUsage } | null> {
+    if (!this.sandbox.executeCommand) return null
+    const provider = meta.provider ?? this.agent.name
+    const client = providerToTokscaleClient(provider)
+    if (!client) return null
+
+    const sessionId = meta.sessionId ?? this.parseContext.sessionId ?? undefined
+    try {
+      const result = await this.sandbox.executeCommand(
+        `tokscale --json --client ${client} --group-by session,model 2>/dev/null`,
+        30
+      )
+      if (result.exitCode !== 0) return null
+      const raw = (result.output ?? "").trim()
+      if (!raw) return null
+
+      const cumulative = normalizeTokscaleUsage(raw, sessionId)
+      // Nothing recorded yet -> nothing to attribute.
+      if (cumulative.totalTokens === 0 && cumulative.costUSD === 0 && !cumulative.hasCost) {
+        return null
+      }
+      const delta = diffUsage(cumulative, meta.usageCum)
+      return { cumulative, delta }
+    } catch (err) {
+      debugLog(
+        `measureTurnUsage failed agent=${provider}`,
+        this.parseContext.sessionId,
+        String(err)
+      )
+      return null
+    }
+  }
 
   private async readMeta(): Promise<SessionMeta | null> {
     if (!this.sandbox.executeCommand) return null
@@ -636,6 +726,10 @@ class BackgroundSessionImpl implements BackgroundSession {
       rawCursor: Number(result.rawCursor) || meta.rawCursor || 0,
       provider: this.agent.name,
       sessionId: this.parseContext.sessionId ?? meta.sessionId ?? null,
+      // Carry forward the usage baseline so it survives every meta rewrite;
+      // the completion branch overrides these when it measures a new turn.
+      usageCum: meta.usageCum,
+      lastTurnUsage: meta.lastTurnUsage,
     }
 
     // Early poll / wrapper race
@@ -667,9 +761,29 @@ class BackgroundSessionImpl implements BackgroundSession {
 
     if (!stillRunning || sawEnd) {
       const nextTurn = (meta.currentTurn ?? 0) + 1
+      const finishedTurn = meta.currentTurn ?? 0
+
+      // Best-effort per-turn token usage + cost via tokscale. Only on a clean
+      // end (not a crash), and only once per turn (the next poll returns early
+      // because outputFile/runId are cleared below).
+      let usageFields: Pick<SessionMeta, "usageCum" | "lastTurnUsage"> = {}
+      if (sawEnd) {
+        const computed = await this.measureTurnUsage(meta, finishedTurn)
+        if (computed) {
+          usageFields = {
+            usageCum: computed.cumulative,
+            lastTurnUsage: { turn: finishedTurn, usage: computed.delta },
+          }
+          result.events.push(
+            usageToEvent(meta.provider ?? this.agent.name, computed.delta)
+          )
+        }
+      }
+
       await this.writeMetaIfChanged(
         {
           ...baseMeta,
+          ...usageFields,
           currentTurn: nextTurn,
           sawEnd,
           ...(sawEnd

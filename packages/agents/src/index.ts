@@ -47,6 +47,7 @@ export type {
   ToolEndEvent,
   EndEvent,
   AgentCrashedEvent,
+  UsageEvent,
   EventType,
   ToolName,
   WriteToolInput,
