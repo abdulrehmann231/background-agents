@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { isSharedPoolAvailable } from "@/lib/claude-credentials"
 import { hasExceededClaudeLimit, getDailyClaudeCodeLimit } from "@/lib/db/usage-limit"
+import { claudeLimitScope, isClaudeLimited } from "@/lib/server/claude-limit"
 import { decryptUserCredentials } from "@/lib/db/api-helpers"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
 
@@ -65,6 +66,13 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   flags.OPENCODE_API_KEY_SHARED = opencodeFromEnv
   // Preserve the conventional boolean presence flag for callers that expect it
   flags.OPENCODE_API_KEY = opencodeFromDb || opencodeFromEnv
+
+  // Surface the real-time Claude provider-limit state (from the in-memory cache)
+  // so the client can render the autoswitch to OpenCode instantly, rather than
+  // only learning about it from the slow send round-trip.
+  if (isClaudeLimited(claudeLimitScope(userId, storedCreds))) {
+    flags.CLAUDE_PROVIDER_LIMITED = true
+  }
 
   if (await isSharedPoolAvailable()) {
     flags.CLAUDE_SHARED_POOL_AVAILABLE = true

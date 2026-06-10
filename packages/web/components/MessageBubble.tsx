@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, memo } from "react"
-import { GitMerge, FileText, AlertTriangle } from "lucide-react"
+import { GitMerge, FileText, AlertTriangle, ArrowLeftRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Message } from "@/lib/types"
 import {
@@ -98,6 +98,8 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
   const hasBlocks = message.contentBlocks && message.contentBlocks.length > 0
   const isEmpty = !hasContent && !hasToolCalls && !hasBlocks
   const isGitOperation = message.messageType === "git-operation"
+  // Provider-limit autoswitch notice (Claude → OpenCode), rendered as a system line.
+  const isNotice = message.messageType === "notice"
   // Error messages (e.g. a failed send/agent run) are surfaced as a system
   // message rather than rendered as plain assistant markdown text.
   const isErrorMessage = message.messageType === "error" || (message.isError && !isGitOperation)
@@ -109,6 +111,18 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
       <div className="text-2xl text-muted-foreground animate-pulse">
         ...
       </div>
+    )
+  }
+
+  // Provider-limit autoswitch notice — a neutral system line in the chat.
+  if (isNotice) {
+    return (
+      <SystemMessage
+        icon={ArrowLeftRight}
+        content={message.content}
+        variant="success"
+        isMobile={isMobile}
+      />
     )
   }
 

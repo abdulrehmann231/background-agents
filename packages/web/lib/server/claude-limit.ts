@@ -25,7 +25,7 @@
  * Switch when the worst window (Session/5hr OR Weekly) has <= this % remaining
  * ("about to hit"). Currently 20% for testing — raise/lower as needed.
  */
-const SWITCH_AT_REMAINING_PERCENT = 20
+const SWITCH_AT_REMAINING_PERCENT = 50
 
 interface ClaudeQuota {
   /** Worst (lowest) remaining percent across all reported windows, 0..100. */
@@ -105,6 +105,18 @@ export function shouldSwitchFromClaude(scope: string): boolean {
       q.resetAt ? new Date(q.resetAt).toISOString() : "n/a"
     }) → SWITCH`
   )
+  return true
+}
+
+/**
+ * Quiet read (no logging, no mutation) of whether the scope is currently
+ * limited. Used to expose the state to the client via credential flags so the
+ * UI can show the switch instantly instead of waiting for the send round-trip.
+ */
+export function isClaudeLimited(scope: string): boolean {
+  const q = cache.get(scope)
+  if (!q || !q.limited) return false
+  if (q.resetAt && Date.now() >= q.resetAt) return false
   return true
 }
 

@@ -21,11 +21,18 @@ import { checkSharedClaudeUsage } from "@/lib/db/usage-limit"
 import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
 import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
-import { getEnvForModel, defaultAgentModel } from "@background-agents/common"
+import { getEnvForModel } from "@background-agents/common"
 import {
   claudeLimitScope,
   shouldSwitchFromClaude,
 } from "@/lib/server/claude-limit"
+
+/**
+ * Fallback when Claude is at its provider limit: OpenCode's FREE MiMo v2.5
+ * (requiresKey: "none") — no API key, so it never fails on missing credits.
+ */
+const CLAUDE_LIMIT_FALLBACK_AGENT = "opencode"
+const CLAUDE_LIMIT_FALLBACK_MODEL = "opencode/mimo-v2.5-free"
 import { decrypt } from "@/lib/db/encryption"
 import {
   createSandboxForChat,
@@ -174,19 +181,21 @@ export async function POST(
   // The cache is read-only here (no tokscale call on the send path); it is
   // refreshed after each Claude turn completes. Rewriting payload.agent before
   // the agent-switch detection below makes history injection automatic.
-  // The user's selected agent/model — persisted on the chat so the selection
-  // survives a per-turn autoswitch and the limit is re-evaluated next message.
-  const selectedAgent = payload.agent
-  const selectedModel = payload.model
+  // Provider-limit autoswitch: if the active Claude account is at/near its real
+  // provider quota (per the in-memory cache), switch this chat to OpenCode's
+  // free MiMo model. This is a STICKY switch — the new agent/model is persisted
+  // on the chat and reflected in the UI; the user re-selects Claude manually.
+  // Rewriting payload.agent before the agent-switch detection below makes
+  // history injection automatic.
   let autoSwitchedFromClaude = false
   if (payload.agent === "claude-code") {
     const scope = claudeLimitScope(userId, credentials)
     if (shouldSwitchFromClaude(scope)) {
       console.log(
-        `[chats/messages] Claude at provider limit (scope=${scope}); switching to shared OpenCode pool`
+        `[chats/messages] Claude at provider limit (scope=${scope}); switching to OpenCode free MiMo`
       )
-      payload.agent = "opencode"
-      payload.model = defaultAgentModel.opencode
+      payload.agent = CLAUDE_LIMIT_FALLBACK_AGENT
+      payload.model = CLAUDE_LIMIT_FALLBACK_MODEL
       autoSwitchedFromClaude = true
     }
   }
@@ -602,11 +611,11 @@ export async function POST(
           status: "running",
           backgroundSessionId: bgSession.backgroundSessionId,
           lastActiveAt: new Date(),
-          // Persist the user's *selected* agent/model (not the per-turn
-          // autoswitch target) so the next message re-evaluates the Claude
-          // limit and routes back to Claude once its window resets.
-          agent: selectedAgent,
-          model: selectedModel,
+          // Persist agent/model. On a provider-limit autoswitch these are the
+          // OpenCode fallback values, so the switch is sticky and the UI
+          // reflects it (the user re-selects Claude when ready).
+          agent: payload.agent,
+          model: payload.model,
           // Clear stale sessionId on agent switch — new agent will generate its own
           ...(isAgentSwitch && { sessionId: null }),
         },

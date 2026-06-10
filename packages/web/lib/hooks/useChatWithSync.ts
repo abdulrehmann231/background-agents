@@ -444,9 +444,32 @@ export function useChatWithSync() {
       const userMessage: Message = { id: nanoid(), role: "user", content, timestamp: now }
       const assistantMessage: Message = { id: nanoid(), role: "assistant", content: "", timestamp: now + 1, toolCalls: [], contentBlocks: [] }
 
+      // Provider-limit autoswitch notice: when the active Claude account is at
+      // its limit (per the freshly-refetched credential flags), the server will
+      // route this turn to the OpenCode free model. Render an in-chat notice
+      // optimistically NOW so the user sees it instantly, rather than waiting
+      // for the ~10s send round-trip. Best-effort/ephemeral (not persisted).
+      const willAutoSwitchFromClaude =
+        selectedAgent === "claude-code" && !!credentialFlags.CLAUDE_PROVIDER_LIMITED
+      const noticeMessage: Message | undefined = willAutoSwitchFromClaude
+        ? {
+            id: nanoid(),
+            role: "assistant",
+            content:
+              "Claude Code is at its usage limit — switched this chat to OpenCode (MiMo v2.5 Free).",
+            timestamp: now,
+            messageType: "notice",
+          }
+        : undefined
+      // Optimistic selector switch (same fallback the server uses).
+      const switchedAgent = willAutoSwitchFromClaude ? "opencode" : undefined
+      const switchedModel = willAutoSwitchFromClaude ? "opencode/mimo-v2.5-free" : undefined
+
       // Optimistic update
       updateChatsCache((old) => old.map((c) =>
-        c.id === chatId ? applyOptimisticSend(c, userMessage, assistantMessage, now) : c
+        c.id === chatId
+          ? applyOptimisticSend(c, userMessage, assistantMessage, now, noticeMessage, switchedAgent, switchedModel)
+          : c
       ))
 
       // Switch to the real chat in the same synchronous block as the optimistic

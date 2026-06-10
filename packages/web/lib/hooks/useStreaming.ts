@@ -225,6 +225,12 @@ export function useStreaming(options: UseStreamingOptions = {}) {
             })
           }
 
+          // A Claude turn just finished, so the server refreshed its
+          // provider-limit cache. Refetch settings so credentialFlags carry the
+          // fresh CLAUDE_PROVIDER_LIMITED state before the next send — that's
+          // what lets the autoswitch notice render instantly next message.
+          queryClient.invalidateQueries({ queryKey: queryKeys.settings.all })
+
           // Fetch any new messages created by the backend (delta sync)
           try {
             const chatData = await fetchChat(chatId, { afterMessageId: assistantMessageId })

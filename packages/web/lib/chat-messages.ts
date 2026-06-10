@@ -31,6 +31,11 @@ export interface SendMessageResponse {
   previewUrlPattern: string | null
   backgroundSessionId: string
   uploadedFiles: string[]
+  /** Set when the server auto-switched off Claude due to its provider limit. */
+  autoSwitchedFromClaude?: boolean
+  /** The agent/model actually used (differs from the request on autoswitch). */
+  effectiveAgent?: string
+  effectiveModel?: string
 }
 
 export type SendMessageResult =
@@ -120,13 +125,25 @@ export function applyOptimisticSend(
   chat: Chat,
   userMessage: Message,
   assistantMessage: Message,
-  now: number
+  now: number,
+  noticeMessage?: Message,
+  switchedAgent?: string,
+  switchedModel?: string
 ): Chat {
   return {
     ...chat,
-    messages: [...chat.messages, userMessage, assistantMessage],
+    messages: [
+      ...chat.messages,
+      userMessage,
+      ...(noticeMessage ? [noticeMessage] : []),
+      assistantMessage,
+    ],
     status: chat.sandboxId ? "running" : "creating",
     lastActiveAt: now,
+    // On a provider-limit autoswitch, flip the selector instantly (the server
+    // confirms the same values via applySendSuccess on the response).
+    ...(switchedAgent ? { agent: switchedAgent } : {}),
+    ...(switchedModel ? { model: switchedModel } : {}),
     errorMessage: undefined,
     errorKind: undefined,
   }
@@ -156,8 +173,10 @@ export function applySendSuccess(
     branch: data.branch,
     previewUrlPattern: data.previewUrlPattern ?? undefined,
     backgroundSessionId: data.backgroundSessionId,
-    agent,
-    model,
+    // On a provider-limit autoswitch the server returns the effective
+    // (fallback) agent/model — persist those so the selector reflects the switch.
+    agent: data.effectiveAgent ?? agent,
+    model: data.effectiveModel ?? model,
     status: "running",
     messages: chat.messages.map((m) =>
       m.id === userMessageId && data.uploadedFiles.length > 0 ? { ...m, uploadedFiles: data.uploadedFiles } : m
