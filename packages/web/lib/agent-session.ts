@@ -184,9 +184,12 @@ export interface AgentSnapshot {
   /** When status is "error", classifies the failure so the UI can pick the
    *  right recovery action. "crash" = the agent process exited without
    *  completing (often transient, and any partial turn may have been persisted
-   *  server-side) → the UI may offer Reload instead of Retry. Specific failures
-   *  that carry their own guidance (e.g. model-not-available) stay undefined. */
-  errorKind?: "crash"
+   *  server-side) → the UI may offer Reload instead of Retry. "incomplete" = the
+   *  wire stream ended with no terminal event and no output → the agent may still
+   *  be running in the background, so the UI offers Reload (refresh history)
+   *  rather than resending. Specific failures that carry their own guidance (e.g.
+   *  model-not-available) stay undefined. */
+  errorKind?: "crash" | "incomplete"
   sessionId?: string
 }
 
@@ -256,6 +259,9 @@ function summarizeEvents(
       toolCalls,
       contentBlocks,
       error: hasOutput ? undefined : "Agent stopped without completing",
+      // The agent may still be running in the background; refreshing the chat
+      // history recovers the turn rather than resending and duplicating it.
+      errorKind: hasOutput ? undefined : ("incomplete" as const),
       sessionId: sessionId || undefined,
     }
   }
