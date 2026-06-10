@@ -6,7 +6,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { isSharedPoolAvailable } from "@/lib/claude-credentials"
 import { hasExceededClaudeLimit, getDailyClaudeCodeLimit } from "@/lib/db/usage-limit"
-import { claudeLimitScope, isClaudeLimited } from "@/lib/server/claude-limit"
+import { providerLimitScope, isProviderLimited } from "@/lib/server/claude-limit"
 import { decryptUserCredentials } from "@/lib/db/api-helpers"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
 
@@ -67,12 +67,15 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   // Preserve the conventional boolean presence flag for callers that expect it
   flags.OPENCODE_API_KEY = opencodeFromDb || opencodeFromEnv
 
-  // Surface the real-time Claude provider-limit state (from the in-memory cache)
-  // so the client can render the autoswitch to OpenCode instantly, rather than
-  // only learning about it from the slow send round-trip.
-  if (isClaudeLimited(claudeLimitScope(userId, storedCreds))) {
-    flags.CLAUDE_PROVIDER_LIMITED = true
-  }
+  // Surface the real-time provider-limit state (from the in-memory cache) for
+  // each monitored agent so the client can render the autoswitch to OpenCode
+  // instantly, rather than only learning about it from the slow send round-trip.
+  const claudeScope = providerLimitScope("claude-code", userId, storedCreds)
+  if (claudeScope && isProviderLimited(claudeScope)) flags.CLAUDE_PROVIDER_LIMITED = true
+  const codexScope = providerLimitScope("codex", userId, storedCreds)
+  if (codexScope && isProviderLimited(codexScope)) flags.CODEX_PROVIDER_LIMITED = true
+  const copilotScope = providerLimitScope("copilot", userId, storedCreds)
+  if (copilotScope && isProviderLimited(copilotScope)) flags.COPILOT_PROVIDER_LIMITED = true
 
   if (await isSharedPoolAvailable()) {
     flags.CLAUDE_SHARED_POOL_AVAILABLE = true

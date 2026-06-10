@@ -23,16 +23,18 @@ import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
 import { getEnvForModel } from "@background-agents/common"
 import {
-  claudeLimitScope,
-  shouldSwitchFromClaude,
+  isMonitoredAgent,
+  providerLimitScope,
+  shouldSwitchFromProvider,
 } from "@/lib/server/claude-limit"
 
 /**
- * Fallback when Claude is at its provider limit: OpenCode's FREE MiMo v2.5
- * (requiresKey: "none") — no API key, so it never fails on missing credits.
+ * Fallback when a monitored provider (Claude/Codex/Copilot) is at its limit:
+ * OpenCode's FREE MiMo v2.5 (requiresKey: "none") — no API key, so it never
+ * fails on missing credits.
  */
-const CLAUDE_LIMIT_FALLBACK_AGENT = "opencode"
-const CLAUDE_LIMIT_FALLBACK_MODEL = "opencode/mimo-v2.5-free"
+const PROVIDER_LIMIT_FALLBACK_AGENT = "opencode"
+const PROVIDER_LIMIT_FALLBACK_MODEL = "opencode/mimo-v2.5-free"
 import { decrypt } from "@/lib/db/encryption"
 import {
   createSandboxForChat,
@@ -95,8 +97,8 @@ interface SuccessResponse {
   previewUrlPattern: string | null
   backgroundSessionId: string
   uploadedFiles: string[]
-  /** Set when the turn was auto-switched off Claude due to its provider limit. */
-  autoSwitchedFromClaude?: boolean
+  /** Set when the turn was auto-switched off the selected provider (limit). */
+  autoSwitched?: boolean
   /** The agent/model actually used (may differ from the request on autoswitch). */
   effectiveAgent?: string
   effectiveModel?: string
@@ -181,22 +183,23 @@ export async function POST(
   // The cache is read-only here (no tokscale call on the send path); it is
   // refreshed after each Claude turn completes. Rewriting payload.agent before
   // the agent-switch detection below makes history injection automatic.
-  // Provider-limit autoswitch: if the active Claude account is at/near its real
-  // provider quota (per the in-memory cache), switch this chat to OpenCode's
-  // free MiMo model. This is a STICKY switch — the new agent/model is persisted
-  // on the chat and reflected in the UI; the user re-selects Claude manually.
-  // Rewriting payload.agent before the agent-switch detection below makes
-  // history injection automatic.
-  let autoSwitchedFromClaude = false
-  if (payload.agent === "claude-code") {
-    const scope = claudeLimitScope(userId, credentials)
-    if (shouldSwitchFromClaude(scope)) {
+  // Provider-limit autoswitch: if the active account for the selected agent
+  // (Claude/Codex/Copilot) is at/near its real provider quota (per the
+  // in-memory cache), switch this chat to OpenCode's free MiMo model. This is a
+  // STICKY switch — the new agent/model is persisted on the chat and reflected
+  // in the UI; the user re-selects the original provider manually. Rewriting
+  // payload.agent before the agent-switch detection below makes history
+  // injection automatic.
+  let autoSwitchedFromProvider = false
+  if (isMonitoredAgent(payload.agent)) {
+    const scope = providerLimitScope(payload.agent, userId, credentials)
+    if (scope && shouldSwitchFromProvider(scope)) {
       console.log(
-        `[chats/messages] Claude at provider limit (scope=${scope}); switching to OpenCode free MiMo`
+        `[chats/messages] ${payload.agent} at provider limit (scope=${scope}); switching to OpenCode free MiMo`
       )
-      payload.agent = CLAUDE_LIMIT_FALLBACK_AGENT
-      payload.model = CLAUDE_LIMIT_FALLBACK_MODEL
-      autoSwitchedFromClaude = true
+      payload.agent = PROVIDER_LIMIT_FALLBACK_AGENT
+      payload.model = PROVIDER_LIMIT_FALLBACK_MODEL
+      autoSwitchedFromProvider = true
     }
   }
 
@@ -640,8 +643,8 @@ export async function POST(
       previewUrlPattern,
       backgroundSessionId: bgSession.backgroundSessionId,
       uploadedFiles: uploadedFilePaths,
-      ...(autoSwitchedFromClaude && {
-        autoSwitchedFromClaude: true,
+      ...(autoSwitchedFromProvider && {
+        autoSwitched: true,
         effectiveAgent: payload.agent,
         effectiveModel: payload.model,
       }),

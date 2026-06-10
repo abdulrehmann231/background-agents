@@ -31,8 +31,8 @@ export interface SendMessageResponse {
   previewUrlPattern: string | null
   backgroundSessionId: string
   uploadedFiles: string[]
-  /** Set when the server auto-switched off Claude due to its provider limit. */
-  autoSwitchedFromClaude?: boolean
+  /** Set when the server auto-switched off the selected provider (limit). */
+  autoSwitched?: boolean
   /** The agent/model actually used (differs from the request on autoswitch). */
   effectiveAgent?: string
   effectiveModel?: string

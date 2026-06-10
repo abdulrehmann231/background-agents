@@ -55,6 +55,7 @@ import {
   decrementClaudeUsage,
   type SendMessagePayload,
 } from "@/lib/chat-messages"
+import { agentLabels } from "@background-agents/common"
 
 // =============================================================================
 // Hook
@@ -449,21 +450,30 @@ export function useChatWithSync() {
       // route this turn to the OpenCode free model. Render an in-chat notice
       // optimistically NOW so the user sees it instantly, rather than waiting
       // for the ~10s send round-trip. Best-effort/ephemeral (not persisted).
-      const willAutoSwitchFromClaude =
-        selectedAgent === "claude-code" && !!credentialFlags.CLAUDE_PROVIDER_LIMITED
-      const noticeMessage: Message | undefined = willAutoSwitchFromClaude
+      // Is the selected provider (Claude/Codex/Copilot) at its limit per the
+      // freshly-refetched flags? If so the server will route this turn to the
+      // OpenCode free model — render the switch optimistically and instantly.
+      const providerLimitedFlag =
+        selectedAgent === "claude-code"
+          ? credentialFlags.CLAUDE_PROVIDER_LIMITED
+          : selectedAgent === "codex"
+            ? credentialFlags.CODEX_PROVIDER_LIMITED
+            : selectedAgent === "copilot"
+              ? credentialFlags.COPILOT_PROVIDER_LIMITED
+              : false
+      const willAutoSwitchProvider = !!providerLimitedFlag
+      const noticeMessage: Message | undefined = willAutoSwitchProvider
         ? {
             id: nanoid(),
             role: "assistant",
-            content:
-              "Claude Code is at its usage limit — switched this chat to OpenCode (MiMo v2.5 Free).",
+            content: `${agentLabels[selectedAgent]} is at its usage limit — switched this chat to OpenCode (MiMo v2.5 Free).`,
             timestamp: now,
             messageType: "notice",
           }
         : undefined
       // Optimistic selector switch (same fallback the server uses).
-      const switchedAgent = willAutoSwitchFromClaude ? "opencode" : undefined
-      const switchedModel = willAutoSwitchFromClaude ? "opencode/mimo-v2.5-free" : undefined
+      const switchedAgent = willAutoSwitchProvider ? "opencode" : undefined
+      const switchedModel = willAutoSwitchProvider ? "opencode/mimo-v2.5-free" : undefined
 
       // Optimistic update
       updateChatsCache((old) => old.map((c) =>

@@ -74,10 +74,12 @@ export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   OPENCODE_API_KEY_SHARED?: boolean
   // Whether the OPENCODE_API_KEY is a user-provided credential stored in DB
   OPENCODE_API_KEY_USER?: boolean
-  // The active Claude account (own subscription or shared pool) is at/near its
-  // real provider quota right now. Lets the client show the autoswitch to
-  // OpenCode instantly instead of waiting for the send round-trip.
+  // The active account for a monitored subscription provider (own or shared)
+  // is at/near its real provider quota right now. Lets the client show the
+  // autoswitch to OpenCode instantly instead of waiting for the send round-trip.
   CLAUDE_PROVIDER_LIMITED?: boolean
+  CODEX_PROVIDER_LIMITED?: boolean
+  COPILOT_PROVIDER_LIMITED?: boolean
 }
 export type Credentials = Partial<Record<CredentialId, string>>
 
