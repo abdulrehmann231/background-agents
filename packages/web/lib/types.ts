@@ -184,9 +184,11 @@ export interface Chat {
 
   /** When status is "error", classifies the failure. "crash" = the agent
    *  process exited without completing — often transient, so the UI offers
-   *  Reload (when partial output streamed) instead of Retry. Cleared on the
-   *  next send. */
-  errorKind?: "crash"
+   *  Reload (when partial output streamed) instead of Retry. "incomplete" = the
+   *  turn ended with no terminal event and no output; the agent may still be
+   *  running in the background, so the UI offers Reload instead of Retry.
+   *  Cleared on the next send. */
+  errorKind?: "crash" | "incomplete"
 
   /** Set when a merge targets this branch but sandbox was stopped. Triggers pull on next execute. */
   needsSync?: boolean
@@ -276,8 +278,9 @@ export interface SSECompleteEvent {
   sessionId?: string
   error?: string
   /** When status is "error", classifies the failure. "crash" = the agent
-   *  process exited without completing → the UI may offer Reload over Retry. */
-  errorKind?: "crash"
+   *  process exited without completing; "incomplete" = the turn ended with no
+   *  terminal event and no output → the UI may offer Reload over Retry. */
+  errorKind?: "crash" | "incomplete"
   cursor: number
   /** Conflict state after agent completion - allows frontend to update warning icon */
   conflictState?: {

@@ -677,10 +677,17 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
             // server-side, so offer Reload (refresh history) instead of Retry
             // (which resends and duplicates the turn). With nothing to recover —
             // the agent crashed before producing anything — fall back to Retry.
+            //
+            // "incomplete" means the turn ended with no terminal event: the agent
+            // may still be running in the background, so always Reload (refresh
+            // history) rather than resending and risking a duplicate run.
             const lastAssistant = [...chat.messages].reverse().find((m) => m.role === "assistant")
             const recoveredOutput =
               !!lastAssistant?.content?.trim() || (lastAssistant?.toolCalls?.length ?? 0) > 0
-            const useReload = chat.errorKind === "crash" && recoveredOutput && !!onReload
+            const useReload =
+              !!onReload &&
+              (chat.errorKind === "incomplete" ||
+                (chat.errorKind === "crash" && recoveredOutput))
 
             return (
               <ErrorBanner
