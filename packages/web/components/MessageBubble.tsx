@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, memo } from "react"
-import { GitMerge, FileText, AlertTriangle } from "lucide-react"
+import { GitMerge, FileText, AlertTriangle, ArrowLeftRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Message } from "@/lib/types"
 import {
@@ -98,6 +98,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
   const hasBlocks = message.contentBlocks && message.contentBlocks.length > 0
   const isEmpty = !hasContent && !hasToolCalls && !hasBlocks
   const isGitOperation = message.messageType === "git-operation"
+  const isProviderSwitch = message.messageType === "provider-switch"
   // Error messages (e.g. a failed send/agent run) are surfaced as a system
   // message rather than rendered as plain assistant markdown text.
   const isErrorMessage = message.messageType === "error" || (message.isError && !isGitOperation)
@@ -124,6 +125,19 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
         linkBranch={message.linkBranch}
         metadata={message.metadata}
         onForcePush={onForcePush}
+      />
+    )
+  }
+
+  // Provider auto-switch notice: rendered as a neutral system line so the user
+  // sees the turn moved to a fallback provider after the original hit its limit.
+  if (isProviderSwitch) {
+    return (
+      <SystemMessage
+        icon={ArrowLeftRight}
+        content={message.content}
+        variant="warning"
+        isMobile={isMobile}
       />
     )
   }

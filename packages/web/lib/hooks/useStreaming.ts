@@ -9,7 +9,7 @@
 
 import { useCallback, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import type { Chat, Message, SSEUpdateEvent, SSECompleteEvent } from "@/lib/types"
+import type { Chat, Message, SSEUpdateEvent, SSECompleteEvent, SSESwitchedEvent } from "@/lib/types"
 import { useStreamStore } from "@/lib/stores/stream-store"
 import { queryKeys } from "@/lib/query"
 import { fetchChat, toMessageType } from "@/lib/sync/api"
@@ -162,6 +162,63 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           }))
         } catch (err) {
           console.error("Failed to parse SSE update:", err)
+        }
+      })
+
+      // Provider auto-switch: the turn hit the original provider's upstream
+      // limit and is now continuing on a fallback provider over this same SSE
+      // connection. Reset the streamed assistant message (its stale error is
+      // cleared server-side) and pull the inline switch notice; subsequent
+      // `update` frames stream the new provider's output into it.
+      eventSource.addEventListener("switched", async (event) => {
+        if (abortSignal?.aborted) return
+        try {
+          const data: SSESwitchedEvent = JSON.parse(event.data)
+          const store = useStreamStore.getState()
+          if (store.isStreaming(chatId)) {
+            store.updateStream(chatId, { cursor: data.cursor, reconnectAttempts: 0 })
+          }
+
+          // Reflect the new provider on the chat + reset the streamed message
+          // (clear stale error content, adopt the bumped timestamp so the
+          // notice — created just before it — sorts immediately above).
+          updateChatsCache((old) => old.map((c) => {
+            if (c.id !== chatId) return c
+            const messages = c.messages.map((m) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    content: "",
+                    toolCalls: [],
+                    contentBlocks: [],
+                    agent: data.toAgent,
+                    model: data.model,
+                    isError: false,
+                    timestamp: data.assistantTimestamp,
+                  }
+                : m
+            )
+            return { ...c, agent: data.toAgent, model: data.model, messages }
+          }))
+
+          // Pull the server-persisted switch notice (and any other new rows).
+          try {
+            const chatData = await fetchChat(chatId)
+            const incoming = chatData.messages.map(toMessageType)
+            if (incoming.length > 0) {
+              updateChatsCache((old) =>
+                old.map((c) =>
+                  c.id === chatId
+                    ? { ...c, messages: mergeMessages(c.messages, incoming) }
+                    : c
+                )
+              )
+            }
+          } catch (fetchErr) {
+            console.error("Failed to fetch messages after provider switch:", fetchErr)
+          }
+        } catch (err) {
+          console.error("Failed to parse SSE switched:", err)
         }
       })
 

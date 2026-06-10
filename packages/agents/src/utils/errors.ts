@@ -26,9 +26,30 @@ export type AgentErrorCategory =
   | "auth"
   | "balance"
   | "model_unavailable"
+  | "usage_limit"
   | "rate_limit"
   | "network"
   | "unknown"
+
+/**
+ * Categories that mean "this provider can't serve this turn right now, but a
+ * different provider could." The web layer switches providers on these.
+ *
+ * - usage_limit: subscription/quota exhausted (Claude 5h/weekly cap, OpenCode
+ *   Go cap, Gemini RESOURCE_EXHAUSTED) — won't recover by waiting briefly.
+ * - balance: out of credits / payment required — same provider stays unusable.
+ * - rate_limit: transient 429 / overloaded — a different provider avoids the wait.
+ */
+const SWITCH_WORTHY: ReadonlySet<AgentErrorCategory> = new Set([
+  "usage_limit",
+  "balance",
+  "rate_limit",
+])
+
+/** Whether a classified error should trigger a provider switch. */
+export function isSwitchWorthyError(category: AgentErrorCategory): boolean {
+  return SWITCH_WORTHY.has(category)
+}
 
 export interface ClassifiedError {
   category: AgentErrorCategory
@@ -121,9 +142,20 @@ const RULES: { category: AgentErrorCategory; test: RegExp; hint: string }[] = [
     hint: "select a different model for this agent",
   },
   {
+    // Transient throttling — clears by waiting. Listed BEFORE usage_limit so
+    // "rate limit exceeded" classifies here, not as a subscription cap.
     category: "rate_limit",
     test: /rate[\s_-]?limit|\b429\b|too\s+many\s+requests|overloaded/i,
     hint: "wait a moment and retry",
+  },
+  {
+    // Subscription / plan quota exhausted upstream. Distinct from rate_limit:
+    // these don't clear by waiting a few seconds (Claude's 5-hour and weekly
+    // caps, OpenCode Go monthly usage, Gemini RESOURCE_EXHAUSTED) — the right
+    // move is to switch to another provider.
+    category: "usage_limit",
+    test: /usage\s+limit|session\s+limit|quota|resource[\s_-]?exhausted|5[\s-]?hour\s+limit|weekly\s+limit|monthly\s+limit|plan\s+limit|subscription\s+limit|hit\s+your\s+\w+\s+limit|limit\s+(reached|exceeded)|limit\s+will\s+reset|reached\s+your\s+(usage|plan|weekly|daily)\s+limit/i,
+    hint: "switch to another provider or wait for the limit to reset",
   },
   {
     category: "network",

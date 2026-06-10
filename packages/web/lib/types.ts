@@ -46,7 +46,7 @@ export interface EnvironmentVariables {
 // =============================================================================
 
 /** Message type for distinguishing system messages from regular chat */
-export type MessageType = "chat" | "git-operation" | "error"
+export type MessageType = "chat" | "git-operation" | "error" | "provider-switch"
 
 /** Action types for git-operation messages */
 export type MessageAction = "force-push" | "view-pr" | "view-branch"
@@ -269,6 +269,24 @@ export interface SSEUpdateEvent {
   cursor: number
   sessionId?: string
   error?: string
+}
+
+/**
+ * Emitted mid-stream when the turn is auto-switched to a fallback provider
+ * after the original provider hit its upstream limit. The same SSE connection
+ * keeps streaming afterward — subsequent `update` frames carry the new
+ * provider's output into the (reset) assistant message.
+ */
+export interface SSESwitchedEvent {
+  fromAgent: string
+  toAgent: string
+  model: string
+  /** Id of the inline notice message the server persisted for the switch. */
+  noticeMessageId: string
+  /** New timestamp of the (restarted) assistant message, so the client can
+   *  reset it and keep the notice ordered just above it. */
+  assistantTimestamp: number
+  cursor: number
 }
 
 export interface SSECompleteEvent {

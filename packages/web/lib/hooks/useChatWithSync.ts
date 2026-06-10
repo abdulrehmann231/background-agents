@@ -490,7 +490,7 @@ export function useChatWithSync() {
 
         const { data } = result
         updateChatsCache((old) => old.map((c) =>
-          c.id === chatId ? applySendSuccess(c, data, selectedAgent, selectedModel, userMessage.id) : c
+          c.id === chatId ? applySendSuccess(c, data, selectedAgent, selectedModel, userMessage.id, assistantMessage.id) : c
         ))
 
         startStreaming(chatId, data.sandboxId, "project", data.backgroundSessionId, assistantMessage.id, data.previewUrlPattern ?? undefined, data.branch, undefined, planMode)

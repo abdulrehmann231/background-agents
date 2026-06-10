@@ -127,6 +127,8 @@ export interface ChatStreamAccessResult {
     sandboxId: string | null
     backgroundSessionId: string | null
     previewUrlPattern: string | null
+    /** Current agent for the chat — used to drive provider auto-switch. */
+    agent: string | null
   }
 }
 
@@ -165,6 +167,7 @@ export async function requireChatStreamAccess(
       sandboxId: chat.sandboxId,
       backgroundSessionId: chat.backgroundSessionId,
       previewUrlPattern: chat.previewUrlPattern,
+      agent: chat.agent ?? null,
     },
   }
 }

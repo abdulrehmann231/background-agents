@@ -45,6 +45,7 @@ export type {
   ToolStartEvent,
   ToolDeltaEvent,
   ToolEndEvent,
+  UsageEvent,
   EndEvent,
   AgentCrashedEvent,
   EventType,
@@ -155,8 +156,20 @@ export {
   extractErrorMessage,
   classifyAgentError,
   resolveAgentError,
+  isSwitchWorthyError,
 } from "./utils/index"
 export type { AgentErrorCategory, ClassifiedError } from "./utils/index"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pricing / cost estimation
+// ─────────────────────────────────────────────────────────────────────────────
+
+export {
+  getModelPrice,
+  estimateCostUsd,
+  buildUsageEvent,
+} from "./core/pricing"
+export type { ModelPrice, UsageTokens } from "./core/pricing"
 
 // Debug (enable with CODING_AGENTS_DEBUG=1)
 export { isDebugEnabled, debugLog } from "./debug"

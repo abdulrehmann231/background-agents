@@ -11,7 +11,7 @@ import type { MessageMetadata } from "@/lib/types"
 export interface SystemMessageProps {
   icon: LucideIcon
   content: string
-  variant?: "success" | "error"
+  variant?: "success" | "error" | "warning"
   isMobile?: boolean
   repo?: string
   linkBranch?: string
@@ -27,6 +27,7 @@ export function SystemMessage({ icon: Icon, content, variant = "success", isMobi
     "shrink-0",
     variant === "error" && "text-red-500 dark:text-red-400",
     variant === "success" && "text-green-600 dark:text-green-400",
+    variant === "warning" && "text-amber-600 dark:text-amber-400",
     isMobile ? "h-4 w-4" : "h-3.5 w-3.5"
   )
 

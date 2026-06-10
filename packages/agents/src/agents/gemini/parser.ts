@@ -22,6 +22,7 @@
 import type { Event } from "../../types/events"
 import type { ParseContext } from "../../core/agent"
 import { createToolStartEvent, normalizeToolName } from "../../core/tools"
+import { buildUsageEvent, estimateCostUsd } from "../../core/pricing"
 import { safeJsonParse } from "../../utils/json"
 
 /**
@@ -44,9 +45,21 @@ interface GeminiMessage {
   delta?: boolean
 }
 
+/** Per-(turn|model) token counts. `input_tokens` includes `cached`; `input` is
+ *  the non-cached portion (input + cached === input_tokens). */
+interface GeminiStats {
+  total_tokens?: number
+  input_tokens?: number
+  output_tokens?: number
+  cached?: number
+  input?: number
+  models?: Record<string, GeminiStats>
+}
+
 interface GeminiResult {
   type: "result"
   status: string
+  stats?: GeminiStats
 }
 
 /** Current Gemini CLI: tool invocation */
@@ -133,8 +146,48 @@ export function parseGeminiLine(
     return null
   }
 
-  // Result event — marks turn completion
+  // Result event — marks turn completion, carrying token stats (no cost).
   if (json.type === "result") {
+    const stats = (json as GeminiResult).stats
+    const hasTokens =
+      !!stats &&
+      !!(
+        stats.total_tokens ||
+        stats.input_tokens ||
+        stats.output_tokens ||
+        stats.input ||
+        stats.cached
+      )
+    if (stats && hasTokens) {
+      const cached = stats.cached ?? 0
+      // `input` is non-cached; fall back to input_tokens - cached.
+      const nonCachedInput = stats.input ?? Math.max(0, (stats.input_tokens ?? 0) - cached)
+      // Gemini can use multiple models in one turn; sum their estimated costs
+      // and label the event with the highest-volume model.
+      const models = stats.models ?? {}
+      const entries = Object.entries(models)
+      let costUsd: number | undefined
+      for (const [m, s] of entries) {
+        const c = estimateCostUsd(m, {
+          inputTokens: s.input ?? Math.max(0, (s.input_tokens ?? 0) - (s.cached ?? 0)),
+          outputTokens: s.output_tokens ?? 0,
+          cachedInputTokens: s.cached,
+        })
+        if (c !== undefined) costUsd = (costUsd ?? 0) + c
+      }
+      const primaryModel = entries
+        .sort((a, b) => (b[1].total_tokens ?? 0) - (a[1].total_tokens ?? 0))[0]?.[0]
+      const usageEvent = buildUsageEvent({
+        provider: "gemini",
+        model: primaryModel,
+        inputTokens: nonCachedInput,
+        outputTokens: stats.output_tokens ?? 0,
+        cachedInputTokens: cached || undefined,
+        totalTokens: stats.total_tokens,
+        costUsd,
+      })
+      return [usageEvent, { type: "end" }]
+    }
     return { type: "end" }
   }
 

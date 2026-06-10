@@ -8,6 +8,7 @@
 import type { Event } from "../../types/events"
 import type { ParseContext } from "../../core/agent"
 import { createToolStartEvent, normalizeToolName } from "../../core/tools"
+import { buildUsageEvent } from "../../core/pricing"
 import { safeJsonParse } from "../../utils/json"
 import { resolveAgentError } from "../../utils/errors"
 
@@ -74,6 +75,14 @@ interface OpenCodeStepFinish {
     id: string
     type: "step-finish"
     reason: string
+    /** USD cost for this step (authoritative — OpenCode computes it). */
+    cost?: number
+    tokens?: {
+      input?: number
+      output?: number
+      reasoning?: number
+      cache?: { read?: number; write?: number }
+    }
   }
 }
 
@@ -156,10 +165,28 @@ export function parseOpencodeLine(
     return { type: "tool_end" }
   }
 
-  // Step finish - emit end only when run actually stops
+  // Step finish - carries per-step token usage + an authoritative USD cost.
+  // OpenCode reports usage incrementally (one step_finish per step), so emit a
+  // usage event each time; summing them yields the turn total. End is emitted
+  // only when the run actually stops.
   if (json.type === "step_finish") {
-    if (json.part?.reason === "stop") return { type: "end" }
-    return null
+    const part = json.part
+    const tokens = part?.tokens
+    let usageEvent: Event | undefined
+    if (tokens) {
+      usageEvent = buildUsageEvent({
+        provider: "opencode",
+        // reasoning tokens are billed as output; fold them in.
+        inputTokens: tokens.input ?? 0,
+        outputTokens: (tokens.output ?? 0) + (tokens.reasoning ?? 0),
+        cachedInputTokens: tokens.cache?.read,
+        costUsd: part?.cost,
+      })
+    }
+    if (part?.reason === "stop") {
+      return usageEvent ? [usageEvent, { type: "end" }] : { type: "end" }
+    }
+    return usageEvent ?? null
   }
 
   // Error event - emit as end with error

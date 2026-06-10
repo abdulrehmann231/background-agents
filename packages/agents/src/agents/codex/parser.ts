@@ -8,6 +8,7 @@
 import type { Event } from "../../types/events"
 import type { ShellToolInput, WriteToolInput } from "../../types/events"
 import { createToolStartEvent } from "../../core/tools"
+import { buildUsageEvent } from "../../core/pricing"
 import { safeJsonParse } from "../../utils/json"
 import { resolveAgentError } from "../../utils/errors"
 import { normalizeCodexToolName } from "./tools"
@@ -73,6 +74,12 @@ interface CodexToolEnd {
 
 interface CodexTurnCompleted {
   type: "turn.completed"
+  usage?: {
+    /** Total prompt tokens, INCLUDING cached ones (OpenAI convention). */
+    input_tokens?: number
+    cached_input_tokens?: number
+    output_tokens?: number
+  }
 }
 
 interface CodexTurnFailed {
@@ -197,8 +204,23 @@ export function parseCodexLine(
     return { type: "tool_end" }
   }
 
-  // Turn complete
+  // Turn complete — may carry token usage (no cost; model isn't in the stream,
+  // so cost is left undefined for the caller to estimate from the model it ran).
   if (json.type === "turn.completed") {
+    const u = json.usage
+    if (u) {
+      const cached = u.cached_input_tokens ?? 0
+      // OpenAI's input_tokens includes cached tokens; split them out so the
+      // usage event's inputTokens is non-cached (consistent across providers).
+      const nonCachedInput = Math.max(0, (u.input_tokens ?? 0) - cached)
+      const usageEvent = buildUsageEvent({
+        provider: "codex",
+        inputTokens: nonCachedInput,
+        outputTokens: u.output_tokens ?? 0,
+        cachedInputTokens: cached || undefined,
+      })
+      return [usageEvent, { type: "end" }]
+    }
     return { type: "end" }
   }
 

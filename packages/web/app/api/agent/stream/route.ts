@@ -12,6 +12,11 @@ import {
 import { prisma } from "@/lib/db/prisma"
 import { isAuthError, requireChatStreamAccess } from "@/lib/db/api-helpers"
 import { createGitOperationMessage } from "@/lib/db/git-messages"
+import { attemptProviderSwitch, isSwitchableAgent } from "@/lib/provider-switch"
+import { FALLBACK_CHAIN } from "@/lib/provider-fallback"
+import { recordProviderLimit } from "@/lib/provider-limit"
+import { classifyAgentError, isSwitchWorthyError } from "@background-agents/sdk"
+import type { Agent } from "@background-agents/common"
 import type { Settings } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
@@ -137,19 +142,24 @@ export async function GET(req: Request) {
   // authenticated user could overwrite with another user's sandbox id —
   // Daytona uses one app-wide API key (single org) so daytona.get(foreignId)
   // would succeed. See packages/web/e2e tests for reproduction.
-  const { chat } = auth
+  const { chat, userId } = auth
   const sandboxId = chat.sandboxId
-  const backgroundSessionId = chat.backgroundSessionId
+  const initialBackgroundSessionId = chat.backgroundSessionId
   const previewUrlPattern = chat.previewUrlPattern
   // The sandbox clone directory is fixed per app convention; the client
   // always passed "project" anyway, so the value lives here now.
   const repoName = "project"
 
-  if (!sandboxId || !backgroundSessionId) {
+  if (!sandboxId || !initialBackgroundSessionId) {
     return jsonResponse(400, {
       error: "Chat has no active sandbox or background session",
     })
   }
+
+  // Mutable: provider auto-switch repoints these to a new session/agent
+  // mid-stream. Initialized from the guarded (non-null) value above.
+  let backgroundSessionId: string = initialBackgroundSessionId
+  let currentAgent = chat.agent
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
   if (!daytonaApiKey) {
@@ -249,6 +259,10 @@ export async function GET(req: Request) {
         // periodically persist it to the DB. The route holds NO accumulator
         // state — the snapshot is re-derived from the file each time, so a
         // new SSE connection (reconnect) automatically reconstructs full state.
+        // Providers already tried (and exhausted) during this stream, so a
+        // cascade of limits walks the fallback chain without looping back.
+        const exhausted = new Set<Agent>()
+
         let lastSnap: AgentSnapshot | null = null
         while (!isStreamClosed) {
           lastSnap = await snapshotBackgroundAgent(
@@ -288,6 +302,66 @@ export async function GET(req: Request) {
           }
 
           if (lastSnap.status === "completed" || lastSnap.status === "error") {
+            // ── Reactive provider auto-switch ──────────────────────────────
+            // If the turn failed because the upstream provider hit its OWN
+            // limit (Claude 5h/weekly, OpenCode Go, Codex/Gemini quota),
+            // restart the turn on the next available provider — same sandbox,
+            // history injected — instead of surfacing the error. Capped at the
+            // chain length so a cascade of limits can't loop forever.
+            const errorCategory = lastSnap.error
+              ? classifyAgentError(lastSnap.error).category
+              : "unknown"
+            if (
+              lastSnap.status === "error" &&
+              lastSnap.error &&
+              assistantMessageId &&
+              currentAgent &&
+              isSwitchableAgent(currentAgent) &&
+              isSwitchWorthyError(errorCategory) &&
+              exhausted.size < FALLBACK_CHAIN.length
+            ) {
+              try {
+                // Cache persistent exhaustion (with its reset time when stated)
+                // so the NEXT message skips this provider up front. Transient
+                // rate-limits aren't cached — they clear on their own.
+                if (errorCategory === "usage_limit" || errorCategory === "balance") {
+                  await recordProviderLimit(userId, currentAgent, lastSnap.error)
+                }
+                const switched = await attemptProviderSwitch({
+                  sandbox,
+                  chatId: chat.id,
+                  userId,
+                  fromAgent: currentAgent,
+                  // Non-null: guarded by `assistantMessageId &&` in the condition above.
+                  assistantMessageId: assistantMessageId!,
+                  exhausted,
+                  previewUrlPattern,
+                })
+                if (switched) {
+                  backgroundSessionId = switched.backgroundSessionId
+                  currentAgent = switched.agent
+                  // Force the next snapshot to be sent fresh for the new run.
+                  lastSentSig = null
+                  cursor += 1
+                  sendEvent("switched", {
+                    fromAgent: switched.fromAgent,
+                    toAgent: switched.agent,
+                    model: switched.model,
+                    noticeMessageId: switched.noticeMessageId,
+                    assistantTimestamp: switched.assistantTimestamp,
+                    cursor,
+                  })
+                  await new Promise((resolve) =>
+                    setTimeout(resolve, BACKEND_POLL_INTERVAL)
+                  )
+                  continue
+                }
+              } catch (err) {
+                console.error("[agent/stream] provider switch failed:", err)
+                // Fall through and finalize the original error.
+              }
+            }
+
             await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
 

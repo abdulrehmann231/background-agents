@@ -21,6 +21,9 @@ import { checkSharedClaudeUsage } from "@/lib/db/usage-limit"
 import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
 import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
+import { getEffectiveCredentialFlags } from "@/lib/server/credential-flags"
+import { pickFallbackAgent } from "@/lib/provider-fallback"
+import { getProviderLimitedUntil, switchNoticeContent } from "@/lib/provider-limit"
 import { getEnvForModel } from "@background-agents/common"
 import { decrypt } from "@/lib/db/encryption"
 import {
@@ -84,6 +87,18 @@ interface SuccessResponse {
   previewUrlPattern: string | null
   backgroundSessionId: string
   uploadedFiles: string[]
+  /** Present when the selected provider was limited and the turn was switched
+   *  to a fallback before running. Lets the client surface the notice + the
+   *  effective agent/model immediately (server timestamps keep ordering right). */
+  proactiveSwitch?: {
+    fromAgent: string
+    toAgent: string
+    model: string
+    noticeMessageId: string
+    noticeContent: string
+    noticeTimestamp: number
+    assistantTimestamp: number
+  }
 }
 
 /**
@@ -157,6 +172,33 @@ export async function POST(
   const githubToken = await getGitHubToken(userId)
 
   let credentials = await getUserCredentials(userId)
+
+  // ── Proactive provider switch ──────────────────────────────────────────
+  // If the selected provider is known to be limited (cached from a prior limit
+  // hit, not yet past its reset time), switch BEFORE running so we don't waste
+  // a turn rediscovering the limit. The reactive switch in the stream route is
+  // the safety net for limits we haven't seen yet.
+  let proactiveSwitch: { from: Agent; to: Agent; model: string } | null = null
+  {
+    const requestedAgent = payload.agent as Agent
+    const limitedUntil = await getProviderLimitedUntil(userId, requestedAgent)
+    if (limitedUntil) {
+      const { flags } = await getEffectiveCredentialFlags(userId)
+      const pick = pickFallbackAgent({
+        requested: requestedAgent,
+        flags,
+        exhausted: new Set<Agent>([requestedAgent]),
+      })
+      if (pick) {
+        proactiveSwitch = { from: requestedAgent, to: pick.agent, model: pick.model }
+        payload.agent = pick.agent
+        payload.model = pick.model
+        console.log(
+          `[chats/messages] Proactive switch ${proactiveSwitch.from} → ${pick.agent} (limited until ${limitedUntil.toISOString()})`
+        )
+      }
+    }
+  }
 
   // Shared-pool fallback: when Claude Code is selected and the user hasn't
   // stored their own subscription token, inject the rotating credential blob
@@ -508,6 +550,15 @@ export async function POST(
 
     // ── Stage 5: persist messages + chat status (transactional) ────────────
     const now = Date.now()
+    // When a proactive switch happened, a notice slots between the user message
+    // (now) and the assistant placeholder, so push the assistant out by one ms.
+    const assistantTs = proactiveSwitch ? now + 2 : now + 1
+    const proactiveNoticeId = proactiveSwitch ? randomUUID() : null
+    const proactiveNoticeContent = proactiveSwitch
+      ? switchNoticeContent(proactiveSwitch.from, proactiveSwitch.to, proactiveSwitch.model, {
+          proactive: true,
+        })
+      : null
     await prisma.$transaction(async (tx) => {
       // Reject reuse of a message ID that already exists in a different
       // chat — the upsert below would otherwise overwrite a foreign row.
@@ -547,6 +598,23 @@ export async function POST(
         },
       })
 
+      // Proactive-switch notice: explains the turn is running on a fallback
+      // because the selected provider is currently rate/usage limited.
+      if (proactiveSwitch && proactiveNoticeId && proactiveNoticeContent) {
+        await tx.message.create({
+          data: {
+            id: proactiveNoticeId,
+            chatId,
+            role: "assistant",
+            content: proactiveNoticeContent,
+            timestamp: BigInt(now + 1),
+            messageType: "provider-switch",
+            agent: payload.agent,
+            model: payload.model,
+          },
+        })
+      }
+
       await tx.message.upsert({
         where: { id: payload.assistantMessageId },
         create: {
@@ -554,7 +622,7 @@ export async function POST(
           chatId,
           role: "assistant",
           content: "",
-          timestamp: BigInt(now + 1),
+          timestamp: BigInt(assistantTs),
           agent: payload.agent,
           model: payload.model,
           toolCalls: [],
@@ -596,6 +664,19 @@ export async function POST(
       previewUrlPattern,
       backgroundSessionId: bgSession.backgroundSessionId,
       uploadedFiles: uploadedFilePaths,
+      ...(proactiveSwitch && proactiveNoticeId && proactiveNoticeContent
+        ? {
+            proactiveSwitch: {
+              fromAgent: proactiveSwitch.from,
+              toAgent: proactiveSwitch.to,
+              model: proactiveSwitch.model,
+              noticeMessageId: proactiveNoticeId,
+              noticeContent: proactiveNoticeContent,
+              noticeTimestamp: now + 1,
+              assistantTimestamp: assistantTs,
+            },
+          }
+        : {}),
     }
     return Response.json(response)
   } catch (error) {

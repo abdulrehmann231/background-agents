@@ -128,6 +128,40 @@ export interface ToolEndEvent {
   output?: string
 }
 
+/**
+ * Usage event - token counts and (when known) cost for a unit of work.
+ *
+ * Every real provider streams token usage in the same stdout the SDK already
+ * polls; this event normalizes those provider-specific shapes into one form.
+ *
+ * Semantics: summing the fields across every `usage` event in a session yields
+ * the session total. Providers that report a single cumulative figure per turn
+ * (Claude `result`, Codex `turn.completed`, Gemini `result.stats`) emit one
+ * event per turn; providers that report incrementally (OpenCode `step_finish`)
+ * emit one event per step. Either way the sum is correct.
+ */
+export interface UsageEvent {
+  type: "usage"
+  /** SDK provider name that produced this usage (e.g. "claude", "codex"). */
+  provider: string
+  /** Model that produced the usage, when the stream exposes it. */
+  model?: string
+  /** Non-cached input/prompt tokens. */
+  inputTokens: number
+  /** Output/completion tokens. */
+  outputTokens: number
+  /** Cached (cache-read) input tokens, when the provider distinguishes them. */
+  cachedInputTokens?: number
+  /** input + output (+ cached, where applicable) as reported or summed. */
+  totalTokens: number
+  /**
+   * Cost in USD when the provider reports it directly (Claude `total_cost_usd`,
+   * OpenCode/Kilo `cost`) or when it can be estimated from a pricing table.
+   * Undefined when neither is possible (consumer may estimate from tokens).
+   */
+  costUsd?: number
+}
+
 /** End event - indicates the message/turn is complete */
 export interface EndEvent {
   type: "end"
@@ -150,6 +184,7 @@ export type Event =
   | ToolStartEvent
   | ToolDeltaEvent
   | ToolEndEvent
+  | UsageEvent
   | EndEvent
   | AgentCrashedEvent
 

@@ -7,6 +7,7 @@
 
 import type { Event } from "../../types/events"
 import { createToolStartEvent } from "../../core/tools"
+import { buildUsageEvent } from "../../core/pricing"
 import { safeJsonParse } from "../../utils/json"
 import { resolveAgentError } from "../../utils/errors"
 
@@ -33,12 +34,29 @@ interface ClaudeAssistantMessage {
   session_id: string
 }
 
+interface ClaudeUsage {
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+}
+
 interface ClaudeResult {
   type: "result"
   subtype?: "success" | "error" | "error_during_execution" | "error_max_turns"
+  /** Authoritative failure flag. Set true for subscription session/usage-limit
+   *  results, which otherwise arrive with subtype "success" and the limit
+   *  notice in `result` — so checking subtype alone misses them. */
+  is_error?: boolean
   result?: string
   error?: string
   session_id: string
+  /** Final cumulative token usage for the turn. */
+  usage?: ClaudeUsage
+  /** Authoritative USD cost for the whole turn (sums all models used). */
+  total_cost_usd?: number
+  /** Per-model breakdown; keys are model ids. Used to label the usage event. */
+  modelUsage?: Record<string, unknown>
 }
 
 interface ClaudeToolUse {
@@ -149,16 +167,31 @@ export function parseClaudeLine(
 
   // Result event marks end of interaction (success or CLI error)
   if (json.type === "result") {
+    const res = json as ClaudeResult
     const isError =
-      (json as ClaudeResult).subtype === "error_during_execution" ||
-      (json as ClaudeResult).subtype === "error"
+      res.is_error === true ||
+      res.subtype === "error_during_execution" ||
+      res.subtype === "error"
     const err = isError
-      ? resolveAgentError(
-          (json as ClaudeResult).error ?? (json as ClaudeResult).result ?? json,
-          "claude"
-        )
+      ? resolveAgentError(res.error ?? res.result ?? json, "claude")
       : undefined
-    return { type: "end", ...(err ? { error: err } : {}) }
+    const endEvent: Event = { type: "end", ...(err ? { error: err } : {}) }
+
+    // Claude reports cumulative usage + an authoritative USD cost on the result
+    // line. Emit a usage event before end so consumers can budget per turn.
+    if (res.usage) {
+      const model = res.modelUsage ? Object.keys(res.modelUsage)[0] : undefined
+      const usageEvent = buildUsageEvent({
+        provider: "claude",
+        model,
+        inputTokens: res.usage.input_tokens ?? 0,
+        outputTokens: res.usage.output_tokens ?? 0,
+        cachedInputTokens: res.usage.cache_read_input_tokens,
+        costUsd: res.total_cost_usd,
+      })
+      return [usageEvent, endEvent]
+    }
+    return endEvent
   }
 
   return null

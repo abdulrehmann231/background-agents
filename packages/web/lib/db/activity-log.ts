@@ -16,6 +16,9 @@ export type ActivityAction =
   | "admin_promoted"
   | "admin_demoted"
   | "daily_limit_reached"
+  // An upstream provider reported its own limit exhausted (Claude session/
+  // weekly cap, OpenCode Go cap, etc). metadata: { agent, limitedUntil, reason }.
+  | "provider_limited"
 
 /**
  * Metadata types for different actions

@@ -31,6 +31,18 @@ export interface SendMessageResponse {
   previewUrlPattern: string | null
   backgroundSessionId: string
   uploadedFiles: string[]
+  /** Set when the selected provider was limited and the turn was switched to a
+   *  fallback before running (see the messages route). Carries server
+   *  timestamps so the inline notice sorts correctly against the assistant msg. */
+  proactiveSwitch?: {
+    fromAgent: string
+    toAgent: string
+    model: string
+    noticeMessageId: string
+    noticeContent: string
+    noticeTimestamp: number
+    assistantTimestamp: number
+  }
 }
 
 export type SendMessageResult =
@@ -142,26 +154,56 @@ export function removeOptimisticMessages(chat: Chat, messageIds: string[]): Chat
   }
 }
 
-/** Apply the server's send response: sandbox/branch/session info + uploaded-file ids. */
+/** Apply the server's send response: sandbox/branch/session info + uploaded-file ids.
+ *  When the server proactively switched providers (selected one was limited),
+ *  also adopt the fallback agent/model and splice in the inline notice. */
 export function applySendSuccess(
   chat: Chat,
   data: SendMessageResponse,
   agent: string,
   model: string,
-  userMessageId: string
+  userMessageId: string,
+  assistantMessageId: string
 ): Chat {
+  const ps = data.proactiveSwitch
+  const effectiveAgent = ps ? ps.toAgent : agent
+  const effectiveModel = ps ? ps.model : model
+
+  let messages = chat.messages.map((m) => {
+    if (m.id === userMessageId && data.uploadedFiles.length > 0) {
+      return { ...m, uploadedFiles: data.uploadedFiles }
+    }
+    // Adopt the fallback agent/model + the server timestamp on the assistant
+    // placeholder so the notice (inserted below) sorts immediately above it.
+    if (ps && m.id === assistantMessageId) {
+      return { ...m, agent: effectiveAgent, model: effectiveModel, timestamp: ps.assistantTimestamp }
+    }
+    return m
+  })
+
+  if (ps && !messages.some((m) => m.id === ps.noticeMessageId)) {
+    const notice: Message = {
+      id: ps.noticeMessageId,
+      role: "assistant",
+      content: ps.noticeContent,
+      timestamp: ps.noticeTimestamp,
+      messageType: "provider-switch",
+      agent: effectiveAgent,
+      model: effectiveModel,
+    }
+    messages = [...messages, notice].sort((a, b) => a.timestamp - b.timestamp)
+  }
+
   return {
     ...chat,
     sandboxId: data.sandboxId,
     branch: data.branch,
     previewUrlPattern: data.previewUrlPattern ?? undefined,
     backgroundSessionId: data.backgroundSessionId,
-    agent,
-    model,
+    agent: effectiveAgent,
+    model: effectiveModel,
     status: "running",
-    messages: chat.messages.map((m) =>
-      m.id === userMessageId && data.uploadedFiles.length > 0 ? { ...m, uploadedFiles: data.uploadedFiles } : m
-    ),
+    messages,
   }
 }
 
