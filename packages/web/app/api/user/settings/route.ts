@@ -118,18 +118,29 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       user?.credentials as Record<string, unknown> | null
     )
 
+    let claudeCredsChanged = false
     if (body.credentials) {
       for (const [key, value] of Object.entries(body.credentials)) {
         if (!isCredentialId(key)) continue
         // The literal "***" is the UI mask for an existing key — never a real
         // credential value. Reject defensively in case a stale client sends it.
         if (value === "***") continue
+        if (key === "ANTHROPIC_API_KEY" || key === "CLAUDE_CODE_CREDENTIALS") {
+          claudeCredsChanged = true
+        }
         if (value === "" || value === undefined) {
           delete newCredentials[key]
         } else if (typeof value === "string") {
           newCredentials[key] = encrypt(value)
         }
       }
+    }
+
+    // A Claude credential change makes the cached provider-limit state stale
+    // (different account/quota). Drop it so the next turn re-reads it.
+    if (claudeCredsChanged) {
+      const { invalidateClaudeLimit } = await import("@/lib/server/claude-limit")
+      invalidateClaudeLimit(`user:${userId}`)
     }
 
     await prisma.user.update({

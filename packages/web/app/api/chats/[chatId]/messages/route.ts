@@ -21,7 +21,11 @@ import { checkSharedClaudeUsage } from "@/lib/db/usage-limit"
 import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
 import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
-import { getEnvForModel } from "@background-agents/common"
+import { getEnvForModel, defaultAgentModel } from "@background-agents/common"
+import {
+  claudeLimitScope,
+  shouldSwitchFromClaude,
+} from "@/lib/server/claude-limit"
 import { decrypt } from "@/lib/db/encryption"
 import {
   createSandboxForChat,
@@ -84,6 +88,11 @@ interface SuccessResponse {
   previewUrlPattern: string | null
   backgroundSessionId: string
   uploadedFiles: string[]
+  /** Set when the turn was auto-switched off Claude due to its provider limit. */
+  autoSwitchedFromClaude?: boolean
+  /** The agent/model actually used (may differ from the request on autoswitch). */
+  effectiveAgent?: string
+  effectiveModel?: string
 }
 
 /**
@@ -157,6 +166,30 @@ export async function POST(
   const githubToken = await getGitHubToken(userId)
 
   let credentials = await getUserCredentials(userId)
+
+  // ── Provider-limit autoswitch (Claude → shared OpenCode Go pool) ──────────
+  // If the active Claude account (the user's own subscription, or the shared
+  // pool) is at/near its real provider quota per the in-memory cache, route
+  // this turn to the shared OpenCode pool instead of letting it hit the wall.
+  // The cache is read-only here (no tokscale call on the send path); it is
+  // refreshed after each Claude turn completes. Rewriting payload.agent before
+  // the agent-switch detection below makes history injection automatic.
+  // The user's selected agent/model — persisted on the chat so the selection
+  // survives a per-turn autoswitch and the limit is re-evaluated next message.
+  const selectedAgent = payload.agent
+  const selectedModel = payload.model
+  let autoSwitchedFromClaude = false
+  if (payload.agent === "claude-code") {
+    const scope = claudeLimitScope(userId, credentials)
+    if (shouldSwitchFromClaude(scope)) {
+      console.log(
+        `[chats/messages] Claude at provider limit (scope=${scope}); switching to shared OpenCode pool`
+      )
+      payload.agent = "opencode"
+      payload.model = defaultAgentModel.opencode
+      autoSwitchedFromClaude = true
+    }
+  }
 
   // Shared-pool fallback: when Claude Code is selected and the user hasn't
   // stored their own subscription token, inject the rotating credential blob
@@ -569,9 +602,11 @@ export async function POST(
           status: "running",
           backgroundSessionId: bgSession.backgroundSessionId,
           lastActiveAt: new Date(),
-          // Persist agent/model so subsequent messages on this chat keep them
-          agent: payload.agent,
-          model: payload.model,
+          // Persist the user's *selected* agent/model (not the per-turn
+          // autoswitch target) so the next message re-evaluates the Claude
+          // limit and routes back to Claude once its window resets.
+          agent: selectedAgent,
+          model: selectedModel,
           // Clear stale sessionId on agent switch — new agent will generate its own
           ...(isAgentSwitch && { sessionId: null }),
         },
@@ -596,6 +631,11 @@ export async function POST(
       previewUrlPattern,
       backgroundSessionId: bgSession.backgroundSessionId,
       uploadedFiles: uploadedFilePaths,
+      ...(autoSwitchedFromClaude && {
+        autoSwitchedFromClaude: true,
+        effectiveAgent: payload.agent,
+        effectiveModel: payload.model,
+      }),
     }
     return Response.json(response)
   } catch (error) {

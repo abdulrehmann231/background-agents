@@ -96,6 +96,12 @@ export function getAgentSandboxImage(): Image {
         // Install Kilo CLI
         "npm install -g @kilocode/cli"
       )
+      .runCommands(
+        // Install tokscale (token/cost analytics + provider quota lookup).
+        // Pinned for deterministic builds; the npm package fetches its native
+        // binary at install time (the image build has network).
+        "npm install -g tokscale@3.1.2"
+      )
       // Create daytona user (non-root) - Claude Code refuses to run as root
       .runCommands(
         "useradd -m -s /bin/bash daytona || true && " +

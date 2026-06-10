@@ -10,7 +10,8 @@ import {
   type AgentSnapshot,
 } from "@/lib/agent-session"
 import { prisma } from "@/lib/db/prisma"
-import { isAuthError, requireChatStreamAccess } from "@/lib/db/api-helpers"
+import { isAuthError, requireChatStreamAccess, getUserCredentials } from "@/lib/db/api-helpers"
+import { claudeLimitScope, refreshClaudeLimit } from "@/lib/server/claude-limit"
 import { createGitOperationMessage } from "@/lib/db/git-messages"
 import type { Settings } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
@@ -290,6 +291,26 @@ export async function GET(req: Request) {
           if (lastSnap.status === "completed" || lastSnap.status === "error") {
             await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
+
+            // Refresh the Claude provider-limit cache after a turn on a
+            // Claude-selected chat (best-effort, never blocks completion).
+            // tokscale queries the live subscription quota using the
+            // credentials present in the sandbox, so this also detects when a
+            // previously-exhausted window has reset.
+            if (chatId) {
+              try {
+                const c = await prisma.chat.findUnique({
+                  where: { id: chatId },
+                  select: { agent: true, userId: true },
+                })
+                if (c?.agent === "claude-code") {
+                  const creds = await getUserCredentials(c.userId)
+                  await refreshClaudeLimit(sandbox, claudeLimitScope(c.userId, creds))
+                }
+              } catch (err) {
+                console.error("[agent/stream] Claude limit refresh failed:", err)
+              }
+            }
 
             // Populated when the auto-push below delivers new commits, so the
             // client can raise a "new push" notification.
