@@ -50,6 +50,25 @@ Supported prefixed keys:
 - `TEST_OPENAI_API_KEY`
 - `TEST_GEMINI_API_KEY` / `TEST_GOOGLE_API_KEY`
 
+### Per-turn usage & cost (tokscale)
+
+`tests/integration/usage.test.ts` validates per-turn token usage + cost end to
+end: it runs one real turn per provider, then asserts `getTurnUsage()` (and the
+streamed `UsageEvent`) return non-zero tokens and a priced cost. It also runs a
+second turn to confirm per-turn attribution is a diff, not the running total.
+
+The default Daytona sandbox is not the rebuilt `background-agents` snapshot, so
+the test installs `tokscale` at runtime. Run only this file with:
+
+```bash
+DAYTONA_API_KEY=... ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... \
+  npm test -w @background-agents/sdk -- tests/integration/usage.test.ts
+```
+
+Each provider is skipped unless its key is present (see the header in the test
+for the per-provider key matrix). Captured usage is printed as
+`[usage:<provider>] {...}` for inspection.
+
 ### Debugging
 
 Set `CODING_AGENTS_DEBUG=1` to enable verbose debug output during test runs. This will print additional logging information useful for troubleshooting agent behavior.
