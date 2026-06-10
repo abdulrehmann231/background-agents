@@ -217,6 +217,10 @@ model Message {
   toolCalls     Json? // Array<{ tool, summary, fullSummary?, output? }>
   contentBlocks Json? // Array<ContentBlock>
   uploadedFiles Json? // Array<string> - file paths
+  // Per-turn token usage & cost from tokscale (assistant messages only).
+  // { provider, model?, inputTokens, outputTokens, cacheReadTokens,
+  //   cacheWriteTokens, totalTokens, costUSD?, source }
+  usageMetrics  Json?
 
   // Git operation message fields
   linkBranch String?

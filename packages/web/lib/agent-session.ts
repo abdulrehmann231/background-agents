@@ -8,6 +8,7 @@ import {
   getSession,
   type Event,
   type EndEvent,
+  type UsageEvent,
 } from "@background-agents/sdk"
 import {
   buildSystemPrompt,
@@ -277,12 +278,17 @@ function summarizeEvents(
  *
  * Best-effort: errors are swallowed because the snapshot has already been
  * persisted to the DB and the wire state has settled.
+ *
+ * Returns the completed turn's token usage & cost (from tokscale, via the SDK)
+ * when available, so callers can persist it to the assistant message. Returns
+ * null when usage couldn't be measured (unsupported provider, tokscale missing,
+ * etc.) — this is non-fatal and never blocks turn finalization.
  */
 export async function finalizeTurn(
   sandbox: DaytonaSandbox,
   backgroundSessionId: string,
   options: AgentSessionOptions
-): Promise<void> {
+): Promise<UsageEvent | null> {
   try {
     const systemPrompt = buildSystemPrompt(
       options.repoPath,
@@ -293,9 +299,13 @@ export async function finalizeTurn(
       sandbox,
       systemPrompt,
     })
+    // getEvents() advances per-turn meta AND computes the turn's usage
+    // (cached in sandbox meta); getTurnUsage() then reads it back cheaply.
     await bgSession.getEvents()
+    return await bgSession.getTurnUsage()
   } catch {
     /* best effort */
+    return null
   }
 }
 

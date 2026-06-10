@@ -289,7 +289,23 @@ export async function GET(req: Request) {
 
           if (lastSnap.status === "completed" || lastSnap.status === "error") {
             await persistSnapshot(lastSnap, true)
-            await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
+            const usage = await finalizeTurn(
+              sandbox,
+              backgroundSessionId,
+              sessionOpts
+            )
+            if (usage && assistantMessageId) {
+              try {
+                await prisma.message.update({
+                  where: { id: assistantMessageId },
+                  data: {
+                    usageMetrics: usage as unknown as Prisma.InputJsonValue,
+                  },
+                })
+              } catch (error) {
+                console.error("[agent/stream] usage persist error:", error)
+              }
+            }
 
             // Populated when the auto-push below delivers new commits, so the
             // client can raise a "new push" notification.

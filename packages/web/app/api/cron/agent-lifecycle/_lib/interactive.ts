@@ -43,9 +43,19 @@ export async function finalizeInteractiveChat(
   if (chat.sandboxId && chat.backgroundSessionId) {
     try {
       const sandbox = await daytona.get(chat.sandboxId)
-      await finalizeTurn(sandbox, chat.backgroundSessionId, {
+      const usage = await finalizeTurn(sandbox, chat.backgroundSessionId, {
         repoPath: `${PATHS.SANDBOX_HOME}/project`,
       })
+      if (usage && assistantMessage) {
+        try {
+          await prisma.message.update({
+            where: { id: assistantMessage.id },
+            data: { usageMetrics: usage as unknown as Prisma.InputJsonValue },
+          })
+        } catch (err) {
+          console.error(`[agent-lifecycle] usage persist failed ${chat.id}:`, err)
+        }
+      }
 
       // 3. Auto-push if chat has a branch (reuse existing logic from SSE stream)
       if (chat.branch && chat.repo && chat.repo !== "__new__") {
