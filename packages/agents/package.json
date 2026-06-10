@@ -19,7 +19,8 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
-    "generate:jsonl-refs": "npx tsx scripts/generate-jsonl-references.ts"
+    "generate:jsonl-refs": "npx tsx scripts/generate-jsonl-references.ts",
+    "check:usage": "npx tsx scripts/check-local-usage.ts"
   },
   "keywords": [
     "ai",
