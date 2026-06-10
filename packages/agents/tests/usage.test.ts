@@ -119,6 +119,79 @@ describe("normalizeTokscaleUsage", () => {
   })
 })
 
+describe("real tokscale 3.x output (--json --group-by session,model)", () => {
+  // Captured verbatim from `tokscale 3.1.2 --json --client claude
+  // --group-by session,model` running against a live Claude Code session.
+  // The rows live under `entries`, there is no per-entry total field, and the
+  // token fields are input/output/cacheRead/cacheWrite/cost. This is the same
+  // normalized envelope tokscale emits for every client.
+  const REAL = JSON.stringify({
+    groupBy: "session,model",
+    entries: [
+      {
+        client: "claude",
+        mergedClients: null,
+        sessionId: "4c83cce7-e7e5-43ee-96fa-e9816aaa7c54",
+        model: "claude-opus-4-8",
+        provider: "anthropic",
+        input: 44958,
+        output: 99656,
+        cacheRead: 11105994,
+        cacheWrite: 265228,
+        reasoning: 0,
+        messageCount: 91,
+        cost: 9.926862,
+        performance: { msPer1KTokens: 125.17, totalDurationMs: 1398910 },
+      },
+      {
+        client: "claude",
+        mergedClients: null,
+        sessionId: "4c83cce7-e7e5-43ee-96fa-e9816aaa7c54",
+        model: "claude-haiku-4-5",
+        provider: "anthropic",
+        input: 87104,
+        output: 15725,
+        cacheRead: 2105773,
+        cacheWrite: 145353,
+        reasoning: 0,
+        messageCount: 58,
+        cost: 0.55799755,
+      },
+    ],
+    totalInput: 132062,
+    totalOutput: 115381,
+    totalCacheRead: 13211767,
+    totalCacheWrite: 410581,
+    totalMessages: 149,
+    totalCost: 10.48485955,
+    processingTimeMs: 473,
+  })
+
+  it("finds rows under `entries` and sums the session's models", () => {
+    const u = normalizeTokscaleUsage(REAL, "4c83cce7-e7e5-43ee-96fa-e9816aaa7c54")
+    expect(u.inputTokens).toBe(132062)
+    expect(u.outputTokens).toBe(115381)
+    expect(u.cacheReadTokens).toBe(13211767)
+    expect(u.cacheWriteTokens).toBe(410581)
+    // No per-entry total field -> derived as in+out+cacheRead+cacheWrite,
+    // matching tokscale's own top-level totals.
+    expect(u.totalTokens).toBe(132062 + 115381 + 13211767 + 410581)
+    expect(u.costUSD).toBeCloseTo(10.48485955)
+    expect(u.hasCost).toBe(true)
+    expect(u.model).toBeUndefined() // two models in the session
+  })
+
+  it("extractRows picks up the entries array", () => {
+    expect(extractRows(JSON.parse(REAL))).toHaveLength(2)
+  })
+
+  it("matches the real session id (per-turn diffing is sound)", () => {
+    const u = normalizeTokscaleUsage(REAL, "does-not-exist")
+    // Unknown session -> falls back to summing all entries (still 2 rows).
+    expect(u.totalTokens).toBe(132062 + 115381 + 13211767 + 410581)
+  })
+})
+
 describe("diffUsage", () => {
   const cur: CumulativeUsage = {
     inputTokens: 30,

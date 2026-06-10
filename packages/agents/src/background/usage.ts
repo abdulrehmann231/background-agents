@@ -134,7 +134,9 @@ const SESSION_KEYS = ["sessionId", "session_id", "session", "sessionID"]
 export function extractRows(parsed: unknown): Record<string, unknown>[] {
   if (Array.isArray(parsed)) return parsed.filter(isObject)
   if (!isObject(parsed)) return []
-  for (const key of ["rows", "data", "results", "sessions", "items", "usage"]) {
+  // `entries` is tokscale's actual key (confirmed against tokscale 3.x
+  // `--json --group-by session,model`); the rest are defensive fallbacks.
+  for (const key of ["entries", "rows", "data", "results", "sessions", "items", "usage"]) {
     const v = parsed[key]
     if (Array.isArray(v)) return v.filter(isObject)
   }
