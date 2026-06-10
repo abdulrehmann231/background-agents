@@ -11,7 +11,11 @@ import { getFileType } from "@/lib/file-preview"
 import type { PendingFile } from "@/lib/types"
 
 // File upload constraints
-const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30 MB
+// NOTE: Vercel serverless functions have a 4.5 MB body size limit.
+// After multipart/form-data encoding overhead (~30-40%), the practical
+// max file size is ~3 MB. Files larger than this will be rejected by
+// the server with a 413 error regardless of provider.
+const MAX_FILE_SIZE = 3 * 1024 * 1024 // 3 MB (Vercel body limit safe zone)
 const MAX_FILE_COUNT = 20
 const MAX_IMAGE_DIMENSION = 8000 // 8000 x 8000 pixels
 
@@ -155,7 +159,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
     for (const file of fileArray) {
       // Check file size
       if (file.size > MAX_FILE_SIZE) {
-        errors.push(`"${file.name}" exceeds 30 MB limit`)
+        errors.push(`"${file.name}" exceeds 3 MB limit (Vercel serverless body size constraint)`)
         continue
       }
 

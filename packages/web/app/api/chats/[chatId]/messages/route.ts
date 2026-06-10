@@ -137,6 +137,22 @@ export async function POST(
     for (const [key, value] of formData.entries()) {
       if (key.startsWith("file-") && value instanceof File) files.push(value)
     }
+
+    // Server-side file size validation: Vercel serverless functions have a
+    // 4.5 MB body size limit. After multipart encoding overhead, files > 3 MB
+    // will fail. Reject early with a clear error instead of a cryptic 413.
+    const MAX_SERVER_FILE_SIZE = 3 * 1024 * 1024 // 3 MB
+    const oversizedFiles = files.filter((f) => f.size > MAX_SERVER_FILE_SIZE)
+    if (oversizedFiles.length > 0) {
+      const names = oversizedFiles.map((f) => `"${f.name}"`).join(", ")
+      return Response.json(
+        {
+          error: "FILE_TOO_LARGE",
+          message: `${names} exceed the 3 MB upload limit (Vercel serverless body size constraint).`,
+        },
+        { status: 413 }
+      )
+    }
   } else {
     payload = (await req.json()) as MessagePayload
   }
