@@ -188,8 +188,62 @@ class BackgroundSessionImpl implements BackgroundSession {
     return this.core("delta")
   }
 
-  getSnapshot(): Promise<PollResult> {
-    return this.core("snapshot")
+  /**
+   * Cumulative snapshot read from offset 0. STATELESS: it uses a local parse
+   * context and event buffer and does not touch this session's incremental
+   * accumulator — so it is safe to call concurrently on a shared (cached)
+   * session object, which is exactly how the web layer polls it.
+   */
+  async getSnapshot(): Promise<PollResult> {
+    const handle = await this.reattach()
+    if (!handle) {
+      return {
+        sessionId: this.parseContext.sessionId,
+        events: [],
+        cursor: "0",
+        running: false,
+        runPhase: "idle",
+      }
+    }
+
+    const ctx: ParseContext = { state: {}, sessionId: null }
+    const events: Event[] = []
+    const r = await this.jobs.read(handle, 0)
+    const captured = this.parseLines(r.raw, ctx, events)
+    if (captured) await this.patchMeta({ sessionId: captured })
+
+    const status = r.status
+    const sawEnd = events.some((e) => e.type === "end")
+    const cancelled = this.cancelled || status.exitCode === CANCELLED_EXIT_CODE
+    const isCrash =
+      !sawEnd &&
+      !cancelled &&
+      (status.state === "crashed" || (status.state === "exited" && status.exitCode !== 0))
+
+    if (isCrash && status.state === "crashed" && events.length === 0 && this.withinGrace()) {
+      return {
+        sessionId: ctx.sessionId,
+        events,
+        cursor: String(r.cursor),
+        running: true,
+        runPhase: "starting",
+      }
+    }
+
+    let out: Event[] = events
+    if (isCrash) {
+      out = [...events, this.synthesizeCrashEvent(r.raw)]
+      this.logCrash(r.raw)
+    }
+
+    const running = status.state === "running" && !sawEnd
+    const runPhase: BackgroundRunPhase = running
+      ? this.withinGrace() && events.length === 0
+        ? "starting"
+        : "running"
+      : "stopped"
+
+    return { sessionId: ctx.sessionId, events: out, cursor: String(r.cursor), running, runPhase }
   }
 
   async isRunning(): Promise<boolean> {
@@ -215,7 +269,7 @@ class BackgroundSessionImpl implements BackgroundSession {
   // Core poll: read (incremental or from-zero) → parse → derive state.
   // ─────────────────────────────────────────────────────────────────────────
 
-  private async core(mode: "delta" | "cumulative" | "snapshot"): Promise<PollResult> {
+  private async core(mode: "delta" | "cumulative"): Promise<PollResult> {
     const handle = await this.reattach()
     if (!handle) {
       return {
@@ -227,35 +281,14 @@ class BackgroundSessionImpl implements BackgroundSession {
       }
     }
 
-    if (mode === "snapshot") {
-      this.cursor = 0
-      this.cum = []
-      this.crashEmitted = false
-      // Fresh parse state; the session event will re-appear from offset 0.
-      this.parseContext = { state: {}, sessionId: null }
-    }
-
     const r = await this.jobs.read(handle, this.cursor)
     this.cursor = r.cursor
 
     // Events produced by THIS read (the delta). They are also appended to the
     // cumulative buffer, so we can serve either contract from one parse.
     const fresh: Event[] = []
-    let capturedSession: string | null = null
-    for (const line of r.raw.split("\n")) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      const parsed = this.agent.parse(trimmed, this.parseContext)
-      const events = parsed === null ? [] : Array.isArray(parsed) ? parsed : [parsed]
-      for (const event of events) {
-        if (event.type === "session") {
-          this.parseContext.sessionId = (event as { id: string }).id
-          capturedSession = this.parseContext.sessionId
-        }
-        this.cum.push(event)
-        fresh.push(event)
-      }
-    }
+    const capturedSession = this.parseLines(r.raw, this.parseContext, fresh)
+    this.cum.push(...fresh)
 
     // Persist a newly-captured session id so the next turn / a cold caller can
     // resume the agent's own conversation.
@@ -331,6 +364,30 @@ class BackgroundSessionImpl implements BackgroundSession {
 
   private withinGrace(): boolean {
     return this.startedAt > 0 && Date.now() - this.startedAt < STARTUP_GRACE_MS
+  }
+
+  /**
+   * Parse complete output lines into `sink`, updating `ctx` (its sessionId).
+   * Returns a newly-captured agent session id, if any. No instance state is
+   * touched beyond what the caller passes in — so getSnapshot() can call this
+   * with locals and stay concurrency-safe.
+   */
+  private parseLines(raw: string, ctx: ParseContext, sink: Event[]): string | null {
+    let captured: string | null = null
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      const parsed = this.agent.parse(trimmed, ctx)
+      const events = parsed === null ? [] : Array.isArray(parsed) ? parsed : [parsed]
+      for (const event of events) {
+        if (event.type === "session") {
+          ctx.sessionId = (event as { id: string }).id
+          captured = ctx.sessionId
+        }
+        sink.push(event)
+      }
+    }
+    return captured
   }
 
   // ─────────────────────────────────────────────────────────────────────────
