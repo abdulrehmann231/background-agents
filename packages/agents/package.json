@@ -62,6 +62,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./utils/shell": "./src/utils/shell.ts",
     "./*": "./src/*",
     "./next.config": "./next.config.codeagentsdk.cjs"
   },
