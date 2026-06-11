@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import hljs from "highlight.js/lib/common"
 import { Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useCopyToClipboard, extractCodeText } from "@/lib/hooks/useCopyToClipboard"
 import { escapeHtml } from "./escape-html"
 
 interface MarkdownPreviewProps {
@@ -304,21 +304,9 @@ export function MarkdownPreview({
  * Code block with copy button - GitHub style
  */
 function CodeBlock({ children }: { children: React.ReactNode }) {
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard()
 
-  const handleCopy = async () => {
-    // Extract text content from children (the code element)
-    const codeElement = children as React.ReactElement<{ children?: string }>
-    const textContent = codeElement?.props?.children || ""
-
-    try {
-      await navigator.clipboard.writeText(String(textContent))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error("Failed to copy:", err)
-    }
-  }
+  const handleCopy = () => copy(extractCodeText(children))
 
   return (
     <div className="relative group mb-4 last:mb-0">

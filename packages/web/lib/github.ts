@@ -81,20 +81,6 @@ export async function fetchAllRepos(
 }
 
 /**
- * Fetch a single repository.
- * Calls GET /api/github/repo which reads the token from DB server-side.
- */
-export async function fetchRepo(
-  owner: string,
-  repo: string
-): Promise<GitHubRepo> {
-  const res = await fetch(`/api/github/repo?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`)
-  if (!res.ok) await throwResponseError(res, "Failed to fetch repo")
-  const data = await res.json()
-  return data.repo
-}
-
-/**
  * Fetch branches for a repository.
  * Calls GET /api/github/branches which reads the token from DB server-side.
  */

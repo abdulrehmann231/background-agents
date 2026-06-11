@@ -72,49 +72,6 @@ export type ToolStartEvent =
   | { type: "tool_start"; name: "shell"; input?: ShellToolInput }
   | { type: "tool_start"; name: string; input?: unknown }
 
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v)
-}
-
-/** Normalize raw provider payload into typed tool input and return a typed ToolStartEvent */
-export function createToolStartEvent(name: ToolName | string, rawInput?: unknown): ToolStartEvent {
-  let input: unknown = rawInput
-  if (name === "write" && isObject(rawInput)) {
-    const path = rawInput.file_path ?? rawInput.filePath ?? rawInput.path
-    if (typeof path === "string") {
-      const kind = rawInput.kind === "add" || rawInput.kind === "update" ? rawInput.kind : "update"
-      input = {
-        file_path: path,
-        content: typeof rawInput.content === "string" ? rawInput.content : null,
-        kind,
-      } satisfies WriteToolInput
-    }
-  } else if (name === "read" && isObject(rawInput)) {
-    const path = rawInput.file_path ?? rawInput.filePath ?? rawInput.path
-    if (typeof path === "string") {
-      input = { file_path: path } satisfies ReadToolInput
-    }
-  } else if (name === "edit" && isObject(rawInput)) {
-    const path = rawInput.file_path ?? rawInput.filePath ?? rawInput.path
-    if (typeof path === "string") {
-      input = { file_path: path, ...rawInput } as EditToolInput
-    }
-  } else if (name === "shell" && isObject(rawInput) && typeof rawInput.command === "string") {
-    input = {
-      command: rawInput.command,
-      description: typeof rawInput.description === "string" ? rawInput.description : undefined,
-    } satisfies ShellToolInput
-  } else if (name === "glob" && isObject(rawInput) && typeof rawInput.pattern === "string") {
-    input = { pattern: rawInput.pattern } satisfies GlobToolInput
-  } else if (name === "grep" && isObject(rawInput) && typeof rawInput.pattern === "string") {
-    input = {
-      pattern: rawInput.pattern,
-      path: typeof rawInput.path === "string" ? rawInput.path : undefined,
-    } satisfies GrepToolInput
-  }
-  return { type: "tool_start", name, input } as ToolStartEvent
-}
-
 /** Tool delta event - partial input being streamed to a tool */
 export interface ToolDeltaEvent {
   type: "tool_delta"

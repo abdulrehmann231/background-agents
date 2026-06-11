@@ -157,6 +157,7 @@ export {
   resolveAgentError,
 } from "./utils/index"
 export type { AgentErrorCategory, ClassifiedError } from "./utils/index"
+export { escapeShell, quote } from "./utils/shell"
 
 // Debug (enable with CODING_AGENTS_DEBUG=1)
 export { isDebugEnabled, debugLog } from "./debug"

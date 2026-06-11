@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
 import { Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useCopyToClipboard, extractCodeText } from "@/lib/hooks/useCopyToClipboard"
 
 interface CodeBlockProps {
   children: React.ReactNode
@@ -10,21 +10,9 @@ interface CodeBlockProps {
 }
 
 export function CodeBlock({ children, isMobile = false }: CodeBlockProps) {
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard()
 
-  const handleCopy = async () => {
-    // Extract text content from children (the code element)
-    const codeElement = children as React.ReactElement<{ children?: string }>
-    const textContent = codeElement?.props?.children || ""
-
-    try {
-      await navigator.clipboard.writeText(String(textContent))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error("Failed to copy:", err)
-    }
-  }
+  const handleCopy = () => copy(extractCodeText(children))
 
   return (
     <div className="relative group my-4 first:mt-0 last:mb-0 min-w-0 max-w-full overflow-hidden">
