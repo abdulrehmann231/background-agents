@@ -61,10 +61,17 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
     // `setsid` gives the job its own session/group so `kill -- -<pgid>` later
     // reaps the command and all its children.
     const inner = `${cd}${envExports}${userCmd} >> ${q(outputFile)} 2>&1; echo $? > ${q(exitFile)}`
+    // CRITICAL: the backgrounded part must be a SIMPLE command so the shell
+    // exec-replaces it into a single detached process whose std fds are all on
+    // /dev/null. If we instead background a COMPOUND like `mkdir && setsid …`,
+    // the shell forks a subshell whose own stdout is still the executeCommand
+    // read channel; that subshell lingers for the whole life of the job and
+    // keeps the channel open, so the launch call blocks until it times out
+    // ("command execution timeout"). So: run mkdir in the foreground, then
+    // background only `setsid …` (fully redirected), then print the pid.
     const launch =
       `mkdir -p ${q(dir)} && ` +
-      `setsid sh -c ${q(inner)} < /dev/null > /dev/null 2>&1 & ` +
-      `echo $!`
+      `{ setsid sh -c ${q(inner)} < /dev/null > /dev/null 2>&1 & echo $!; }`
 
     const pgid = parsePid(await exec(launch))
     const handle: JobHandle = { jobId, dir, outputFile, exitFile, pgid }

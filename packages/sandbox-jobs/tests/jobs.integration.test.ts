@@ -32,6 +32,24 @@ describe.skipIf(!API_KEY)("sandbox-jobs (integration)", () => {
     await sandbox?.delete().catch(() => {})
   })
 
+  it("start() returns immediately even for a long-running job (no channel hang)", async () => {
+    // Regression guard: the launch must detach so executeCommand returns at
+    // once. If the backgrounded process keeps the read channel open, this call
+    // blocks until the command finishes (here: ~120s) and Daytona raises a
+    // "command execution timeout" long before that.
+    const jobs = createSandboxJobs(sandbox)
+    const t0 = Date.now()
+    const handle = await jobs.start({ command: `sleep 120` })
+    const elapsed = Date.now() - t0
+
+    expect(elapsed).toBeLessThan(15_000) // launch is near-instant, not ~120s
+    expect(handle.pgid).toBeGreaterThan(0)
+
+    // It really is running, then we reap it so the sandbox isn't left busy.
+    expect((await jobs.status(handle)).state).toBe("running")
+    await jobs.cancel(handle)
+  })
+
   it("reconnects cold, reads incrementally, attaches by id, replays, and reports exit code", async () => {
     const TICKS = 6
     const handle = await createSandboxJobs(sandbox).start({
