@@ -7,6 +7,7 @@ import { NEW_REPOSITORY } from "@/lib/types"
 import { prisma } from "@/lib/db/prisma"
 import {
   badRequest,
+  decryptUserCredentials,
   getChatWithAuth,
   getGitHubToken,
   getUserCredentials,
@@ -16,6 +17,7 @@ import {
   requireAuth,
   serverConfigError,
 } from "@/lib/db/api-helpers"
+import { buildUsageMeta } from "@/lib/server/shared-pool"
 import { logActivityAsync } from "@/lib/db/activity-log"
 import { checkSharedClaudeUsage } from "@/lib/db/usage-limit"
 import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
@@ -506,6 +508,18 @@ export async function POST(
       skills: discoveredSkills.length > 0 ? discoveredSkills : undefined,
     })
 
+    // Resolve the credential pool for this run (shared vs the user's own key)
+    // from DB-stored creds only — process.env keys must read as shared. Stamped
+    // on the assistant message so the turn finalizer (cron) can attribute usage.
+    const storedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { credentials: true },
+    })
+    const usageMeta = buildUsageMeta(
+      payload.agent as Agent,
+      decryptUserCredentials(storedUser?.credentials as Record<string, unknown> | null)
+    )
+
     // ── Stage 5: persist messages + chat status (transactional) ────────────
     const now = Date.now()
     await prisma.$transaction(async (tx) => {
@@ -559,8 +573,11 @@ export async function POST(
           model: payload.model,
           toolCalls: [],
           contentBlocks: [],
+          metadata: { usage: usageMeta } as unknown as Prisma.InputJsonValue,
         },
-        update: {},
+        update: {
+          metadata: { usage: usageMeta } as unknown as Prisma.InputJsonValue,
+        },
       })
 
       await tx.chat.update({
