@@ -133,8 +133,30 @@ export async function insertTokenUsageRows(
 }
 
 export interface UsageTotals {
+  /** All components incl. cache (input+output+cache+reasoning). */
   totalTokens: number
+  /**
+   * Cache-excluded measure used for rate limiting: input (uncached) + output +
+   * reasoning. Cache reads can be 100×+ the rest of a turn yet are nearly free,
+   * so including them would make a token budget meaningless; we exclude them.
+   */
+  limitedTokens: number
   costUsd: number
+}
+
+function toTotals(sum: {
+  inputTokens: number | null
+  outputTokens: number | null
+  reasoningTokens: number | null
+  totalTokens: number | null
+  costUsd: number | null
+}): UsageTotals {
+  return {
+    totalTokens: sum.totalTokens ?? 0,
+    limitedTokens:
+      (sum.inputTokens ?? 0) + (sum.outputTokens ?? 0) + (sum.reasoningTokens ?? 0),
+    costUsd: sum.costUsd ?? 0,
+  }
 }
 
 /**
@@ -151,12 +173,15 @@ export async function sumSharedUsage(params: {
   const { userId, provider, since, pool = "shared" } = params
   const agg = await prisma.tokenUsage.aggregate({
     where: { userId, provider, pool, createdAt: { gte: since } },
-    _sum: { totalTokens: true, costUsd: true },
+    _sum: {
+      inputTokens: true,
+      outputTokens: true,
+      reasoningTokens: true,
+      totalTokens: true,
+      costUsd: true,
+    },
   })
-  return {
-    totalTokens: agg._sum.totalTokens ?? 0,
-    costUsd: agg._sum.costUsd ?? 0,
-  }
+  return toTotals(agg._sum)
 }
 
 /**
@@ -172,14 +197,17 @@ export async function sumUsageByProvider(params: {
   const grouped = await prisma.tokenUsage.groupBy({
     by: ["provider"],
     where: { userId, pool, createdAt: { gte: since } },
-    _sum: { totalTokens: true, costUsd: true },
+    _sum: {
+      inputTokens: true,
+      outputTokens: true,
+      reasoningTokens: true,
+      totalTokens: true,
+      costUsd: true,
+    },
   })
   const out: Record<string, UsageTotals> = {}
   for (const g of grouped) {
-    out[g.provider] = {
-      totalTokens: g._sum.totalTokens ?? 0,
-      costUsd: g._sum.costUsd ?? 0,
-    }
+    out[g.provider] = toTotals(g._sum)
   }
   return out
 }
