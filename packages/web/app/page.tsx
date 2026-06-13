@@ -499,16 +499,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     handleBranchQueuedMessage,
   }), [gitDialogs, canBranch, handleBranchChat, handleBranchWithMessage, handleBranchQueuedMessage])
 
-  // Claude usage data for sidebar user menu
-  const claudeUsage = useMemo(() => ({
-    used: claudeLimitUsed,
-    remaining: claudeLimitRemaining,
-    total: claudeLimitTotal,
-    isPro: claudeIsPro,
-    resetAt: claudeLimitResetAt,
-    isWeekly: claudeIsWeekly,
-  }), [claudeLimitUsed, claudeLimitRemaining, claudeLimitTotal, claudeIsPro, claudeLimitResetAt, claudeIsWeekly])
-
   // Assemble the (large) PaletteProvider props object — see usePaletteProps
   // for the conditional-action wiring (terminal open/toggle, sign-in/out,
   // git-command gating, etc.).
@@ -590,7 +580,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         scheduledJobsActive={sidebar.viewMode === "scheduled-jobs"}
         selectedScheduledJob={sidebar.viewMode === "scheduled-jobs" ? sidebar.selectedScheduledJob : null}
         isLoadingChats={!isHydrated || (isLoading && displayChats.length === 0)}
-        claudeUsage={claudeUsage}
       />
 
       {/* Main Content */}
