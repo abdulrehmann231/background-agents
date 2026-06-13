@@ -26,6 +26,27 @@ export function getDailyTokenBudget(provider: ProviderName): number | null {
   return FREE_DAILY_TOKEN_BUDGETS[provider] ?? null
 }
 
+/**
+ * Free models (mostly OpenCode's free tier) that must NOT count against the
+ * shared-pool budget. They're still recorded in the ledger (so they appear in
+ * overall totals), just flagged `freeModel=true` and excluded from shared sums.
+ *
+ * Matching is by tokscale's `model` id: this explicit set OR a `-free`/`:free`
+ * suffix (the common convention) — so new free models are auto-caught.
+ */
+export const FREE_MODELS: ReadonlySet<string> = new Set([
+  "big-pickle",
+  "deepseek-v4-flash-free",
+  "nemotron-3-ultra-free",
+])
+
+/** Whether a model is free (excluded from shared-pool budgets). */
+export function isFreeModel(model: string | null | undefined): boolean {
+  if (!model) return false
+  const m = model.toLowerCase()
+  return FREE_MODELS.has(m) || m.endsWith("-free") || m.endsWith(":free")
+}
+
 /** Start of the current UTC day (budget window start for free users). */
 export function getStartOfUtcDay(now: Date = new Date()): Date {
   return new Date(

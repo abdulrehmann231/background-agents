@@ -23,6 +23,7 @@ import {
   type TokenUsageInsert,
   type UsagePool,
 } from "@/lib/db/token-usage"
+import { isFreeModel } from "@/lib/server/usage-budgets"
 
 /** `tokscale models --json --group-by session,model` entry shape (subset). */
 interface TokscaleEntry {
@@ -158,7 +159,10 @@ export async function meterTurnUsage(
     const reasoningTokens = d(e.reasoning, prev.reasoningTokens)
     const totalTokens =
       inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens + reasoningTokens
-    const costUsd = Math.max(0, e.cost - prev.costUsd)
+    // Free models: tokscale misprices them, so force cost to 0. They're still
+    // recorded (counted in overall totals) but flagged out of shared budgets.
+    const free = isFreeModel(e.model)
+    const costUsd = free ? 0 : Math.max(0, e.cost - prev.costUsd)
 
     // Skip no-op turns (nothing new since last capture).
     if (totalTokens === 0 && costUsd === 0) continue
@@ -173,6 +177,7 @@ export async function meterTurnUsage(
       provider,
       model: e.model ?? null,
       pool,
+      freeModel: free,
       inputTokens,
       outputTokens,
       cacheReadTokens,

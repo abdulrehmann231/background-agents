@@ -24,6 +24,8 @@ export interface TokenUsageInsert {
   provider: string
   model?: string | null
   pool: UsagePool
+  /** Free model — recorded in totals but excluded from shared-pool budgets. */
+  freeModel: boolean
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -117,6 +119,7 @@ export async function insertTokenUsageRows(
       provider: r.provider,
       model: r.model ?? null,
       pool: r.pool,
+      freeModel: r.freeModel,
       inputTokens: r.inputTokens,
       outputTokens: r.outputTokens,
       cacheReadTokens: r.cacheReadTokens,
@@ -172,7 +175,38 @@ export async function sumSharedUsage(params: {
 }): Promise<UsageTotals> {
   const { userId, provider, since, pool = "shared" } = params
   const agg = await prisma.tokenUsage.aggregate({
-    where: { userId, provider, pool, createdAt: { gte: since } },
+    where: {
+      userId,
+      provider,
+      pool,
+      createdAt: { gte: since },
+      // Free models are excluded from shared-pool budgets (they still count in
+      // overall totals — see sumTotalUsage).
+      ...(pool === "shared" ? { freeModel: false } : {}),
+    },
+    _sum: {
+      inputTokens: true,
+      outputTokens: true,
+      reasoningTokens: true,
+      totalTokens: true,
+      costUsd: true,
+    },
+  })
+  return toTotals(agg._sum)
+}
+
+/**
+ * Overall usage for a user since `since`, across BOTH pools and INCLUDING free
+ * models — the "total tokens used" figure. Optionally scope to one provider.
+ */
+export async function sumTotalUsage(params: {
+  userId: string
+  since: Date
+  provider?: string
+}): Promise<UsageTotals> {
+  const { userId, since, provider } = params
+  const agg = await prisma.tokenUsage.aggregate({
+    where: { userId, createdAt: { gte: since }, ...(provider ? { provider } : {}) },
     _sum: {
       inputTokens: true,
       outputTokens: true,
@@ -196,7 +230,12 @@ export async function sumUsageByProvider(params: {
   const { userId, since, pool = "shared" } = params
   const grouped = await prisma.tokenUsage.groupBy({
     by: ["provider"],
-    where: { userId, pool, createdAt: { gte: since } },
+    where: {
+      userId,
+      pool,
+      createdAt: { gte: since },
+      ...(pool === "shared" ? { freeModel: false } : {}),
+    },
     _sum: {
       inputTokens: true,
       outputTokens: true,

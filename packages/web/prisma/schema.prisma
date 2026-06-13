@@ -290,6 +290,10 @@ model TokenUsage {
   model    String? // model id reported by tokscale
   pool     String // "shared" | "user"
 
+  // Free models (e.g. OpenCode's free tier) are recorded for overall totals but
+  // excluded from shared-pool budgets/limits. Set at write time via isFreeModel.
+  freeModel Boolean @default(false)
+
   // Per-turn delta (diff of tokscale cumulative session totals)
   inputTokens      Int   @default(0)
   outputTokens     Int   @default(0)
