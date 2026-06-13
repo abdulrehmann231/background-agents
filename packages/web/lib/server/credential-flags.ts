@@ -74,6 +74,12 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   // Preserve the conventional boolean presence flag for callers that expect it
   flags.OPENCODE_API_KEY = opencodeFromDb || opencodeFromEnv
 
+  // Same for GEMINI_API_KEY: a server env key (shared pool) should make Gemini
+  // show as available in the UI, not prompt for a key. Pool origin (shared vs
+  // user) is still resolved separately from stored creds, so flagging the env
+  // key here doesn't make it count as user-owned.
+  flags.GEMINI_API_KEY = !!storedCreds.GEMINI_API_KEY || !!process.env.GEMINI_API_KEY
+
   if (await isSharedPoolAvailable()) {
     flags.CLAUDE_SHARED_POOL_AVAILABLE = true
   }
