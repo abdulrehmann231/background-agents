@@ -5,7 +5,14 @@ import * as Dialog from "@radix-ui/react-dialog"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { useModals } from "@/lib/contexts"
+import { AgentIcon } from "@/components/icons/agent-icons"
+import { ALL_AGENTS, agentToProvider, type Agent } from "@background-agents/common"
 import type { ChatUsageResponse } from "@/app/api/chats/[chatId]/usage/route"
+
+/** Reverse map: SDK provider id → agent (for the provider's icon). */
+const PROVIDER_TO_AGENT: Record<string, Agent> = Object.fromEntries(
+  ALL_AGENTS.map((agent) => [agentToProvider[agent], agent])
+)
 
 /** Compact token count: 12_345 → "12.3K", 1_200_000 → "1.2M". */
 function fmtTokens(n: number): string {
@@ -89,15 +96,21 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
               </div>
             ) : (
               <div className="divide-y divide-border/40">
-                {data.providers.map((p) => (
-                  <div key={p.provider} className="flex items-center justify-between py-2">
-                    <span className="text-sm">{p.label}</span>
-                    <span className="text-sm font-medium tabular-nums">
-                      {fmtTokens(p.tokens)}
-                      <span className="text-muted-foreground"> tokens</span>
-                    </span>
-                  </div>
-                ))}
+                {data.providers.map((p) => {
+                  const agent = PROVIDER_TO_AGENT[p.provider]
+                  return (
+                    <div key={p.provider} className="flex items-center justify-between gap-3 py-2">
+                      <span className="flex items-center gap-2 text-sm">
+                        {agent && <AgentIcon agent={agent} className="h-4 w-4 shrink-0" />}
+                        {p.label}
+                      </span>
+                      <span className="text-sm font-medium tabular-nums">
+                        {fmtTokens(p.tokens)}
+                        <span className="text-muted-foreground"> tokens</span>
+                      </span>
+                    </div>
+                  )
+                })}
                 <div className="flex items-center justify-between py-2">
                   <span className="text-sm font-medium">Total</span>
                   <span className="text-sm font-semibold tabular-nums">
