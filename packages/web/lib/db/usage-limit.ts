@@ -1,139 +1,134 @@
 /**
- * Daily usage limit for shared Claude Code subscription.
+ * Token-based usage limits for the shared credential pools.
  *
- * Free users are limited to 10 Claude Code messages per day
- * when using the shared Claude credentials (no personal API key).
- * Pro users have unlimited access.
+ * Free users get a daily, per-provider, cache-excluded token budget when using
+ * a shared pool (Claude OAuth / Gemini / OpenCode server keys). Users running on
+ * their own key, and Pro users, are unlimited. Usage is summed from the
+ * TokenUsage ledger (populated post-turn by tokscale metering).
+ *
+ * Because a turn's token cost is only known after it runs, enforcement is
+ * post-hoc: we block the NEXT turn once the period's usage has met the budget.
  */
 
-import { prisma } from "./prisma"
+import type { Agent, ProviderName } from "@background-agents/common"
 
-/** Daily Claude Code message limit for free users on shared subscription */
-const FREE_DAILY_CLAUDE_CODE_LIMIT = 10
+import { prisma } from "./prisma"
+import { sumSharedUsage, countSharedMessages } from "./token-usage"
+import { isSharedPoolAgent, providerForAgent, resolvePool } from "@/lib/server/shared-pool"
+import { decryptUserCredentials } from "./api-helpers"
+import {
+  getProviderBudget,
+  getNextUtcDayReset,
+  getStartOfUtcDay,
+  type BudgetUnit,
+} from "@/lib/server/usage-budgets"
 
 export interface UsageLimitResult {
   allowed: boolean
   isPro: boolean
-  remaining: number
-  limit: number
+  provider: ProviderName
+  /** "shared" pools are limited; "user" pools are always allowed. */
+  pool: "shared" | "user"
+  /** Unit the budget is measured in: tokens, USD cost, or message count. */
+  unit: BudgetUnit
+  /** Amount used in the current period, in `unit` (tokens / USD / messages). */
+  used: number
+  /** Daily budget in `unit` (free users), or null when unlimited (pro/own key). */
+  limit: number | null
+  remaining: number | null
   resetAt: Date
   error?: string
 }
 
 /**
- * Check if a user can send a Claude Code message using shared credentials.
- * Returns usage status including whether the request is allowed.
- *
- * This only applies to shared Claude Code subscription usage - users with
- * their own API keys have unlimited access.
+ * Check whether a user may start a turn on `agent` given the shared-pool token
+ * budget. Unlimited (allowed, no limit) when: the agent has no shared pool, the
+ * user supplied their own key for it, or the user is Pro.
  */
-export async function checkSharedClaudeUsage(
-  userId: string
+export async function checkSharedPoolUsage(
+  userId: string,
+  agent: Agent
 ): Promise<UsageLimitResult> {
+  const provider = providerForAgent(agent)
+  const resetAt = getNextUtcDayReset()
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { isPro: true },
+    select: { isPro: true, credentials: true },
   })
 
-  if (!user) {
-    return {
-      allowed: false,
-      isPro: false,
-      remaining: 0,
-      limit: FREE_DAILY_CLAUDE_CODE_LIMIT,
-      resetAt: getNextResetTime(),
-      error: "User not found",
-    }
+  const storedCreds = decryptUserCredentials(
+    user?.credentials as Record<string, unknown> | null
+  )
+  const pool = resolvePool(agent, storedCreds)
+
+  const budget = getProviderBudget(provider)
+
+  const base = {
+    isPro: user?.isPro ?? false,
+    provider,
+    pool,
+    unit: budget?.unit ?? ("tokens" as BudgetUnit),
+    used: 0,
+    resetAt,
   }
 
-  // Pro users have unlimited access
-  if (user.isPro) {
-    return {
-      allowed: true,
-      isPro: true,
-      remaining: Infinity,
-      limit: Infinity,
-      resetAt: getNextResetTime(),
-    }
+  // Not a shared-pool run → unlimited.
+  if (!isSharedPoolAgent(agent) || pool === "user") {
+    return { ...base, allowed: true, limit: null, remaining: null }
   }
 
-  // Count Claude Code messages sent today using shared credentials
-  const startOfDay = getStartOfDay()
-  const todayCount = await prisma.activityLog.count({
-    where: {
-      userId,
-      action: "message_sent",
-      createdAt: { gte: startOfDay },
-      // Only count shared Claude Code usage - metadata contains useSharedClaude: true
-      metadata: {
-        path: ["useSharedClaude"],
-        equals: true,
-      },
-    },
-  })
+  // Pro users: unlimited on shared pools.
+  if (base.isPro) {
+    return { ...base, allowed: true, limit: null, remaining: null }
+  }
 
-  const remaining = Math.max(0, FREE_DAILY_CLAUDE_CODE_LIMIT - todayCount)
-  const allowed = todayCount < FREE_DAILY_CLAUDE_CODE_LIMIT
+  if (budget == null) {
+    // No configured budget ⇒ effectively unlimited.
+    return { ...base, allowed: true, limit: null, remaining: null }
+  }
+
+  const since = getStartOfUtcDay()
+  const used = await getSharedUsage(userId, provider, budget.unit, since)
+
+  const remaining = Math.max(0, budget.limit - used)
+  const allowed = used < budget.limit
 
   return {
+    ...base,
+    unit: budget.unit,
     allowed,
-    isPro: false,
+    used,
+    limit: budget.limit,
     remaining,
-    limit: FREE_DAILY_CLAUDE_CODE_LIMIT,
-    resetAt: getNextResetTime(),
-    error: allowed
-      ? undefined
-      : `Daily limit of ${FREE_DAILY_CLAUDE_CODE_LIMIT} free Claude Code messages reached. Upgrade to Pro for unlimited usage.`,
+    error: allowed ? undefined : limitMessage(provider, budget.unit, budget.limit),
   }
 }
 
-/**
- * Get the start of the current day (midnight UTC).
- */
-function getStartOfDay(): Date {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+/** Usage in the period, measured in the provider's budget unit. */
+async function getSharedUsage(
+  userId: string,
+  provider: ProviderName,
+  unit: BudgetUnit,
+  since: Date
+): Promise<number> {
+  if (unit === "messages") {
+    return countSharedMessages({ userId, provider, since })
+  }
+  const { limitedTokens, costUsd } = await sumSharedUsage({ userId, provider, since })
+  return unit === "cost" ? costUsd : limitedTokens
 }
 
-/**
- * Get the next reset time (midnight UTC tomorrow).
- */
-function getNextResetTime(): Date {
-  const startOfDay = getStartOfDay()
-  return new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000)
-}
-
-/**
- * Get the current daily Claude Code limit constant.
- */
-export function getDailyClaudeCodeLimit(): number {
-  return FREE_DAILY_CLAUDE_CODE_LIMIT
-}
-
-/**
- * Lightweight check: has the user exceeded their daily Claude Code limit?
- * Returns true only for free users using the shared pool who hit the cap.
- * Pro users and users with their own API key are never limited.
- */
-export async function hasExceededClaudeLimit(
-  userId: string
-): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isPro: true },
-  })
-
-  if (!user || user.isPro) return false
-
-  const startOfDay = getStartOfDay()
-  const todayCount = await prisma.activityLog.count({
-    where: {
-      userId,
-      action: "message_sent",
-      createdAt: { gte: startOfDay },
-      metadata: { path: ["useSharedClaude"], equals: true },
-    },
-  })
-
-  return todayCount >= FREE_DAILY_CLAUDE_CODE_LIMIT
+/** Human-readable limit message, phrased per unit. */
+function limitMessage(provider: ProviderName, unit: BudgetUnit, limit: number): string {
+  const allowance =
+    unit === "tokens"
+      ? `${limit.toLocaleString()} tokens`
+      : unit === "cost"
+        ? `$${limit.toFixed(2)}`
+        : `${limit.toLocaleString()} messages`
+  return (
+    `Daily ${provider} limit reached (${allowance}). ` +
+    `Upgrade to Pro for unlimited usage, or add your own ${provider} key.`
+  )
 }
