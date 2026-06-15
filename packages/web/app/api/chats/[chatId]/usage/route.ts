@@ -6,8 +6,9 @@ import {
   notFound,
   internalError,
 } from "@/lib/db/api-helpers"
-import { sumChatUsageByProvider } from "@/lib/db/token-usage"
-import { ALL_AGENTS, agentLabels, agentToProvider } from "@background-agents/common"
+import { sumChatUsageByProvider, countChatMessagesByProvider } from "@/lib/db/token-usage"
+import { getProviderBudget, type BudgetUnit } from "@/lib/server/usage-budgets"
+import { ALL_AGENTS, agentLabels, agentToProvider, type ProviderName } from "@background-agents/common"
 
 /** Reverse map: SDK provider id → human label (via its agent). */
 const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
@@ -18,11 +19,18 @@ function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1)
 }
 
-/** Per-provider token usage for a single chat. */
+/** Per-provider usage for a single chat, in that provider's budget unit. */
+export interface ChatProviderUsageView {
+  provider: string
+  label: string
+  /** Unit `value` is measured in: tokens, USD cost, or messages. */
+  unit: BudgetUnit
+  /** Amount used, in `unit`. */
+  value: number
+}
+
 export interface ChatUsageResponse {
-  /** Total tokens recorded for this chat across all providers. */
-  total: number
-  providers: { provider: string; label: string; tokens: number }[]
+  providers: ChatProviderUsageView[]
 }
 
 // =============================================================================
@@ -43,14 +51,20 @@ export async function GET(
     if (!chat) return notFound("Chat not found")
 
     const rows = await sumChatUsageByProvider(chatId)
-    const providers = rows.map((r) => ({
-      provider: r.provider,
-      label: providerLabel(r.provider),
-      tokens: r.totalTokens,
-    }))
-    const total = providers.reduce((sum, p) => sum + p.tokens, 0)
+    const providers: ChatProviderUsageView[] = await Promise.all(
+      rows.map(async (r) => {
+        const unit = getProviderBudget(r.provider as ProviderName)?.unit ?? "tokens"
+        const value =
+          unit === "cost"
+            ? r.costUsd
+            : unit === "messages"
+              ? await countChatMessagesByProvider(chatId, r.provider)
+              : r.totalTokens
+        return { provider: r.provider, label: providerLabel(r.provider), unit, value }
+      })
+    )
 
-    const response: ChatUsageResponse = { total, providers }
+    const response: ChatUsageResponse = { providers }
     return Response.json(response)
   } catch (error) {
     return internalError(error)

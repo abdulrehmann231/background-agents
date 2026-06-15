@@ -1,12 +1,17 @@
 import { requireAuth, isAuthError, internalError, decryptUserCredentials } from "@/lib/db/api-helpers"
 import { prisma } from "@/lib/db/prisma"
-import { sumSharedUsage } from "@/lib/db/token-usage"
+import { sumSharedUsage, countSharedMessages } from "@/lib/db/token-usage"
 import {
   SHARED_POOL_AGENTS,
   providerForAgent,
   resolvePool,
 } from "@/lib/server/shared-pool"
-import { getDailyTokenBudget, getStartOfUtcDay, getNextUtcDayReset } from "@/lib/server/usage-budgets"
+import {
+  getProviderBudget,
+  getStartOfUtcDay,
+  getNextUtcDayReset,
+  type BudgetUnit,
+} from "@/lib/server/usage-budgets"
 import { agentLabels, type Agent } from "@background-agents/common"
 
 /** Per-pool usage for one shared provider, for today (UTC). */
@@ -14,11 +19,13 @@ export interface PoolUsage {
   agent: Agent
   provider: string
   label: string
-  /** Cache-excluded tokens used from the shared pool today (the limited measure). */
+  /** Unit this pool's budget is measured in: tokens, USD cost, or messages. */
+  unit: BudgetUnit
+  /** Amount used from the shared pool today, in `unit`. */
   used: number
   /** Estimated cost (USD) of today's shared-pool usage for this provider. */
   costUsd: number
-  /** Daily token budget, or null when unlimited (Pro, own key, or no budget). */
+  /** Daily budget in `unit`, or null when unlimited (Pro, own key, or no budget). */
   limit: number | null
   /** True when the user has their own key for this provider (shared pool unused). */
   ownKey: boolean
@@ -55,19 +62,28 @@ export async function GET(): Promise<Response> {
       SHARED_POOL_AGENTS.map(async (agent) => {
         const provider = providerForAgent(agent)
         const ownKey = resolvePool(agent, storedCreds) === "user"
+        const budget = getProviderBudget(provider)
+        const unit = budget?.unit ?? "tokens"
         const { limitedTokens, costUsd } = await sumSharedUsage({
           userId,
           provider,
           since,
         })
-        const budget = getDailyTokenBudget(provider)
+        // "used" is reported in the budget's unit so the UI can render it.
+        const used =
+          unit === "messages"
+            ? await countSharedMessages({ userId, provider, since })
+            : unit === "cost"
+              ? costUsd
+              : limitedTokens
         // Unlimited when Pro, on own key, or no configured budget.
-        const limit = isPro || ownKey ? null : budget
+        const limit = isPro || ownKey ? null : (budget?.limit ?? null)
         return {
           agent,
           provider,
           label: agentLabels[agent],
-          used: limitedTokens,
+          unit,
+          used,
           costUsd,
           limit,
           ownKey,

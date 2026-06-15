@@ -1,29 +1,51 @@
 /**
- * Per-provider token budgets for the shared credential pools.
+ * Per-provider daily budgets for the shared credential pools.
  *
- * Free users get a daily cache-excluded token budget per shared pool; Pro users
- * are unlimited. The measure is "limited tokens" = input (uncached) + output +
- * reasoning (see UsageTotals.limitedTokens) — cache reads are excluded so a few
- * large cached turns don't blow the budget.
+ * Free users get a daily budget per shared pool; Pro users are unlimited. The
+ * budget *unit* differs by provider — each pool is metered in whatever measure
+ * best reflects its cost:
+ *   - claude   → "tokens": cache-excluded limited tokens (input + output +
+ *                reasoning; see UsageTotals.limitedTokens).
+ *   - opencode → "cost": USD spend (tokscale's per-turn cost), since OpenCode
+ *                spans many models with wildly different per-token prices.
+ *   - gemini   → "messages": number of assistant turns, a simple message cap.
  *
  * NOTE: numbers below are PLACEHOLDERS. Tune them once real usage has been
- * logged to the TokenUsage ledger (e.g. eyeball a week of admin stats). Set a
- * provider to `null`/omit to leave it unlimited.
+ * logged to the TokenUsage ledger. Omit a provider to leave it unlimited.
  */
 
 import type { ProviderName } from "@background-agents/common"
 
-/** Free-tier daily limited-token budget per shared-pool provider. */
-export const FREE_DAILY_TOKEN_BUDGETS: Partial<Record<ProviderName, number>> = {
-  // TODO(token-budgets): replace placeholders with tuned values.
-  claude: 100_000,
-  gemini: 300_000,
-  opencode: 250_000,
+/** Unit a provider's shared-pool budget is measured in. */
+export type BudgetUnit = "tokens" | "cost" | "messages"
+
+export interface ProviderBudget {
+  unit: BudgetUnit
+  /** Daily allowance in the unit: tokens, USD, or message count. */
+  limit: number
 }
 
-/** Daily token budget for a provider, or null when unlimited. */
+/** Free-tier daily budget per shared-pool provider, with its unit. */
+export const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
+  // TODO(token-budgets): replace placeholders with tuned values.
+  claude: { unit: "tokens", limit: 100_000 },
+  opencode: { unit: "cost", limit: 0.5 },
+  gemini: { unit: "messages", limit: 100 },
+}
+
+/** Daily budget descriptor for a provider, or null when unlimited. */
+export function getProviderBudget(provider: ProviderName): ProviderBudget | null {
+  return FREE_DAILY_BUDGETS[provider] ?? null
+}
+
+/**
+ * Daily token budget for a provider, or null when the provider isn't metered
+ * in tokens (cost/message-based) or is unlimited. Used by the Claude-specific
+ * limit display in credential-flags.
+ */
 export function getDailyTokenBudget(provider: ProviderName): number | null {
-  return FREE_DAILY_TOKEN_BUDGETS[provider] ?? null
+  const b = FREE_DAILY_BUDGETS[provider]
+  return b && b.unit === "tokens" ? b.limit : null
 }
 
 /**

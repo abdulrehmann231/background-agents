@@ -13,13 +13,14 @@
 import type { Agent, ProviderName } from "@background-agents/common"
 
 import { prisma } from "./prisma"
-import { sumSharedUsage } from "./token-usage"
+import { sumSharedUsage, countSharedMessages } from "./token-usage"
 import { isSharedPoolAgent, providerForAgent, resolvePool } from "@/lib/server/shared-pool"
 import { decryptUserCredentials } from "./api-helpers"
 import {
-  getDailyTokenBudget,
+  getProviderBudget,
   getNextUtcDayReset,
   getStartOfUtcDay,
+  type BudgetUnit,
 } from "@/lib/server/usage-budgets"
 
 export interface UsageLimitResult {
@@ -28,9 +29,11 @@ export interface UsageLimitResult {
   provider: ProviderName
   /** "shared" pools are limited; "user" pools are always allowed. */
   pool: "shared" | "user"
-  /** Cache-excluded tokens used in the current period. */
+  /** Unit the budget is measured in: tokens, USD cost, or message count. */
+  unit: BudgetUnit
+  /** Amount used in the current period, in `unit` (tokens / USD / messages). */
   used: number
-  /** Daily token budget (free users), or null when unlimited (pro/own key). */
+  /** Daily budget in `unit` (free users), or null when unlimited (pro/own key). */
   limit: number | null
   remaining: number | null
   resetAt: Date
@@ -59,10 +62,13 @@ export async function checkSharedPoolUsage(
   )
   const pool = resolvePool(agent, storedCreds)
 
+  const budget = getProviderBudget(provider)
+
   const base = {
     isPro: user?.isPro ?? false,
     provider,
     pool,
+    unit: budget?.unit ?? ("tokens" as BudgetUnit),
     used: 0,
     resetAt,
   }
@@ -77,30 +83,52 @@ export async function checkSharedPoolUsage(
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
-  const budget = getDailyTokenBudget(provider)
   if (budget == null) {
     // No configured budget ⇒ effectively unlimited.
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
-  const { limitedTokens } = await sumSharedUsage({
-    userId,
-    provider,
-    since: getStartOfUtcDay(),
-  })
+  const since = getStartOfUtcDay()
+  const used = await getSharedUsage(userId, provider, budget.unit, since)
 
-  const remaining = Math.max(0, budget - limitedTokens)
-  const allowed = limitedTokens < budget
+  const remaining = Math.max(0, budget.limit - used)
+  const allowed = used < budget.limit
 
   return {
     ...base,
+    unit: budget.unit,
     allowed,
-    used: limitedTokens,
-    limit: budget,
+    used,
+    limit: budget.limit,
     remaining,
-    error: allowed
-      ? undefined
-      : `Daily ${provider} token limit reached (${budget.toLocaleString()} tokens). ` +
-        `Upgrade to Pro for unlimited usage, or add your own ${provider} key.`,
+    error: allowed ? undefined : limitMessage(provider, budget.unit, budget.limit),
   }
+}
+
+/** Usage in the period, measured in the provider's budget unit. */
+async function getSharedUsage(
+  userId: string,
+  provider: ProviderName,
+  unit: BudgetUnit,
+  since: Date
+): Promise<number> {
+  if (unit === "messages") {
+    return countSharedMessages({ userId, provider, since })
+  }
+  const { limitedTokens, costUsd } = await sumSharedUsage({ userId, provider, since })
+  return unit === "cost" ? costUsd : limitedTokens
+}
+
+/** Human-readable limit message, phrased per unit. */
+function limitMessage(provider: ProviderName, unit: BudgetUnit, limit: number): string {
+  const allowance =
+    unit === "tokens"
+      ? `${limit.toLocaleString()} tokens`
+      : unit === "cost"
+        ? `$${limit.toFixed(2)}`
+        : `${limit.toLocaleString()} messages`
+  return (
+    `Daily ${provider} limit reached (${allowance}). ` +
+    `Upgrade to Pro for unlimited usage, or add your own ${provider} key.`
+  )
 }

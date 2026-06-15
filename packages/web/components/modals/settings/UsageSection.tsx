@@ -13,6 +13,13 @@ function fmtTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
+/** Format an amount in a pool's budget unit (tokens / USD cost / messages). */
+function fmtUsage(n: number, unit: PoolUsage["unit"]): string {
+  if (unit === "cost") return `$${n.toFixed(2)}`
+  if (unit === "messages") return `${Math.round(n)} ${Math.round(n) === 1 ? "message" : "messages"}`
+  return `${fmtTokens(n)} tokens`
+}
+
 /** Tailwind classes for the bar fill based on how close to the limit we are. */
 function fillClass(pct: number): string {
   if (pct >= 1) return "bg-red-500"
@@ -33,12 +40,12 @@ function PoolBar({ pool }: { pool: PoolUsage }) {
             "Your own key"
           ) : unlimited ? (
             <>
-              {fmtTokens(pool.used)} tokens{" "}
+              {fmtUsage(pool.used, pool.unit)}{" "}
               <span className="text-primary">· Unlimited</span>
             </>
           ) : (
             <>
-              {fmtTokens(pool.used)} / {fmtTokens(pool.limit!)} tokens
+              {fmtUsage(pool.used, pool.unit)} / {fmtUsage(pool.limit!, pool.unit)}
             </>
           )}
         </span>
@@ -60,7 +67,7 @@ function PoolBar({ pool }: { pool: PoolUsage }) {
         <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
           {pool.ownKey
             ? "Using your own key — shared pool not used"
-            : `${fmtTokens(Math.max(0, pool.limit! - pool.used))} left`}
+            : `${fmtUsage(Math.max(0, pool.limit! - pool.used), pool.unit)} left`}
         </div>
       )}
     </div>
@@ -105,8 +112,9 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
       {isMobile && <MobileSectionHeader icon={Gauge} label="Usage" />}
 
       <p className="text-xs text-muted-foreground mb-2">
-        Daily token usage on the shared credential pools. Resets at 00:00 UTC.
-        Cache reads aren&apos;t counted toward limits.
+        Daily usage on the shared credential pools. Resets at 00:00 UTC. Each
+        pool has its own limit (tokens, cost, or messages); cache reads
+        aren&apos;t counted.
       </p>
 
       {error ? (

@@ -21,6 +21,24 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
+/** Render a usage amount in its budget unit (tokens / USD cost / messages). */
+function fmtUsage(value: number, unit: ChatUsageResponse["providers"][number]["unit"]) {
+  if (unit === "cost") return <>${value.toFixed(2)}</>
+  if (unit === "messages")
+    return (
+      <>
+        {Math.round(value)}
+        <span className="text-muted-foreground"> {Math.round(value) === 1 ? "message" : "messages"}</span>
+      </>
+    )
+  return (
+    <>
+      {fmtTokens(value)}
+      <span className="text-muted-foreground"> tokens</span>
+    </>
+  )
+}
+
 interface ChatUsageModalProps {
   /** Chat to show usage for; null when the modal is closed. */
   chatId: string | null
@@ -105,19 +123,11 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
                         {p.label}
                       </span>
                       <span className="text-sm font-medium tabular-nums">
-                        {fmtTokens(p.tokens)}
-                        <span className="text-muted-foreground"> tokens</span>
+                        {fmtUsage(p.value, p.unit)}
                       </span>
                     </div>
                   )
                 })}
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-sm font-medium">Total</span>
-                  <span className="text-sm font-semibold tabular-nums">
-                    {fmtTokens(data.total)}
-                    <span className="text-muted-foreground font-normal"> tokens</span>
-                  </span>
-                </div>
               </div>
             )}
 
