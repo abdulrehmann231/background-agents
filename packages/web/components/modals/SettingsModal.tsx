@@ -80,8 +80,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   const { setTheme } = useTheme()
   const { isDesktopApp, getClaudeLicenseAutoDetect, getLicenseDetectSettings, setLicenseDetectSettings } = useElectron()
 
-  // Plaintext values for non-secret fields (custom Base URL / Model ID) so they
-  // render unmasked and editable. Read from the shared settings query cache.
+  // Plaintext values for the custom-model fields (Base URL / Model ID / Headers)
+  // so they render unmasked and editable. Read from the shared settings query cache.
   const { data: settingsData } = useSettingsQuery()
   const credentialValues = settingsData?.credentialValues
 

@@ -20,8 +20,8 @@ import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags, type Crede
 export interface EffectiveFlags {
   flags: CredentialFlags
   /**
-   * Plaintext values for non-secret credential fields the UI shows unmasked
-   * (the custom-model Base URL / Model ID). Secrets are never included.
+   * Plaintext values for the custom-model fields the UI shows unmasked and
+   * editable (Base URL / Model ID / Headers). Other credentials stay masked.
    */
   credentialValues: Partial<Record<CredentialId, string>>
   limitResetAt: Date | null
@@ -73,12 +73,13 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   // distinguish between user-owned keys and server-shared env keys.
   const flags = flagsFromCredentials(storedCreds)
 
-  // Echo back plaintext for the non-secret custom-model fields (single-line
-  // ones — Base URL / Model ID) so the UI can show them unmasked and editable.
-  // The multiline Headers field carries auth, so it stays masked.
+  // Echo back plaintext for all custom-model fields (Base URL, Model ID, and the
+  // Headers blob) so the UI can show them unmasked and editable. The Headers
+  // field can carry auth, so its contents are returned to the authenticated
+  // owner's own client — an accepted trade-off for editability.
   const credentialValues: Partial<Record<CredentialId, string>> = {}
   for (const f of CREDENTIAL_KEYS) {
-    if (f.group === "custom-model" && !f.multiline && storedCreds[f.id]) {
+    if (f.group === "custom-model" && storedCreds[f.id]) {
       credentialValues[f.id] = storedCreds[f.id]
     }
   }

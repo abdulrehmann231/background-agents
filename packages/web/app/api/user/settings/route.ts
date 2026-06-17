@@ -21,7 +21,7 @@ import { DEFAULT_SETTINGS } from "@/lib/storage"
 interface SettingsResponse {
   settings: Settings
   credentialFlags: CredentialFlags
-  /** Plaintext values for non-secret fields the UI shows unmasked (custom Base URL / Model ID). */
+  /** Plaintext values for the custom-model fields the UI shows unmasked (Base URL / Model ID / Headers). */
   credentialValues: Partial<Record<CredentialId, string>>
   /** ISO timestamp when the daily Claude limit resets, or null if not limited */
   claudeLimitResetAt: string | null

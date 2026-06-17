@@ -12,9 +12,9 @@ import type { CredentialFlags } from "@/lib/types"
 export const MASK = "***"
 
 /**
- * Initial input values: a real plaintext value when the server returns one (for
- * non-secret fields like the custom Base URL / Model ID), otherwise "***" for
- * credentials the server has but won't echo back, or "" when unset.
+ * Initial input values: a real plaintext value when the server returns one (the
+ * custom-model fields, which are editable), otherwise "***" for credentials the
+ * server has but won't echo back, or "" when unset.
  */
 export function initialCredValues(
   flags: CredentialFlags,
