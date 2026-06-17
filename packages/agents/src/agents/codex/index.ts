@@ -10,6 +10,7 @@ import type {
 } from "../../core/agent"
 import type { Event } from "../../types/events"
 import type { CodeAgentSandbox } from "../../types/provider"
+import { escapeShell } from "../../utils/shell"
 import { parseCodexLine } from "./parser"
 import { CODEX_TOOL_MAPPINGS } from "./tools"
 
@@ -22,7 +23,7 @@ async function codexSetup(
 ): Promise<void> {
   if (!env.OPENAI_API_KEY || !sandbox.executeCommand) return
 
-  const safeKey = env.OPENAI_API_KEY.replace(/'/g, "'\\''")
+  const safeKey = escapeShell(env.OPENAI_API_KEY)
   await sandbox.executeCommand(
     `echo '${safeKey}' | codex login --with-api-key 2>&1`,
     30

@@ -4,6 +4,7 @@
 
 import type { AgentDefinition, CommandSpec, ParseContext, RunOptions } from "../../core/agent"
 import type { Event } from "../../types/events"
+import { quote } from "../../utils/shell"
 import { parseGooseLine } from "./parser"
 import { GOOSE_TOOL_MAPPINGS } from "./tools"
 
@@ -72,9 +73,7 @@ export const gooseAgent: AgentDefinition = {
     }
 
     // Build the goose command string (will be passed to bash -c)
-    const gooseCmd = ["goose", ...gooseArgs].map(arg => {
-      return `'${arg.replace(/'/g, "'\\''")}'`
-    }).join(" ")
+    const gooseCmd = ["goose", ...gooseArgs].map(quote).join(" ")
 
     // Wrap in bash to ensure PATH includes ~/.local/bin where goose installs
     return {
