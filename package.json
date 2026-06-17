@@ -21,6 +21,7 @@
     "build:electron": "npm run build -w @background-agents/electron",
     "publish:sdk": "npm publish -w @background-agents/sdk --access public",
     "build:web": "dotenv -e packages/web/.env -e .env -c -- sh -c 'npm run build -w @background-agents/sdk && npm run prisma:generate && npm run build -w @background-agents/web'",
+    "build:snapshot": "dotenv -e packages/web/.env -e .env -c -- npm run build:snapshot -w @background-agents/sandbox-image",
     "start": "dotenv -e packages/web/.env -e .env -c -- npm run start -w @background-agents/web",
     "test:ccauth": "dotenv -e packages/web/.env -e .env -c -- npm run test:ccauth -w @background-agents/web",
     "seed:ccauth": "dotenv -e packages/web/.env -e .env -c -- npm run seed:ccauth -w @background-agents/web",
