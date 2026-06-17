@@ -65,11 +65,11 @@ export default function AdminDashboard() {
 
   // Global time range state (affects all charts)
   const [globalTimeRange, setGlobalTimeRange] = useState<StatsTimeRange>("7d")
-  // Exclude admin users' activity from the overview stats (default on)
-  const [excludeAdmins, setExcludeAdmins] = useState(true)
+  // Include admin users' activity in the overview stats (default off)
+  const [includeAdmins, setIncludeAdmins] = useState(false)
 
   // Queries - pass globalTimeRange to stats query
-  const statsQuery = useAdminStatsQuery(globalTimeRange, excludeAdmins)
+  const statsQuery = useAdminStatsQuery(globalTimeRange, !includeAdmins)
   const activityQuery = useAdminActivityQuery({
     page: activityPage,
     limit: 20,
@@ -261,33 +261,33 @@ export default function AdminDashboard() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold md:text-xl">Overview</h2>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  {/* Exclude admins toggle */}
+                  {/* Include admins toggle */}
                   <button
                     type="button"
                     role="switch"
-                    aria-checked={excludeAdmins}
-                    onClick={() => setExcludeAdmins((v) => !v)}
+                    aria-checked={includeAdmins}
+                    onClick={() => setIncludeAdmins((v) => !v)}
                     className={cn(
                       "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all sm:text-sm",
-                      excludeAdmins
+                      includeAdmins
                         ? "border-primary/30 bg-primary/10 text-primary"
                         : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
                     )}
                   >
                     <span
                       className={cn(
-                        "relative h-4 w-7 rounded-full transition-colors",
-                        excludeAdmins ? "bg-primary" : "bg-muted-foreground/30"
+                        "flex h-4 w-7 items-center rounded-full p-0.5 transition-colors",
+                        includeAdmins ? "bg-primary" : "bg-muted-foreground/30"
                       )}
                     >
                       <span
                         className={cn(
-                          "absolute top-0.5 h-3 w-3 rounded-full bg-background transition-transform",
-                          excludeAdmins ? "translate-x-3.5" : "translate-x-0.5"
+                          "h-3 w-3 rounded-full bg-background transition-transform",
+                          includeAdmins ? "translate-x-3" : "translate-x-0"
                         )}
                       />
                     </span>
-                    Exclude admins
+                    Include admins
                   </button>
                   {/* Time range buttons */}
                   <div className="flex gap-1 rounded-lg bg-muted p-1">
