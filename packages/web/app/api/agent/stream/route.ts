@@ -123,10 +123,13 @@ const HEARTBEAT_INTERVAL = 15000
 const DB_PERSIST_INTERVAL = 5000
 
 // How long a turn may run without producing any new output before we treat it
-// as stalled and surface an error instead of spinning forever. Some agent CLIs
-// (notably OpenCode) wedge silently when a model rate/quota limit is hit — they
-// keep the process alive and emit no terminal event — so there is nothing to
-// parse and the only available signal is "running but quiet for too long".
+// as stalled and surface an error instead of spinning forever (default 2 min,
+// tune via AGENT_STALL_TIMEOUT_MS). Some agent CLIs (notably OpenCode) wedge
+// silently when a model rate/quota limit is hit — they keep the process alive
+// and emit no terminal event — so there is nothing to parse and the only
+// available signal is "running but quiet for too long". The surfaced error is
+// non-destructive (errorKind "incomplete" → Reload), so a turn that was merely
+// slow is recovered by refreshing history rather than lost.
 const STALL_TIMEOUT_MS = resolveStallTimeoutMs(process.env.AGENT_STALL_TIMEOUT_MS)
 
 const jsonResponse = (status: number, body: object) =>

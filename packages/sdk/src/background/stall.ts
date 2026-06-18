@@ -15,22 +15,30 @@
 
 /**
  * Default time (ms) a turn may run without producing any new output before it
- * is considered stalled. Chosen to sit comfortably above realistic model
- * first-token latency and ordinary long tool calls, yet within a single SSE
- * connection window so the watchdog can actually fire before the connection is
- * recycled. Override per-deployment via the `AGENT_STALL_TIMEOUT_MS` env var.
+ * is considered stalled.
+ *
+ * This is a deliberate trade-off. Too low and a legitimately long step (a big
+ * build/test/install the agent is silently waiting on) gets flagged; too high
+ * and a genuinely wedged turn (rate/quota hang, stuck upstream stream) leaves
+ * the user staring at a spinner. We bias toward responsiveness because the
+ * surfaced error is *non-destructive*: the turn keeps running in the background
+ * and the UI offers Reload, so a slow-but-valid turn is recovered, not lost.
+ * Override per-deployment via the `AGENT_STALL_TIMEOUT_MS` env var (ms; <=0
+ * disables the watchdog entirely).
  */
-export const DEFAULT_STALL_TIMEOUT_MS = 240_000
+export const DEFAULT_STALL_TIMEOUT_MS = 120_000
 
 /**
- * User-facing message for a stalled turn. Names the most common cause
- * (rate/usage/quota limit) and the available recovery actions.
+ * User-facing message for a stalled turn. Hedged on purpose: silence can mean a
+ * rate/usage/quota limit the agent is silently retrying, a stuck upstream
+ * stream, OR a long step we simply can't see output from — so it states the
+ * likely causes without over-asserting, and points at the recovery actions.
  */
 export const STALL_ERROR_MESSAGE =
-  "The agent stopped producing output for an extended period and appears to be stuck. " +
-  "This usually means a model rate, usage, or quota limit was reached and the agent is " +
-  "silently retrying (or the upstream response stalled). Stopped waiting for it — you can " +
-  "retry, switch to a different model, or check your plan's limits."
+  "The agent produced no output for a while and looks stuck. This usually means a model " +
+  "rate, usage, or quota limit was hit (the agent retries silently and emits nothing), or " +
+  "the upstream response stalled. Stopped waiting — reload to pick up the turn if it was " +
+  "just slow, or retry / switch model / check your plan's limits if it was a quota issue."
 
 export interface StallCheck {
   /** True while the turn has not yet emitted a terminal (`end`/error) event. */

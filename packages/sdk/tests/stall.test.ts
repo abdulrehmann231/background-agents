@@ -45,6 +45,10 @@ describe("isTurnStalled", () => {
     ).toBe(false)
   })
 
+  it("uses a responsive default (2 min) so a wedged turn surfaces quickly", () => {
+    expect(DEFAULT_STALL_TIMEOUT_MS).toBe(120_000)
+  })
+
   it("defaults to DEFAULT_STALL_TIMEOUT_MS when no timeout is given", () => {
     expect(
       isTurnStalled({
