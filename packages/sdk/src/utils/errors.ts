@@ -71,13 +71,40 @@ export function extractErrorMessage(input: unknown): string {
   }
   const data = nested("data")
   const error = nested("error")
+  const errorData =
+    error && typeof error["data"] === "object"
+      ? (error["data"] as Record<string, unknown>)
+      : undefined
+
+  // An HTTP status code is often the only machine-readable signal a provider
+  // gives for the failure *category* (402 balance, 401/403 auth, 429 rate
+  // limit). Agents like OpenCode can emit `{name, data:{statusCode:429}}` with
+  // no message string at all — without this, the `name` ("ProviderError") would
+  // win below and the 429 would be silently dropped, leaving the failure
+  // unclassified. Hunt for it in the spots providers commonly stash it.
+  const statusOf = (o?: Record<string, unknown>): number | undefined => {
+    if (!o) return undefined
+    for (const k of ["statusCode", "status", "responseStatus", "httpStatus"]) {
+      const v = o[k]
+      // Restrict to plausible HTTP status codes so unrelated numeric fields
+      // (e.g. an exit `code`) don't masquerade as one.
+      if (typeof v === "number" && v >= 100 && v <= 599) return v
+    }
+    return undefined
+  }
+  const status = statusOf(e) ?? statusOf(data) ?? statusOf(error) ?? statusOf(errorData)
+
+  // Append the status to whatever human message we found, unless the text
+  // already mentions it, so both the user *and* classifyAgentError see it.
+  const withStatus = (text: string): string => {
+    if (status == null) return text
+    return new RegExp(`\\b${status}\\b`).test(text) ? text : `${text} (HTTP ${status})`
+  }
 
   const candidates: unknown[] = [
     data?.message,
     e.message,
-    error?.["data"] && typeof error["data"] === "object"
-      ? (error["data"] as Record<string, unknown>).message
-      : undefined,
+    errorData?.message,
     error?.message,
     typeof e.error === "string" ? e.error : undefined,
     e.finalError,
@@ -89,8 +116,12 @@ export function extractErrorMessage(input: unknown): string {
     typeof e.code === "string" ? e.code : undefined,
   ]
   for (const c of candidates) {
-    if (typeof c === "string" && c.trim()) return c.trim()
+    if (typeof c === "string" && c.trim()) return withStatus(c.trim())
   }
+
+  // No textual candidate, but we did recover a status code — surface it on its
+  // own so the category is still recoverable (e.g. "HTTP 429").
+  if (status != null) return `HTTP ${status}`
 
   // Last resort: surface the raw object rather than hide it. For the failure
   // that motivated this module (an OpenCode `error` event carrying e.g.

@@ -460,11 +460,11 @@ describe("parseOpencodeLine", () => {
     expect(event).toEqual({ type: "end", error: "APIError" })
   })
 
-  it("surfaces the raw payload (not 'Unknown error') when the error has no message or name", () => {
+  it("surfaces the status code (not 'Unknown error') when the error has no message or name", () => {
     // Regression: an OpenCode error event whose payload has neither
     // error.data.message nor error.name used to collapse to the useless string
-    // "Unknown error". Now the raw fields survive — here a 402 status, which is
-    // additionally classified as a balance problem.
+    // "Unknown error". Now the status survives as a clean "HTTP <code>" — here a
+    // 402, which is additionally classified as a balance problem.
     const ctx = createContext()
     const event = parseOpencodeLine(
       '{"type": "error", "sessionID": "ses_xyz123", "error": {"statusCode": 402, "providerID": "opencode"}}',
@@ -473,8 +473,23 @@ describe("parseOpencodeLine", () => {
     )
     expect(event).toEqual({
       type: "end",
-      error:
-        '{"statusCode":402,"providerID":"opencode"} — switch to a free model or add credits / an API key',
+      error: "HTTP 402 — switch to a free model or add credits / an API key",
+    })
+  })
+
+  it("classifies a rate limit emitted as name + data.statusCode (no message)", () => {
+    // The OpenCode quota/rate-limit shape: a name but no message, with the 429
+    // in data.statusCode. The name must not eclipse the 429 → must end up
+    // classified as a rate limit, not an opaque "ProviderError".
+    const ctx = createContext()
+    const event = parseOpencodeLine(
+      '{"type": "error", "sessionID": "ses_xyz123", "error": {"name": "ProviderError", "data": {"statusCode": 429}}}',
+      mappings,
+      ctx
+    )
+    expect(event).toEqual({
+      type: "end",
+      error: "ProviderError (HTTP 429) — wait a moment and retry",
     })
   })
 

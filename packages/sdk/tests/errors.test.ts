@@ -32,13 +32,31 @@ describe("extractErrorMessage", () => {
     expect(extractErrorMessage({ error: "string error" })).toBe("string error")
   })
 
-  it("falls back to a compact JSON dump so detail is never lost", () => {
-    // This is the failure that motivated the module: an error event with no
-    // message/name field. Previously collapsed to "Unknown error"; now the raw
-    // payload (here the status code) is surfaced.
-    expect(extractErrorMessage({ statusCode: 402, providerID: "opencode" })).toBe(
-      '{"statusCode":402,"providerID":"opencode"}'
-    )
+  it("surfaces a bare HTTP status code when there is no message/name", () => {
+    // An error event whose only machine-readable signal is the status code.
+    // Previously collapsed to "Unknown error", then to a raw JSON dump; now it
+    // surfaces a clean "HTTP <code>" that classifyAgentError can still bucket.
+    expect(extractErrorMessage({ statusCode: 402, providerID: "opencode" })).toBe("HTTP 402")
+  })
+
+  it("preserves an HTTP status alongside a name so the category survives", () => {
+    // OpenCode emits this shape on a rate limit: a name but no message, with the
+    // 429 tucked in data.statusCode. The name must not eclipse the 429.
+    expect(
+      extractErrorMessage({ name: "ProviderError", data: { statusCode: 429 } })
+    ).toBe("ProviderError (HTTP 429)")
+  })
+
+  it("does not append a status that the message already states", () => {
+    expect(
+      extractErrorMessage({ message: "429 Too Many Requests", statusCode: 429 })
+    ).toBe("429 Too Many Requests")
+  })
+
+  it("ignores numeric fields that are not plausible HTTP statuses", () => {
+    // A non-HTTP numeric `code` (e.g. a process exit code) must not be treated
+    // as a status and appended.
+    expect(extractErrorMessage({ name: "Boom", code: 1 })).toBe("Boom")
   })
 
   it("returns empty string for an empty object", () => {
@@ -97,10 +115,16 @@ describe("resolveAgentError", () => {
     )
   })
 
-  it("surfaces the raw payload for an opaque error object instead of 'Unknown error'", () => {
+  it("classifies a status-only error instead of returning 'Unknown error'", () => {
     expect(resolveAgentError({ statusCode: 402 })).toBe(
-      '{"statusCode":402} — switch to a free model or add credits / an API key'
+      "HTTP 402 — switch to a free model or add credits / an API key"
     )
+  })
+
+  it("classifies a rate limit emitted as name + data.statusCode (OpenCode shape)", () => {
+    expect(
+      resolveAgentError({ name: "ProviderError", data: { statusCode: 429 } }, "opencode")
+    ).toBe("ProviderError (HTTP 429) — wait a moment and retry")
   })
 
   it("logs and returns a clear placeholder when nothing is extractable", () => {
