@@ -2,6 +2,11 @@ import { createHash } from "node:crypto"
 import { Daytona } from "@daytonaio/sdk"
 import { Prisma } from "@prisma/client"
 import { createSandboxGit } from "@background-agents/daytona-git"
+import {
+  isTurnStalled,
+  resolveStallTimeoutMs,
+  STALL_ERROR_MESSAGE,
+} from "@background-agents/sdk"
 import { PATHS } from "@/lib/constants"
 import {
   finalizeTurn,
@@ -116,6 +121,13 @@ export const maxDuration = 300
 const BACKEND_POLL_INTERVAL = 500
 const HEARTBEAT_INTERVAL = 15000
 const DB_PERSIST_INTERVAL = 5000
+
+// How long a turn may run without producing any new output before we treat it
+// as stalled and surface an error instead of spinning forever. Some agent CLIs
+// (notably OpenCode) wedge silently when a model rate/quota limit is hit — they
+// keep the process alive and emit no terminal event — so there is nothing to
+// parse and the only available signal is "running but quiet for too long".
+const STALL_TIMEOUT_MS = resolveStallTimeoutMs(process.env.AGENT_STALL_TIMEOUT_MS)
 
 const jsonResponse = (status: number, body: object) =>
   new Response(JSON.stringify(body), {
@@ -251,6 +263,10 @@ export async function GET(req: Request) {
         // state — the snapshot is re-derived from the file each time, so a
         // new SSE connection (reconnect) automatically reconstructs full state.
         let lastSnap: AgentSnapshot | null = null
+        // Wall-clock of the last time the wire payload changed. Drives the
+        // stall watchdog: while the turn keeps emitting output this advances;
+        // once it goes silent the gap grows until the watchdog trips.
+        let lastActivityAt = Date.now()
         while (!isStreamClosed) {
           lastSnap = await snapshotBackgroundAgent(
             sandbox,
@@ -276,6 +292,7 @@ export async function GET(req: Request) {
             .digest("hex")
           if (sig !== lastSentSig) {
             lastSentSig = sig
+            lastActivityAt = Date.now()
             cursor += 1
             sendEvent("update", {
               status: lastSnap.status,
@@ -286,6 +303,32 @@ export async function GET(req: Request) {
               sessionId: lastSnap.sessionId,
               error: lastSnap.error,
             })
+          }
+
+          // Stall watchdog: a turn that is still "running" but has produced no
+          // new output for too long is almost always wedged — most often a
+          // model rate/usage/quota limit that the agent CLI is silently
+          // retrying (OpenCode emits nothing in this state, so there is no
+          // error event to parse). Surface it as an error so the UI stops
+          // spinning. Tagged "incomplete" → the UI offers Reload, so if the
+          // turn was merely slow and later finishes, refreshing history
+          // recovers it without resending.
+          if (
+            isTurnStalled({
+              running: lastSnap.status === "running",
+              msSinceLastActivity: Date.now() - lastActivityAt,
+              timeoutMs: STALL_TIMEOUT_MS,
+            })
+          ) {
+            console.warn(
+              `[agent/stream] turn stalled: no output for >=${STALL_TIMEOUT_MS}ms (chatId=${chatId}); surfacing stall error`
+            )
+            lastSnap = {
+              ...lastSnap,
+              status: "error",
+              error: STALL_ERROR_MESSAGE,
+              errorKind: "incomplete",
+            }
           }
 
           if (lastSnap.status === "completed" || lastSnap.status === "error") {

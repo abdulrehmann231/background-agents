@@ -84,6 +84,16 @@ export type {
   TurnHandle,
 } from "./background/index"
 
+// Stall watchdog: detect agent turns that wedge without a terminal event
+// (e.g. OpenCode silently retrying after a rate/quota limit).
+export {
+  isTurnStalled,
+  resolveStallTimeoutMs,
+  DEFAULT_STALL_TIMEOUT_MS,
+  STALL_ERROR_MESSAGE,
+  type StallCheck,
+} from "./background/index"
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sandbox Types
 // ─────────────────────────────────────────────────────────────────────────────

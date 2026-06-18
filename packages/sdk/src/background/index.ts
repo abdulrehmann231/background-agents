@@ -17,3 +17,11 @@ export {
   readProviderFromMeta,
   type BackgroundSession,
 } from "./session"
+
+export {
+  isTurnStalled,
+  resolveStallTimeoutMs,
+  DEFAULT_STALL_TIMEOUT_MS,
+  STALL_ERROR_MESSAGE,
+  type StallCheck,
+} from "./stall"
