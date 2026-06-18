@@ -43,13 +43,19 @@ function ffResponder(opts: {
   headSeq?: string[]
 }): Responder {
   const heads = [...(opts.headSeq ?? ["old1234", "new5678"])]
+  // Conflicts / MERGE_HEAD only appear *after* the merge has run, so the
+  // start-of-pull "already in conflict" guard sees a clean tree first.
+  let merged = false
   return (cmd) => {
     if (cmd.includes("rev-list")) return ok(opts.behind)
     if (cmd.includes("rev-parse --short HEAD")) return ok(heads.length > 1 ? heads.shift()! : heads[0])
     if (cmd.includes("git status --porcelain")) return ok(opts.dirty ?? "")
-    if (cmd.includes("MERGE_HEAD")) return ok("no")
-    if (cmd.includes("--diff-filter=U")) return ok(opts.conflicts ?? "")
-    if (cmd.includes("git merge")) return { result: opts.mergeOutput ?? "", exitCode: opts.mergeExit ?? 0 }
+    if (cmd.includes("MERGE_HEAD")) return ok(merged && opts.conflicts ? "yes" : "no")
+    if (cmd.includes("--diff-filter=U")) return ok(merged ? (opts.conflicts ?? "") : "")
+    if (cmd.includes("git merge")) {
+      merged = true
+      return { result: opts.mergeOutput ?? "", exitCode: opts.mergeExit ?? 0 }
+    }
     return ok()
   }
 }
@@ -73,18 +79,35 @@ describe("autoPullBeforeRun", () => {
     const res = await autoPullBeforeRun(sandbox, REPO, BRANCH, TOKEN)
 
     expect(res).toEqual({ status: "pulled", commits: 3 })
-    // Uses --autostash so a dirty tree can't block a fast-forward.
-    expect(commands.some((c) => c.includes("git merge --no-edit --autostash"))).toBe(true)
+    // Plain merge (no --autostash) on a clean tree; no WIP commit needed.
+    expect(commands.some((c) => c.includes("git merge --no-edit origin/"))).toBe(true)
+    expect(commands.some((c) => c.includes("git merge --no-edit --autostash"))).toBe(false)
+    expect(commands.some((c) => c.includes("git add -A && git commit"))).toBe(false)
+    // Installs the pre-commit hook that blocks committing conflict markers.
+    expect(commands.some((c) => c.includes(".git/hooks/pre-commit") && c.includes("git diff --cached --check"))).toBe(true)
+  })
+
+  it("commits the WIP before merging when the working tree is dirty", async () => {
+    const { sandbox, commands } = makeSandbox(
+      ffResponder({ behind: "1\t0", dirty: " M src/main.py" })
+    )
+
+    const res = await autoPullBeforeRun(sandbox, REPO, BRANCH, TOKEN)
+
+    expect(res).toEqual({ status: "pulled", commits: 1 })
+    // WIP is committed first so the pull is a real, abortable merge.
+    expect(commands.some((c) => c.includes("git add -A && git commit"))).toBe(true)
+    expect(commands.some((c) => c.includes("git merge --no-edit origin/"))).toBe(true)
+    expect(commands.some((c) => c.includes("--autostash"))).toBe(false)
   })
 
   it("reports error (not pulled) when the merge fails and HEAD does not move", async () => {
-    // Dirty tree blocks the merge: non-zero exit, HEAD unchanged, no conflict.
+    // A merge that fails without a content conflict and leaves HEAD unchanged.
     const { sandbox } = makeSandbox(
       ffResponder({
         behind: "2\t0",
-        dirty: " M src/main.py",
         mergeExit: 1,
-        mergeOutput: "error: Your local changes would be overwritten by merge",
+        mergeOutput: "fatal: merge failed",
         headSeq: ["old1234", "old1234"], // HEAD does not advance
       })
     )
@@ -93,7 +116,7 @@ describe("autoPullBeforeRun", () => {
 
     expect(res).toEqual({
       status: "error",
-      message: "error: Your local changes would be overwritten by merge",
+      message: "fatal: merge failed",
     })
   })
 

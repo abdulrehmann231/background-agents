@@ -47,6 +47,31 @@ function esc(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`
 }
 
+/**
+ * Install a `pre-commit` hook that blocks commits containing unresolved conflict
+ * markers, so the agent can't accidentally `git add -A && git commit` the markers
+ * and silently finalize a conflicted merge (which would clear `MERGE_HEAD` and
+ * drop us out of conflict state). `git diff --cached --check` is git's built-in
+ * detector for staged conflict markers. Idempotent — safe to re-run every turn.
+ */
+async function installConflictMarkerHook(
+  sandbox: SandboxLike,
+  repoPath: string
+): Promise<void> {
+  const hookPath = `${esc(repoPath)}/.git/hooks/pre-commit`
+  await sandbox.process.executeCommand(
+    `cat > ${hookPath} <<'HOOK' && chmod +x ${hookPath}\n` +
+      `#!/bin/sh\n` +
+      `markers=$(git diff --cached --check 2>/dev/null | grep -i 'conflict marker')\n` +
+      `if [ -n "$markers" ]; then\n` +
+      `  echo "Commit blocked — unresolved conflict markers:" >&2\n` +
+      `  echo "$markers" >&2\n` +
+      `  exit 1\n` +
+      `fi\n` +
+      `HOOK`
+  )
+}
+
 /** Whether a merge is currently in progress in the repo. */
 async function isMergeInProgress(
   sandbox: SandboxLike,
@@ -102,9 +127,14 @@ async function commitsBehind(
 /**
  * Merge origin/<branch> into the current branch.
  *
- * `--autostash` is used so uncommitted changes in the working tree (e.g. the
- * agent's WIP from a prior turn) don't block a fast-forward — git stashes them,
- * merges, then re-applies. The outcome is decided authoritatively:
+ * We deliberately do NOT use `--autostash`. An autostash re-apply conflict
+ * leaves conflict markers in the working tree but *no* `MERGE_HEAD` — so it's
+ * invisible to the `MERGE_HEAD`-based conflict checks and can't be aborted with
+ * `git merge --abort`. Instead, if the working tree is dirty we **commit the WIP
+ * first**, then run a normal merge. That turns any conflict into a genuine
+ * 3-way merge conflict with `MERGE_HEAD` set, which the existing conflict UI,
+ * the auto-push skip, the pre-commit hook, and the Abort Merge button all handle
+ * correctly. The outcome is decided authoritatively:
  *   - unresolved conflicts present  → "conflict" (merge left in progress)
  *   - HEAD did not advance, no conflict → "error" (the merge failed; we don't
  *     pretend it pulled)
@@ -116,24 +146,33 @@ async function mergeRemote(
   branch: string,
   behind: number
 ): Promise<AutoPullResult> {
-  const before = await head(sandbox, repoPath)
   const dirty = await dirtyStatus(sandbox, repoPath)
   if (dirty) {
-    console.log(`[auto-pull] working tree is DIRTY before merge:\n${dirty}`)
+    // Commit the agent's uncommitted WIP so the pull is a real, abortable merge
+    // rather than an autostash pop. No markers exist yet (nothing is merged), so
+    // the pre-commit hook passes.
+    console.log(`[auto-pull] working tree is DIRTY — committing WIP before merge:\n${dirty}`)
+    const wipRes = await sandbox.process.executeCommand(
+      `cd ${esc(repoPath)} && git add -A && git commit --no-edit -m "Auto-saved WIP before pulling origin/${esc(branch)}" 2>&1`
+    )
+    if (wipRes.exitCode !== 0) {
+      console.error(`[auto-pull] failed to commit WIP before merge:\n${wipRes.result.trim()}`)
+      return { status: "error", message: wipRes.result.trim() || "failed to commit WIP before pull" }
+    }
   } else {
     console.log(`[auto-pull] working tree is clean before merge`)
   }
 
+  const before = await head(sandbox, repoPath)
   const mergeRes = await sandbox.process.executeCommand(
-    `cd ${esc(repoPath)} && git merge --no-edit --autostash origin/${esc(branch)} 2>&1`
+    `cd ${esc(repoPath)} && git merge --no-edit origin/${esc(branch)} 2>&1`
   )
   const after = await head(sandbox, repoPath)
   console.log(
     `[auto-pull] git merge exit=${mergeRes.exitCode}, HEAD ${before || "?"} -> ${after || "?"}\n${mergeRes.result.trim()}`
   )
 
-  // Conflicts (from the merge itself or from re-applying the autostash) leave
-  // unmerged paths in the index.
+  // A real merge conflict leaves unmerged paths and MERGE_HEAD in place.
   const conflicts = await conflictedFiles(sandbox, repoPath)
   if (conflicts.length > 0 || (await isMergeInProgress(sandbox, repoPath))) {
     return { status: "conflict", conflictedFiles: conflicts, alreadyInProgress: false }
@@ -173,15 +212,22 @@ export async function autoPullBeforeRun(
 ): Promise<AutoPullResult> {
   console.log(`[auto-pull] start: branch=${branch} repo=${repoPath}`)
 
-  // A merge left in progress by a prior conflicted pull — the user is sending a
-  // message to have the agent resolve it. Surface the conflicts as-is; the agent
-  // runs on the conflicted tree.
-  if (await isMergeInProgress(sandbox, repoPath)) {
-    const files = await conflictedFiles(sandbox, repoPath)
+  // Guard against the agent committing unresolved conflict markers (which would
+  // silently finalize a conflicted merge and drop us out of conflict state).
+  await installConflictMarkerHook(sandbox, repoPath)
+
+  // Already in conflict — either a merge left in progress by a prior conflicted
+  // pull, or unmerged paths still sitting in the index (e.g. an older sandbox
+  // left in the autostash-orphan state). The user is sending a message to have
+  // the agent resolve it. Surface the conflicts as-is and DON'T pull more on top
+  // of unresolved markers (a fresh WIP commit would also be blocked by the
+  // pre-commit hook). The agent runs on the conflicted tree.
+  const existingConflicts = await conflictedFiles(sandbox, repoPath)
+  if (existingConflicts.length > 0 || (await isMergeInProgress(sandbox, repoPath))) {
     console.log(
-      `[auto-pull] merge already in progress, ${files.length} conflicted file(s): ${files.join(", ") || "(none)"} — agent will resolve`
+      `[auto-pull] already in conflict, ${existingConflicts.length} unresolved file(s): ${existingConflicts.join(", ") || "(none)"} — agent will resolve`
     )
-    return { status: "conflict", conflictedFiles: files, alreadyInProgress: true }
+    return { status: "conflict", conflictedFiles: existingConflicts, alreadyInProgress: true }
   }
 
   const git = createSandboxGit(sandbox)
