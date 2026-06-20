@@ -37,22 +37,36 @@ const CLAUDE_DEFAULT_ENV: Record<string, string> = {
  *
  * The value should be the JSON content of the credentials file, e.g.:
  * {"claudeAiOauth":{"accessToken":"sk-ant-oa..."}}
+ *
+ * Custom-endpoint runs (ANTHROPIC_BASE_URL set, no subscription token) instead
+ * remove a stale ~/.claude/.credentials.json left by an earlier standard run in
+ * the same sandbox, so a leftover subscription/OAuth token can't shadow the
+ * custom endpoint's ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN auth. In this app that
+ * file is only ever written from CLAUDE_CODE_CREDENTIALS, so removing it is safe.
  */
 async function claudeSetup(
   sandbox: CodeAgentSandbox,
   env: Record<string, string>
 ): Promise<void> {
+  if (!sandbox.executeCommand) return
+
   const credentialsJson = env[CLAUDE_CODE_CREDENTIALS_ENV]
-  if (!credentialsJson || !sandbox.executeCommand) return
+  if (credentialsJson) {
+    // Escape single quotes for shell command
+    const safeCredentials = escapeShell(credentialsJson)
 
-  // Escape single quotes for shell command
-  const safeCredentials = escapeShell(credentialsJson)
+    // Create directory and write credentials file with secure permissions
+    await sandbox.executeCommand(
+      `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeCredentials}' > '${CLAUDE_CREDENTIALS_FILE}' && chmod 600 '${CLAUDE_CREDENTIALS_FILE}'`,
+      30
+    )
+    return
+  }
 
-  // Create directory and write credentials file with secure permissions
-  await sandbox.executeCommand(
-    `mkdir -p '${CLAUDE_CREDENTIALS_DIR}' && echo '${safeCredentials}' > '${CLAUDE_CREDENTIALS_FILE}' && chmod 600 '${CLAUDE_CREDENTIALS_FILE}'`,
-    30
-  )
+  // Custom endpoint run: clear any stale credentials file from a prior standard run.
+  if (env.ANTHROPIC_BASE_URL) {
+    await sandbox.executeCommand(`rm -f '${CLAUDE_CREDENTIALS_FILE}'`, 10)
+  }
 }
 
 /**
