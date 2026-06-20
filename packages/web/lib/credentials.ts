@@ -29,11 +29,11 @@ export interface CredentialField {
   /** Marks a field the user must fill in. Rendered with a required indicator. */
   required?: boolean
   /**
-   * Which settings tab renders this field. Defaults to "api-keys". Fields in
-   * the "custom-model" group are rendered on the dedicated Custom model tab and
-   * filtered out of the API Keys tab.
+   * Which settings tab renders this field. Defaults to "api-keys". Fields in a
+   * "custom-*" group are rendered on their own dedicated tab (Custom model /
+   * Custom Codex) and filtered out of the API Keys tab.
    */
-  group?: "api-keys" | "custom-model"
+  group?: "api-keys" | "custom-model" | "custom-codex"
 }
 
 export const CREDENTIAL_KEYS: readonly CredentialField[] = [
@@ -120,6 +120,35 @@ export const CREDENTIAL_KEYS: readonly CredentialField[] = [
     description:
       "One per line — Header-Name: value. Put auth here: x-api-key or Authorization. anthropic-version is managed for you.",
     group: "custom-model",
+  },
+  // Custom OpenAI-compatible endpoint for Codex — rendered on the "Custom Codex"
+  // tab. Mirrors the Anthropic custom-model fields: Base URL is required, auth is
+  // supplied through the Headers field rather than a separate key.
+  {
+    id: "CUSTOM_CODEX_BASE_URL",
+    provider: "openai",
+    label: "Base URL",
+    placeholder: "https://api.openai.com/v1",
+    required: true,
+    group: "custom-codex",
+  },
+  {
+    id: "CUSTOM_CODEX_NAME",
+    provider: "openai",
+    label: "Model ID",
+    placeholder: "gpt-5.5 (sent to --model)",
+    description: "The exact model ID the endpoint expects. Leave blank to use its default.",
+    group: "custom-codex",
+  },
+  {
+    id: "CUSTOM_CODEX_HEADERS",
+    provider: "openai",
+    label: "Headers",
+    multiline: true,
+    placeholder: "Authorization: Bearer sk-…\n# or: x-api-key: <token>",
+    description:
+      "One per line — Header-Name: value. Put auth here (e.g. Authorization: Bearer …); it's sent with every request.",
+    group: "custom-codex",
   },
 ] as const
 

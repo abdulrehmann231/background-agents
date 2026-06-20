@@ -10,18 +10,49 @@ import type {
 } from "../../core/agent"
 import type { Event } from "../../types/events"
 import type { CodeAgentSandbox } from "../../types/provider"
-import { escapeShell } from "../../utils/shell"
+import { escapeShell, quote } from "../../utils/shell"
 import { parseCodexLine } from "./parser"
 import { CODEX_TOOL_MAPPINGS } from "./tools"
+import { buildCodexConfigToml } from "./config"
 
 /**
- * Codex agent-specific setup: login with API key
+ * Codex agent-specific setup. Two mutually exclusive paths:
+ *
+ * 1. Custom endpoint — when CUSTOM_CODEX_BASE_URL is set (the user configured a
+ *    custom OpenAI-compatible endpoint), write ~/.codex/config.toml routing all
+ *    requests through that provider. Auth lives in the headers blob, so there is
+ *    no `codex login` step.
+ * 2. Standard OpenAI — remove any custom config.toml left over from a previous
+ *    custom run in this sandbox (so a custom→standard switch stops routing to the
+ *    old endpoint), then log in with the stored OPENAI_API_KEY.
  */
 async function codexSetup(
   sandbox: CodeAgentSandbox,
   env: Record<string, string>
 ): Promise<void> {
-  if (!env.OPENAI_API_KEY || !sandbox.executeCommand) return
+  if (!sandbox.executeCommand) return
+
+  if (env.CUSTOM_CODEX_BASE_URL) {
+    const toml = buildCodexConfigToml({
+      baseUrl: env.CUSTOM_CODEX_BASE_URL,
+      model: env.CUSTOM_CODEX_NAME || undefined,
+      headers: env.CUSTOM_CODEX_HEADERS || undefined,
+      authHeaderEnv: env.CUSTOM_CODEX_AUTHORIZATION ? "CUSTOM_CODEX_AUTHORIZATION" : undefined,
+    })
+    // printf '%s' avoids backslash interpretation; quote() handles embedded quotes.
+    await sandbox.executeCommand(
+      `mkdir -p ~/.codex && printf '%s' ${quote(toml)} > ~/.codex/config.toml`,
+      30
+    )
+    return
+  }
+
+  // Standard path: drop any custom config.toml from an earlier custom run in this
+  // sandbox so it can't override the default provider. In this app config.toml is
+  // only ever written by the custom path above, so removing it is safe.
+  await sandbox.executeCommand(`rm -f ~/.codex/config.toml`, 10)
+
+  if (!env.OPENAI_API_KEY) return
 
   const safeKey = escapeShell(env.OPENAI_API_KEY)
   await sandbox.executeCommand(

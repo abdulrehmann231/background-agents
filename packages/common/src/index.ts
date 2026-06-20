@@ -33,6 +33,7 @@ export {
   defaultAgentModel,
   agentSupportsPlanMode,
   CUSTOM_MODEL_VALUE,
+  CUSTOM_CODEX_MODEL_VALUE,
   // Functions
   getDefaultAgent,
   hasOwnAnthropicCredentials,
@@ -42,6 +43,7 @@ export {
   getModelLabel,
   getEnvForModel,
   buildCustomModelEnv,
+  buildCodexCustomEnv,
   parseCustomHeaders,
   resolveCliModel,
 } from "./agents"

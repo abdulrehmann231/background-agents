@@ -70,6 +70,15 @@ export type CredentialId =
   | "CUSTOM_MODEL_BASE_URL"
   | "CUSTOM_MODEL_HEADERS"
   | "CUSTOM_MODEL_NAME"
+  // Custom OpenAI-compatible endpoint for Codex ("Custom Codex" tab). Mirrors the
+  // Anthropic fields above: only a base URL is required, and auth is supplied
+  // through CUSTOM_CODEX_HEADERS (e.g. `Authorization: Bearer …`) rather than a
+  // dedicated key field. At run time these are passed through to the sandbox and
+  // turned into a ~/.codex/config.toml custom model_provider (see the SDK's
+  // codexSetup / buildCodexConfigToml).
+  | "CUSTOM_CODEX_BASE_URL"
+  | "CUSTOM_CODEX_HEADERS"
+  | "CUSTOM_CODEX_NAME"
 
 export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // Server has a shared Claude credential pool (e.g. the rotating row written
@@ -109,9 +118,10 @@ export interface ModelOption {
   /**
    * Which provider's API key is required for this model. "none" means no key
    * needed. "custom" means the user-configured custom Anthropic endpoint (see
-   * the CUSTOM_MODEL_* credentials).
+   * the CUSTOM_MODEL_* credentials). "codex-custom" means the user-configured
+   * custom OpenAI-compatible Codex endpoint (see the CUSTOM_CODEX_* credentials).
    */
-  requiresKey?: ProviderId | "none" | "custom"
+  requiresKey?: ProviderId | "none" | "custom" | "codex-custom"
 }
 
 /**
@@ -120,6 +130,13 @@ export interface ModelOption {
  * injected as ANTHROPIC_* env vars instead of the shared pool / API key.
  */
 export const CUSTOM_MODEL_VALUE = "custom"
+
+/**
+ * Sentinel model value for the user-configured custom Codex endpoint.
+ * When selected (codex only), the stored CUSTOM_CODEX_* credentials drive a
+ * custom ~/.codex/config.toml model_provider instead of the OpenAI default.
+ */
+export const CUSTOM_CODEX_MODEL_VALUE = "codex-custom"
 
 /**
  * Models allowed to run on the server-shared OpenCode API key.
@@ -236,6 +253,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gpt-5.4", label: "GPT-5.4", requiresKey: "openai" },
     { value: "gpt-5.4-mini", label: "GPT-5.4 Mini", requiresKey: "openai" },
     { value: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", requiresKey: "openai" },
+    { value: CUSTOM_CODEX_MODEL_VALUE, label: "Custom endpoint", requiresKey: "codex-custom" },
   ],
   "copilot": [
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", requiresKey: "github" },
@@ -391,6 +409,11 @@ export function hasCredentialsForModel(
     // Authorization) — see buildCustomModelEnv — so it isn't required here.
     return !!flags?.CUSTOM_MODEL_BASE_URL
   }
+  if (model.requiresKey === "codex-custom") {
+    // Same contract as the Anthropic custom endpoint: usable once a base URL is
+    // set; auth is supplied through CUSTOM_CODEX_HEADERS, not a separate key.
+    return !!flags?.CUSTOM_CODEX_BASE_URL
+  }
   if (model.requiresKey === "anthropic") {
     // OpenCode and Pi require an API key — they can't drive a subscription session.
     if (agent === "opencode" || agent === "pi") return !!flags?.ANTHROPIC_API_KEY
@@ -451,6 +474,13 @@ export function getEnvForModel(
     return buildCustomModelEnv(credentials)
   }
 
+  // Custom Codex endpoint: pass the stored CUSTOM_CODEX_* values through to the
+  // sandbox. The Codex CLI is config-file driven (not env driven), so the SDK's
+  // codexSetup reads these env vars and writes ~/.codex/config.toml from them.
+  if (agent === "codex" && model === CUSTOM_CODEX_MODEL_VALUE) {
+    return buildCodexCustomEnv(credentials)
+  }
+
   // Claude Code: subscription token wins over API key.
   if ((!agent || agent === "claude-code") && credentials.CLAUDE_CODE_CREDENTIALS) {
     return { CLAUDE_CODE_CREDENTIALS: credentials.CLAUDE_CODE_CREDENTIALS }
@@ -459,6 +489,7 @@ export function getEnvForModel(
   const opt = agent ? (agentModels[agent] ?? []).find((m) => m.value === model) : undefined
   if (!opt?.requiresKey || opt.requiresKey === "none") return {}
   if (opt.requiresKey === "custom") return buildCustomModelEnv(credentials)
+  if (opt.requiresKey === "codex-custom") return buildCodexCustomEnv(credentials)
 
   const env: Record<string, string> = {}
   for (const id of PROVIDER_ENV[opt.requiresKey]) {
@@ -533,11 +564,56 @@ export function buildCustomModelEnv(credentials: Credentials): Record<string, st
   return env
 }
 
+/** Return the verbatim value of a named header from a `Name: Value` blob. */
+function extractHeaderValue(raw: string, headerName: string): string | undefined {
+  const target = headerName.toLowerCase()
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const idx = trimmed.indexOf(":")
+    if (idx <= 0) continue
+    if (trimmed.slice(0, idx).trim().toLowerCase() === target) {
+      return trimmed.slice(idx + 1).trim() || undefined
+    }
+  }
+  return undefined
+}
+
 /**
- * Resolve the model string passed to the CLI's --model flag. For the custom
- * endpoint the dropdown value is the "custom" sentinel, so translate it to the
- * user's configured model name (or undefined → endpoint default). All other
- * models pass through unchanged.
+ * Pass the stored CUSTOM_CODEX_* credentials through to the sandbox. The Codex
+ * CLI takes a custom endpoint via ~/.codex/config.toml rather than env vars, so
+ * the SDK's codexSetup reads these back and generates the config file — see
+ * buildCodexConfigToml in the SDK.
+ *
+ * Auth handling: Codex drops the Authorization header for a custom base_url when
+ * it's supplied via `env_key` or a static http_header (the header is lost on the
+ * transport fallback — see openai/codex#15492). The path that survives is
+ * `env_http_headers`, which injects a header from a named env var. So we copy the
+ * user's *full* `Authorization` value (incl. the `Bearer ` prefix, verbatim) into
+ * a CUSTOM_CODEX_AUTHORIZATION env var; the generated config maps the
+ * Authorization header to it via env_http_headers. The raw blob still rides along
+ * for any non-auth headers.
+ *
+ * Deliberately never includes OPENAI_API_KEY, so a custom Codex run can't fall
+ * back to a stored OpenAI key.
+ */
+export function buildCodexCustomEnv(credentials: Credentials): Record<string, string> {
+  const env: Record<string, string> = {}
+  if (credentials.CUSTOM_CODEX_BASE_URL) env.CUSTOM_CODEX_BASE_URL = credentials.CUSTOM_CODEX_BASE_URL
+  if (credentials.CUSTOM_CODEX_NAME) env.CUSTOM_CODEX_NAME = credentials.CUSTOM_CODEX_NAME
+  if (credentials.CUSTOM_CODEX_HEADERS) {
+    env.CUSTOM_CODEX_HEADERS = credentials.CUSTOM_CODEX_HEADERS
+    const authorization = extractHeaderValue(credentials.CUSTOM_CODEX_HEADERS, "Authorization")
+    if (authorization) env.CUSTOM_CODEX_AUTHORIZATION = authorization
+  }
+  return env
+}
+
+/**
+ * Resolve the model string passed to the CLI's --model flag. For a custom
+ * endpoint the dropdown value is a sentinel, so translate it to the user's
+ * configured model name (or undefined → endpoint default). All other models
+ * pass through unchanged.
  */
 export function resolveCliModel(
   model: string | undefined,
@@ -545,6 +621,9 @@ export function resolveCliModel(
 ): string | undefined {
   if (model === CUSTOM_MODEL_VALUE) {
     return credentials.CUSTOM_MODEL_NAME || undefined
+  }
+  if (model === CUSTOM_CODEX_MODEL_VALUE) {
+    return credentials.CUSTOM_CODEX_NAME || undefined
   }
   return model
 }

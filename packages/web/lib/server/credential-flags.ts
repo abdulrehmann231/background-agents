@@ -74,13 +74,14 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   // distinguish between user-owned keys and server-shared env keys.
   const flags = flagsFromCredentials(storedCreds)
 
-  // Echo back plaintext for all custom-model fields (Base URL, Model ID, and the
-  // Headers blob) so the UI can show them unmasked and editable. The Headers
-  // field can carry auth, so its contents are returned to the authenticated
-  // owner's own client — an accepted trade-off for editability.
+  // Echo back plaintext for all custom-endpoint fields (Base URL, Model ID, and
+  // the Headers blob — both the Anthropic and Codex tabs) so the UI can show them
+  // unmasked and editable. The Headers field can carry auth, so its contents are
+  // returned to the authenticated owner's own client — an accepted trade-off for
+  // editability.
   const credentialValues: Partial<Record<CredentialId, string>> = {}
   for (const f of CREDENTIAL_KEYS) {
-    if (f.group === "custom-model" && storedCreds[f.id]) {
+    if ((f.group === "custom-model" || f.group === "custom-codex") && storedCreds[f.id]) {
       credentialValues[f.id] = storedCreds[f.id]
     }
   }

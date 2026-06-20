@@ -90,7 +90,7 @@ export function ApiKeysSection({
   return (
     <div>
       {isMobile && <MobileSectionHeader icon={Key} label="API Keys" />}
-      {CREDENTIAL_KEYS.filter((field) => field.group !== "custom-model").map((field) => {
+      {CREDENTIAL_KEYS.filter((field) => !field.group || field.group === "api-keys").map((field) => {
         const isHighlighted =
           highlightKey === field.provider &&
           // Highlight only the first field for the matching provider.
