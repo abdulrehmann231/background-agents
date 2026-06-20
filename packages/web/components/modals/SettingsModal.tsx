@@ -76,6 +76,16 @@ function getSections(isDesktopApp: boolean): SectionDef[] {
   return out
 }
 
+/**
+ * Custom-endpoint credential groups and their display labels, used to validate
+ * required fields (Base URL, and Model ID for OpenCode) before saving.
+ */
+const CUSTOM_ENDPOINT_GROUPS = [
+  { key: "custom-model", label: "Anthropic" },
+  { key: "custom-codex", label: "Codex" },
+  { key: "custom-opencode", label: "OpenCode" },
+] as const
+
 export function SettingsModal({ open, onClose, settings, credentialFlags, onSave, highlightKey, defaultSection = "general", isMobile = false }: SettingsModalProps) {
   const { setTheme } = useTheme()
   const { isDesktopApp, getClaudeLicenseAutoDetect, getLicenseDetectSettings, setLicenseDetectSettings } = useElectron()
@@ -279,6 +289,27 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
 
   const handleSave = async () => {
     if (saveStatus.kind === "saving") return
+
+    // Validate custom-endpoint targets the user edited this session: once a target
+    // is being configured (any field filled), its required fields must be present.
+    // The `required` flag only renders the asterisk — this is what blocks a broken
+    // save. Untouched or fully-cleared targets are left alone.
+    for (const group of CUSTOM_ENDPOINT_GROUPS) {
+      const fields = CREDENTIAL_KEYS.filter((f) => f.group === group.key)
+      const changed = fields.some((f) => credValues[f.id] !== initialCreds[f.id])
+      if (!changed) continue
+      const anyFilled = fields.some((f) => credValues[f.id]?.trim())
+      if (!anyFilled) continue
+      const missing = fields.find((f) => f.required && !credValues[f.id]?.trim())
+      if (missing) {
+        setActiveSection("custom-model")
+        setSaveStatus({
+          kind: "error",
+          message: `${group.label} custom endpoint: ${missing.label} is required.`,
+        })
+        return
+      }
+    }
 
     const settingsPatch: Partial<Settings> = {}
     if (defaultAgent !== initialDefaultAgent) settingsPatch.defaultAgent = defaultAgent
