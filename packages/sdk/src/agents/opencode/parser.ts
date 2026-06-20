@@ -98,6 +98,48 @@ type OpenCodeEvent =
   | OpenCodeError
 
 /**
+ * Detect a fatal model-call failure from OpenCode's plaintext ERROR logs.
+ *
+ * Why this exists: on a retryable model error (HTTP 429 rate-limit / usage
+ * limit, overloaded, transient network), OpenCode does NOT emit a JSON `error`
+ * event — it silently retries with unbounded exponential backoff, writing only
+ * a plaintext `ERROR … service=llm … error={…}` line to its logs on each
+ * attempt. With nothing on stdout, the turn never ends and the UI spins on the
+ * "generating" indicator forever. We surface the failure instead (matching how
+ * the Claude agent surfaces a limit), so the user sees the error and can retry.
+ *
+ * Lines look like:
+ *   ERROR 2026-… +Nms service=llm providerID=anthropic modelID=… session.id=…
+ *   error={"error":{"name":"AI_APICallError","cause":{"code":"…"},…,"statusCode":429,…}}
+ *
+ * The `error={…}` blob also embeds the full request body (system prompt, tool
+ * defs), so we avoid JSON.parsing it and pull only the high-signal fields by
+ * regex. We require TWO such lines before terminating: the first gives OpenCode
+ * one retry to recover from a transient blip; a second failure means it's stuck.
+ */
+function parseOpencodeLogError(line: string, context: ParseContext): Event | null {
+  // Only model-call (service=llm) ERROR logs. Tool/bash errors are recoverable
+  // and must not end the turn.
+  if (!/^ERROR\b/.test(line) || !/\bservice=llm\b/.test(line)) return null
+
+  const count = ((context.state.llmErrorCount as number) ?? 0) + 1
+  context.state.llmErrorCount = count
+
+  // Grace: tolerate a single failure (OpenCode will retry); act on the second.
+  if (count < 2 || context.state.llmErrorEmitted) return null
+  context.state.llmErrorEmitted = true
+
+  // High-signal fields from the `error={…}` JSON, by regex (no full parse).
+  const name = line.match(/error=\{"error":\{"name":"([^"]+)"/)?.[1]
+  const status = line.match(/"statusCode":\s*(\d+)/)?.[1]
+  const causeCode = line.match(/"cause":\{[^}]*"code":"([^"]+)"/)?.[1]
+  const parts = [name, status ? `HTTP ${status}` : null, causeCode].filter(Boolean)
+  const raw = parts.join(" ") || "the model request failed repeatedly"
+
+  return { type: "end", error: resolveAgentError(raw, "opencode") }
+}
+
+/**
  * Parse a line of OpenCode CLI output into event(s).
  *
  * Uses context.state.seenSessionId to track if session event was already emitted.
@@ -109,7 +151,9 @@ export function parseOpencodeLine(
 ): Event | Event[] | null {
   const json = safeJsonParse<OpenCodeEvent>(line)
   if (!json) {
-    return null
+    // Non-JSON line: OpenCode's plaintext logs. A repeated model-call failure
+    // here is the only signal during an otherwise-silent retry hang.
+    return parseOpencodeLogError(line, context)
   }
 
   // Step start - session initialization

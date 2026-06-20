@@ -482,6 +482,34 @@ describe("parseOpencodeLine", () => {
     const ctx = createContext()
     expect(parseOpencodeLine('{"type": "unknown"}', mappings, ctx)).toBeNull()
   })
+
+  it("ignores plaintext logs that are not model-call errors", () => {
+    const ctx = createContext()
+    expect(parseOpencodeLine("INFO 2026-04-03 service=models.dev refreshing", mappings, ctx)).toBeNull()
+    // A tool/bash ERROR must not end the turn — the agent can recover from it.
+    expect(parseOpencodeLine("ERROR 2026-04-03 service=bash command failed", mappings, ctx)).toBeNull()
+  })
+
+  it("surfaces a repeated service=llm error log as a terminal end (retryable hang)", () => {
+    // On a retryable model error OpenCode emits no JSON event — it retries with
+    // unbounded backoff, logging only this plaintext line each attempt. Without
+    // this the turn hangs forever on the generating spinner.
+    const ctx = createContext()
+    const llmError =
+      'ERROR 2026-04-03T21:08:42 +1717ms service=llm providerID=anthropic modelID=claude-haiku-4-5 ' +
+      'session.id=ses_x error={"error":{"name":"AI_APICallError",' +
+      '"requestBodyValues":{"system":[{"type":"text","text":"prompt"}]},"statusCode":429,"isRetryable":true}}'
+
+    // First failure: grace — give OpenCode one retry to recover.
+    expect(parseOpencodeLine(llmError, mappings, ctx)).toBeNull()
+    // Second failure: it's stuck — surface the classified error and end the turn.
+    expect(parseOpencodeLine(llmError, mappings, ctx)).toEqual({
+      type: "end",
+      error: "AI_APICallError HTTP 429 — wait a moment and retry",
+    })
+    // Subsequent failures are not re-emitted.
+    expect(parseOpencodeLine(llmError, mappings, ctx)).toBeNull()
+  })
 })
 
 describe("parseGooseLine", () => {

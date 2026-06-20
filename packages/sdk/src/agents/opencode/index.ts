@@ -30,8 +30,24 @@ export const opencodeAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    // OpenCode sometimes writes JSON events to stderr; run under bash and redirect 2>&1
-    const parts: string[] = ["opencode", "run", "--format", "json", "--variant", "medium"]
+    // OpenCode sometimes writes JSON events to stderr; run under bash and redirect 2>&1.
+    // --print-logs --log-level ERROR surfaces model-call (service=llm) failures as
+    // plaintext ERROR lines. On a retryable error (rate/usage limit, overload),
+    // OpenCode emits no JSON event and retries with unbounded backoff; without these
+    // logs the turn hangs forever on the "generating" spinner. The parser reads the
+    // ERROR lines and ends the turn with the real error instead. ERROR level keeps the
+    // extra output minimal (no INFO/WARN flood).
+    const parts: string[] = [
+      "opencode",
+      "run",
+      "--format",
+      "json",
+      "--print-logs",
+      "--log-level",
+      "ERROR",
+      "--variant",
+      "medium",
+    ]
 
     if (options.model) {
       parts.push("-m", quote(options.model))
