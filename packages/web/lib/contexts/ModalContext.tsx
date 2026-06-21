@@ -35,6 +35,10 @@ export interface ModalContextValue {
   envVarsModalOpen: boolean
   setEnvVarsModalOpen: (open: boolean) => void
 
+  // Sandbox resources (scaling) modal
+  sandboxResourcesModalOpen: boolean
+  setSandboxResourcesModalOpen: (open: boolean) => void
+
   // MCP servers picker (popover, attached to chat input)
   mcpServersModalOpen: boolean
   setMcpServersModalOpen: (open: boolean) => void
@@ -88,6 +92,9 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
 
   // Environment variables modal
   const [envVarsModalOpen, setEnvVarsModalOpen] = useState(false)
+
+  // Sandbox resources (scaling) modal
+  const [sandboxResourcesModalOpen, setSandboxResourcesModalOpen] = useState(false)
 
   // MCP servers picker (popover, attached to chat input)
   const [mcpServersModalOpen, setMcpServersModalOpen] = useState(false)
@@ -162,6 +169,10 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
     // Environment variables modal
     envVarsModalOpen,
     setEnvVarsModalOpen,
+
+    // Sandbox resources (scaling) modal
+    sandboxResourcesModalOpen,
+    setSandboxResourcesModalOpen,
 
     // MCP servers picker (popover, attached to chat input)
     mcpServersModalOpen,

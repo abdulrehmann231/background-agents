@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Code2, TerminalSquare, Globe, PanelRightClose, PanelRightOpen, Download, Copy, MessageSquare, Key, Sun, Moon, Monitor, Zap, Plug, Gauge } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Code2, TerminalSquare, Globe, PanelRightClose, PanelRightOpen, Download, Copy, MessageSquare, Key, Sun, Moon, Monitor, Zap, Plug, Gauge, Cpu } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -76,6 +76,9 @@ interface CommandPaletteProps {
   onCopyCheckoutCommand?: () => void
   /** Open environment variables modal. Omitted when no chat is active. */
   onOpenEnvVars?: () => void
+  /** Open the sandbox resources (scaling) modal. Omitted when not available
+   *  (no sandbox, or the user is not on a paid plan). */
+  onOpenSandboxResources?: () => void
   onOpenMcpServers?: () => void
   /** Open skills manager. Omitted when no sandbox exists. */
   onOpenSkills?: () => void
@@ -119,6 +122,7 @@ export function CommandPalette({
   onCopyCloneCommand,
   onCopyCheckoutCommand,
   onOpenEnvVars,
+  onOpenSandboxResources,
   onOpenMcpServers,
   onOpenSkills,
   chats = [],
@@ -256,6 +260,15 @@ export function CommandPalette({
             <CommandItem value="environment variables" onSelect={() => run(onOpenEnvVars)}>
               <VariableIcon className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>Environment variables</span>
+            </CommandItem>
+          )}
+          {onOpenSandboxResources && (
+            <CommandItem
+              value="sandbox resources scale cpu ram disk"
+              onSelect={() => run(onOpenSandboxResources)}
+            >
+              <Cpu className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Sandbox resources</span>
             </CommandItem>
           )}
           {onOpenMcpServers && (

@@ -17,6 +17,7 @@ import {
   ForcePushDialog,
 } from "@/components/modals/git-dialogs"
 import { EnvironmentVariablesModal } from "@/components/modals/EnvironmentVariablesModal"
+import { SandboxResourcesModal } from "@/components/modals/SandboxResourcesModal"
 import { MobileCommandsMenu } from "@/components/MobileCommandsMenu"
 import { MobileRenameModal } from "@/components/ui/MobileBottomSheet"
 import { ScheduledJobForm } from "@/components/scheduled-jobs/ScheduledJobForm"
@@ -123,6 +124,13 @@ export function AppModals({
         onSave={onSaveEnvVars}
         initialChatEnvVars={envVarsChatEnvVars}
         initialRepoEnvVars={envVarsRepoEnvVars}
+        isMobile={isMobile}
+      />
+
+      <SandboxResourcesModal
+        open={modals.sandboxResourcesModalOpen}
+        onClose={() => modals.setSandboxResourcesModalOpen(false)}
+        sandboxId={currentChat?.sandboxId ?? null}
         isMobile={isMobile}
       />
 

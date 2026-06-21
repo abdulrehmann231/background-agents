@@ -34,6 +34,8 @@ interface UsePalettePropsOptions {
   handleCopyCloneCommand: () => void
   handleCopyCheckoutCommand: () => void
   handleOpenEnvVars: () => void
+  /** Whether the user is on a paid plan (pro/unlimited) — gates sandbox scaling. */
+  claudeIsPro: boolean
 
   // Navigation / chat handlers
   handlePaletteSelectRepo: (repo: GitHubRepo) => void
@@ -82,6 +84,7 @@ export function usePaletteProps({
   handleCopyCloneCommand,
   handleCopyCheckoutCommand,
   handleOpenEnvVars,
+  claudeIsPro,
   handlePaletteSelectRepo,
   handlePaletteSelectBranch,
   handleRunCommand,
@@ -177,6 +180,9 @@ export function usePaletteProps({
     onCopyCloneCommand: hasRepo ? handleCopyCloneCommand : undefined,
     onCopyCheckoutCommand: currentChat?.branch ? handleCopyCheckoutCommand : undefined,
     onOpenEnvVars: currentChat ? handleOpenEnvVars : undefined,
+    // Sandbox scaling is paid-only (pro/unlimited) and needs a live sandbox.
+    onOpenSandboxResources:
+      sandboxId && claudeIsPro ? () => modals.setSandboxResourcesModalOpen(true) : undefined,
     onOpenMcpServers:
       displayCurrentChatId && session ? () => modals.setMcpServersModalOpen(true) : undefined,
     onOpenSkills: sandboxId && hasRepo ? onToggleSkillsModal : undefined,

@@ -56,6 +56,7 @@ interface PaletteProviderProps {
   onCopyCloneCommand?: () => void
   onCopyCheckoutCommand?: () => void
   onOpenEnvVars?: () => void
+  onOpenSandboxResources?: () => void
   onOpenMcpServers?: () => void
   onOpenSkills?: () => void
   // For Alt+Up/Down chat navigation
@@ -104,6 +105,7 @@ export function PaletteProvider({
   onCopyCloneCommand,
   onCopyCheckoutCommand,
   onOpenEnvVars,
+  onOpenSandboxResources,
   onOpenMcpServers,
   onOpenSkills,
   chatIds,
@@ -265,6 +267,7 @@ export function PaletteProvider({
         onCopyCloneCommand={onCopyCloneCommand}
         onCopyCheckoutCommand={onCopyCheckoutCommand}
         onOpenEnvVars={onOpenEnvVars}
+        onOpenSandboxResources={onOpenSandboxResources}
         onOpenMcpServers={onOpenMcpServers}
         onOpenSkills={onOpenSkills}
         chats={chats.map((c) => ({ id: c.id, displayName: c.displayName }))}

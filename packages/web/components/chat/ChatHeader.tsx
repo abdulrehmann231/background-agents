@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown } from "lucide-react"
+import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown, Cpu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useRepoFolderButton } from "@/lib/hooks/useLocalSync"
 import { useModals, useGit } from "@/lib/contexts"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { Input } from "../ui/input"
 import type { Chat } from "@/lib/types"
 import type { RebaseConflictState } from "@background-agents/common"
@@ -31,6 +32,10 @@ export function ChatHeader({
   const modals = useModals()
   const git = useGit()
   const { isDesktopApp } = useElectron()
+  const { data: settingsData } = useSettingsQuery()
+
+  // Sandbox scaling is paid-only (pro/unlimited) and needs a live sandbox.
+  const canScaleSandbox = !!chat.sandboxId && (settingsData?.claudeIsPro ?? false)
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -171,6 +176,18 @@ export function ChatHeader({
                   <span className="h-3.5 w-3.5 flex items-center justify-center text-xs italic font-serif">𝑥</span>
                   Environment Variables
                 </button>
+                {canScaleSandbox && (
+                  <button
+                    onClick={() => {
+                      setTitleMenuOpen(false)
+                      modals.setSandboxResourcesModalOpen(true)
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left cursor-pointer"
+                  >
+                    <Cpu className="h-3.5 w-3.5" />
+                    Sandbox Resources
+                  </button>
+                )}
                 <div className="my-1 border-t border-border" />
                 <button
                   onClick={() => {
