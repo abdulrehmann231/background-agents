@@ -4,7 +4,7 @@ import { execSync } from "node:child_process";
 config();
 
 const url =
-  process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL;
+  process.env.POSTGRES_URL_NON_POOLING || process.env.DIRECT_URL;
 
 if (!url) {
   // No database URL available - skip migrations but still generate Prisma client
