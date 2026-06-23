@@ -59,7 +59,7 @@ The repository is cloned at ${repoPath}.
 - You are working on the git branch that is currently checked out. Do not create, switch, or delete branches.
 - Create a commit after completing each logical unit of work.
 - Always create NEW commits. Never rewrite git history (no git commit --amend, git rebase, or git reset --hard).
-- Do not push — You do not have credentials to push. Pushing will happen automatically after you finish your turn with temporary credentials.
+- Do not push — Pushing will happen automatically as soon as you finish your turn.
 - Use "git restore" to discard file changes (not "git checkout").
 - After resolving rebase conflicts, run \`git rebase --continue\`.
 
