@@ -44,6 +44,15 @@ describe("extractErrorMessage", () => {
   it("returns empty string for an empty object", () => {
     expect(extractErrorMessage({})).toBe("")
   })
+
+  it("does not clip a long object dump to the 600-char log cap", () => {
+    // The user-facing fallback dump must keep enough detail to be useful — an
+    // aggressive cap discards the real failure reason before it reaches the UI.
+    const detail = "x".repeat(5000)
+    const result = extractErrorMessage({ stack: detail })
+    expect(result.length).toBeGreaterThan(4000)
+    expect(result).toContain(detail)
+  })
 })
 
 describe("classifyAgentError", () => {

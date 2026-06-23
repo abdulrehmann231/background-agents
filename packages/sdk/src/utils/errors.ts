@@ -38,8 +38,18 @@ export interface ClassifiedError {
   raw: string
 }
 
+/** Cap for a JSON dump used as a one-line server *log*: keep it compact. */
+const LOG_JSON_MAX = 600
+/**
+ * Cap for a JSON dump that becomes the *user-facing* error message. Much larger
+ * than the log cap because this is the only copy the user ever sees — clipping
+ * it here discards the real failure reason before it reaches the UI, and the
+ * banner is scrollable, so there is no display reason to truncate aggressively.
+ */
+const USER_JSON_MAX = 10_000
+
 /** JSON.stringify that never throws and caps length so logs/UI stay readable. */
-function safeStringify(value: unknown, max = 600): string {
+function safeStringify(value: unknown, max = LOG_JSON_MAX): string {
   try {
     const s = JSON.stringify(value)
     if (!s) return ""
@@ -96,7 +106,7 @@ export function extractErrorMessage(input: unknown): string {
   // that motivated this module (an OpenCode `error` event carrying e.g.
   // `{ statusCode: 402 }` but no name/message) this yields the status code,
   // which classifyAgentError can then turn into a balance hint.
-  const json = safeStringify(e)
+  const json = safeStringify(e, USER_JSON_MAX)
   return json && json !== "{}" ? json : ""
 }
 
