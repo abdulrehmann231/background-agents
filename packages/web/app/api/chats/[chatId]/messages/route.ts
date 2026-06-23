@@ -326,14 +326,23 @@ export async function POST(
         previewUrlPattern = recreated.previewUrlPattern ?? null
         createdSandbox = true // Important: mark as created for cleanup on downstream failures
 
+        // The recreated sandbox is a fresh clone with no agent conversation
+        // history on disk (it only ever lived in the now-deleted sandbox).
+        // Drop the stale session pointer so the agent starts a new conversation
+        // instead of resuming a session the CLI can't find. Clear it both in the
+        // DB (for future requests) and in memory (so this request's resume read
+        // below sees no session). Agent-agnostic: sessionId is the generic
+        // resume pointer used by every agent.
         await prisma.chat.update({
           where: { id: chatId },
           data: {
             sandboxId,
             previewUrlPattern,
+            sessionId: null,
             status: "ready",
           },
         })
+        chat.sessionId = null
 
         sandbox = recreated.sandbox
 
