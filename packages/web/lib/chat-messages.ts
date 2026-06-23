@@ -7,7 +7,7 @@
 // in chat-messages.test.ts instead of being buried inline in the hook.
 
 import type { Chat, Message, Settings, Agent, CredentialFlags } from "@/lib/types"
-import { getDefaultAgent, getDefaultModelForAgent } from "@/lib/types"
+import { getDefaultAgent, getDefaultModelForAgent, sharedClaudePoolEligible } from "@/lib/types"
 import type { SettingsData } from "@/lib/query"
 import { generateBranchName } from "@/lib/utils"
 
@@ -136,7 +136,7 @@ export function resolveAgentAndModel(
   settings: Pick<Settings, "defaultAgent" | "defaultModel">,
   credentialFlags: CredentialFlags
 ): { agent: Agent; model: string } {
-  const agent = (explicitAgent ?? chat.agent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
+  const agent = (explicitAgent ?? chat.agent ?? settings.defaultAgent ?? getDefaultAgent()) as Agent
   const model =
     explicitModel ?? chat.model ?? settings.defaultModel ?? getDefaultModelForAgent(agent, credentialFlags)
   return { agent, model }
@@ -148,9 +148,7 @@ export function resolveAgentAndModel(
  * decrement the usage counter.
  */
 export function usesSharedClaudePool(agent: string, flags: CredentialFlags): boolean {
-  if (agent !== "claude-code") return false
-  const hasOwnAnthropicKey = !!flags.ANTHROPIC_API_KEY || !!flags.CLAUDE_CODE_CREDENTIALS
-  return !!flags.CLAUDE_SHARED_POOL_AVAILABLE && !hasOwnAnthropicKey
+  return agent === "claude-code" && sharedClaudePoolEligible(flags)
 }
 
 /** Branch arg for the send payload: a new agent branch unless the sandbox exists. */
