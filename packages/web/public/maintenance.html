@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#050506" />
+    <title>Down for maintenance &middot; Background Agents</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        color-scheme: dark;
+
+        --background: #050506;
+        --foreground: #f7f7f8;
+        --muted-foreground: #a1a1aa;
+
+        --card: rgba(18, 18, 22, 0.72);
+        --border: rgba(255, 255, 255, 0.1);
+
+        --primary: oklch(0.65 0.15 145);
+        --primary-soft: color-mix(in oklch, var(--primary) 14%, transparent);
+        --primary-ring: color-mix(in oklch, var(--primary) 32%, transparent);
+
+        --radius: 24px;
+        --shadow: 0 32px 90px rgba(0, 0, 0, 0.58);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% -10%, rgba(59, 214, 117, 0.22), transparent 34%),
+          radial-gradient(circle at 10% 30%, rgba(59, 214, 117, 0.08), transparent 28%),
+          radial-gradient(circle at 90% 75%, rgba(59, 214, 117, 0.08), transparent 30%),
+          var(--background);
+        color: var(--foreground);
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(circle at 50% 38%, #000 0%, transparent 72%);
+        -webkit-mask-image: radial-gradient(circle at 50% 38%, #000 0%, transparent 72%);
+        pointer-events: none;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.76));
+        pointer-events: none;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 28px;
+      }
+
+      .shell {
+        width: 100%;
+        max-width: 720px;
+      }
+
+      .brand {
+        margin-bottom: 18px;
+        text-align: center;
+        color: rgba(247, 247, 248, 0.86);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+
+      .brand span {
+        color: var(--primary);
+      }
+
+      .card {
+        position: relative;
+        overflow: hidden;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 36%),
+          var(--card);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        padding: 1px;
+        border-radius: inherit;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.22),
+          rgba(255, 255, 255, 0.03),
+          rgba(59, 214, 117, 0.22)
+        );
+        mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        -webkit-mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        -webkit-mask-composite: xor;
+        pointer-events: none;
+      }
+
+      .content {
+        position: relative;
+        padding: 58px 54px 34px;
+        text-align: center;
+      }
+
+      .soft-line {
+        width: 86px;
+        height: 3px;
+        margin: 0 auto 30px;
+        border-radius: 999px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--primary),
+          transparent
+        );
+        box-shadow: 0 0 28px rgba(59, 214, 117, 0.45);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 20px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        color: var(--primary);
+        background: rgba(59, 214, 117, 0.09);
+        border: 1px solid rgba(59, 214, 117, 0.22);
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .pulse-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--primary);
+        box-shadow: 0 0 0 0 rgba(59, 214, 117, 0.5);
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(36px, 6vw, 60px);
+        line-height: 0.98;
+        font-weight: 800;
+        letter-spacing: -0.06em;
+      }
+
+      .subtitle {
+        margin: 22px auto 0;
+        max-width: 58ch;
+        color: var(--muted-foreground);
+        font-size: 16px;
+        line-height: 1.75;
+      }
+
+      .subtitle strong {
+        color: var(--foreground);
+        font-weight: 650;
+      }
+
+      .progress-wrap {
+        margin: 36px auto 0;
+        max-width: 430px;
+      }
+
+      .progress {
+        position: relative;
+        height: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .progress::after {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        left: 0;
+        width: 44%;
+        border-radius: inherit;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--primary),
+          rgba(255, 255, 255, 0.82),
+          var(--primary),
+          transparent
+        );
+        filter: drop-shadow(0 0 14px rgba(59, 214, 117, 0.5));
+        animation: slide 1.9s ease-in-out infinite;
+      }
+
+      .progress-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 11px;
+        color: rgba(247, 247, 248, 0.58);
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .details {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        margin-top: 34px;
+        background: rgba(255, 255, 255, 0.08);
+        border-top: 1px solid var(--border);
+      }
+
+      .detail {
+        padding: 22px 18px;
+        background: rgba(10, 10, 12, 0.55);
+        text-align: center;
+      }
+
+      .detail span {
+        display: block;
+        margin-bottom: 7px;
+        color: rgba(247, 247, 248, 0.48);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .detail strong {
+        display: block;
+        color: var(--foreground);
+        font-size: 14px;
+        line-height: 1.45;
+        font-weight: 650;
+      }
+
+      .footer {
+        padding: 20px 24px 24px;
+        color: rgba(247, 247, 248, 0.56);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      .footer strong {
+        color: rgba(247, 247, 248, 0.86);
+        font-weight: 650;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(59, 214, 117, 0.5);
+        }
+        70% {
+          box-shadow: 0 0 0 9px transparent;
+        }
+        100% {
+          box-shadow: 0 0 0 0 transparent;
+        }
+      }
+
+      @keyframes slide {
+        0% {
+          transform: translateX(-120%);
+        }
+        100% {
+          transform: translateX(260%);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          padding: 18px;
+        }
+
+        .content {
+          padding: 44px 24px 28px;
+        }
+
+        .details {
+          grid-template-columns: 1fr;
+        }
+
+        .progress-label {
+          flex-direction: column;
+          gap: 5px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .pulse-dot,
+        .progress::after {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="page">
+      <section class="shell" aria-label="Maintenance notice">
+        <div class="brand">Background <span>Agents</span></div>
+
+        <main class="card">
+          <div class="content">
+            <div class="soft-line" aria-hidden="true"></div>
+
+            <span class="badge">
+              <span class="pulse-dot"></span>
+              Scheduled maintenance
+            </span>
+
+            <h1>We&rsquo;ll be right back.</h1>
+
+            <p class="subtitle">
+              Background Agents is temporarily offline while we perform planned
+              maintenance. We&rsquo;re making improvements behind the scenes to
+              keep everything <strong>fast, stable, and reliable</strong>.
+            </p>
+
+            <div class="progress-wrap">
+              <div
+                class="progress"
+                role="progressbar"
+                aria-label="Maintenance in progress"
+              ></div>
+
+              <div class="progress-label">
+                <span>Maintenance in progress</span>
+                <span>No action needed</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="details">
+            <div class="detail">
+              <span>Status</span>
+              <strong>Temporary downtime</strong>
+            </div>
+
+            <div class="detail">
+              <span>Reason</span>
+              <strong>Planned system maintenance</strong>
+            </div>
+
+            <div class="detail">
+              <span>Your data</span>
+              <strong>Safe and unchanged</strong>
+            </div>
+          </div>
+
+          <div class="footer">
+            <strong>Thanks for your patience.</strong> Please check back shortly.
+          </div>
+        </main>
+      </section>
+    </div>
+  </body>
+</html>
