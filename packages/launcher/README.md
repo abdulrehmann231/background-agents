@@ -15,7 +15,7 @@ That's it. The first run downloads the Electron runtime (~once, then cached); ev
 This is a thin launcher published to npm as [`background-agents`](https://www.npmjs.com/package/background-agents):
 
 1. `npx background-agents@latest` resolves the **latest published version** of this package from the npm registry.
-2. npm installs it and its one dependency, **Electron**, downloading the platform binary on first run (cached for later runs).
+2. npm installs it and its dependencies — **Electron** (plus `electron-updater` and `isomorphic-git`) — downloading the Electron platform binary on first run (cached for later runs).
 3. The launcher spawns the bundled Electron app (`app/`) pointed at the production backend, showing a small terminal UI while it starts.
 
 Because every launch pulls the latest npm version, **publishing a new version is the update mechanism** — there's no separate auto-updater to configure or code-sign.
