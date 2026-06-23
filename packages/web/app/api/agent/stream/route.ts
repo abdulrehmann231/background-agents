@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { createSandboxGit } from "@background-agents/daytona-git"
 import { PATHS } from "@/lib/constants"
 import {
+  cancelBackgroundAgent,
   finalizeTurn,
   formatAgentError,
   snapshotBackgroundAgent,
@@ -289,6 +290,17 @@ export async function GET(req: Request) {
           }
 
           if (lastSnap.status === "completed" || lastSnap.status === "error") {
+            // A turn can end in "error" while its process is still alive — most
+            // notably OpenCode, which on a retryable model error (rate/usage
+            // limit, overload) retries with unbounded backoff. The snapshot
+            // surfaces that error, but the process keeps running and would
+            // linger as an orphan until the sandbox is torn down. Reap it.
+            // Best-effort and idempotent: a no-op when the process already
+            // exited (the common completed/crashed case).
+            if (lastSnap.status === "error") {
+              await cancelBackgroundAgent(sandbox, backgroundSessionId, sessionOpts)
+            }
+
             await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
 
