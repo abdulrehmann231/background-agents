@@ -34,9 +34,9 @@ import {
   queryKeys,
 } from "@/lib/query"
 import { useStreamStore } from "@/lib/stores/stream-store"
-import { fetchChat, toMessageType } from "@/lib/sync/api"
-import { useStreaming, mergeMessages } from "./useStreaming"
+import { useStreaming } from "./useStreaming"
 import { useQueueDispatch } from "./useQueueDispatch"
+import { useChatMessageSync } from "./useChatMessageSync"
 import {
   mergeLocalState,
   computeUnseenTransitions,
@@ -97,7 +97,6 @@ export function useChatWithSync() {
   const prevStatuses = useRef<Map<string, ChatStatus>>(new Map())
   const sendInFlight = useRef<Set<string>>(new Set())
   const stopInFlight = useRef<Set<string>>(new Set())
-  const messagesLoadFailed = useRef<Set<string>>(new Set())
   const materializingDraft = useRef<boolean>(false)
 
   // Callback for conflict state changes from SSE complete events
@@ -158,60 +157,10 @@ export function useChatWithSync() {
     }
   }, [chats, currentChatId, isHydrated])
 
-  // Load messages for current chat when selected
-  useEffect(() => {
-    if (!currentChatId || !isHydrated) return
-
-    const chat = chats.find((c) => c.id === currentChatId)
-    if (!chat) return
-
-    // Skip if messages already loaded or previous load failed
-    if (chat.messages.length > 0 || messagesLoadFailed.current.has(currentChatId)) {
-      return
-    }
-
-    const loadMessages = async () => {
-      try {
-        const chatData = await fetchChat(currentChatId)
-        const incomingMessages = chatData.messages.map(toMessageType)
-
-        updateChatsCache((old) =>
-          old.map((c) => {
-            if (c.id !== currentChatId) return c
-            return {
-              ...c,
-              messages: mergeMessages(c.messages, incomingMessages),
-              messageCount: chatData.messageCount,
-            }
-          })
-        )
-      } catch (err) {
-        console.error("Failed to load chat messages:", err)
-        messagesLoadFailed.current.add(currentChatId)
-      }
-    }
-
-    loadMessages()
-  }, [currentChatId, chats, isHydrated, updateChatsCache])
-
-  // Force a re-fetch of a chat's messages (e.g. after the server appends a
-  // git-operation message). Unlike the load-on-select effect this has no
-  // "already loaded" guard.
-  const reloadMessages = useCallback(async (chatId: string) => {
-    try {
-      const chatData = await fetchChat(chatId)
-      const incomingMessages = chatData.messages.map(toMessageType)
-      updateChatsCache((old) =>
-        old.map((c) =>
-          c.id === chatId
-            ? { ...c, messages: mergeMessages(c.messages, incomingMessages), messageCount: chatData.messageCount }
-            : c
-        )
-      )
-    } catch (err) {
-      console.error("Failed to reload chat messages:", err)
-    }
-  }, [updateChatsCache])
+  // Message fetching/merging (load-on-select, reload, refetch delta-sync,
+  // reload-after-disconnect, client-side append) lives in its own hook.
+  const { reloadMessages, refetchMessages, reloadChat, addMessageToChat } =
+    useChatMessageSync({ chats, currentChatId, isHydrated, updateChatsCache })
 
   // Helper to check if a chat ID is a draft
   const isDraftChatId = useCallback((chatId: string | null): boolean => {
@@ -679,12 +628,6 @@ export function useChatWithSync() {
     }
   }, [localChatState.previewStates, updateChatById])
 
-  // Append a message into the cached chat without going through the server.
-  // Used by callers that have already produced a system message client-side.
-  const addMessageToChat = useCallback((chatId: string, message: Message) => {
-    updateChatsCache((old) => old.map((c) => c.id === chatId ? { ...c, messages: [...c.messages, message] } : c))
-  }, [updateChatsCache])
-
   // Draft management
   const updateDraft = useCallback((chatId: string, draft: string) => {
     useChatSyncStore.getState().setDraftText(chatId, draft)
@@ -693,58 +636,6 @@ export function useChatWithSync() {
   const clearDraft = useCallback((chatId: string) => {
     useChatSyncStore.getState().setDraftText(chatId, undefined)
   }, [])
-
-  // Refetch messages for a specific chat (used after git operations add messages on backend)
-  // Uses delta sync - only fetches messages after the last known message ID
-  const refetchMessages = useCallback(async (chatId: string) => {
-    try {
-      // Find the last message ID for this chat to enable delta sync
-      const chat = chats.find((c) => c.id === chatId)
-      const lastMessageId = chat?.messages[chat.messages.length - 1]?.id
-
-      // Fetch only new messages (after lastMessageId)
-      const chatData = await fetchChat(chatId, lastMessageId ? { afterMessageId: lastMessageId } : undefined)
-      const incomingMessages = chatData.messages.map(toMessageType)
-
-      if (incomingMessages.length > 0) {
-        updateChatsCache((old) =>
-          old.map((c) => {
-            if (c.id !== chatId) return c
-            return { ...c, messages: mergeMessages(c.messages, incomingMessages) }
-          })
-        )
-      }
-    } catch (err) {
-      console.error("Failed to refetch messages:", err)
-    }
-  }, [chats, updateChatsCache])
-
-  // Reload a chat's full history after the SSE stream died ("disconnected").
-  // Unlike refetchMessages (delta sync), this re-fetches the entire history so a
-  // partially-streamed assistant turn is replaced by the fuller persisted copy
-  // (mergeMessages prefers the message with more content), then clears the
-  // disconnected banner so the user can continue.
-  const reloadChat = useCallback(async (chatId: string) => {
-    try {
-      const chatData = await fetchChat(chatId)
-      const incomingMessages = chatData.messages.map(toMessageType)
-      updateChatsCache((old) =>
-        old.map((c) => {
-          if (c.id !== chatId) return c
-          return {
-            ...c,
-            messages: incomingMessages.length > 0
-              ? mergeMessages(c.messages, incomingMessages)
-              : c.messages,
-            status: "ready",
-            errorMessage: undefined,
-          }
-        })
-      )
-    } catch (err) {
-      console.error("Failed to reload chat:", err)
-    }
-  }, [updateChatsCache])
 
   // True when messages need to be loaded for current chat (to prevent flash of empty state)
   // A chat needs loading if: has no messages locally, but server says it has messages (messageCount > 0)
