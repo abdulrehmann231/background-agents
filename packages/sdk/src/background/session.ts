@@ -96,7 +96,7 @@ export function createBackgroundSession(
 class BackgroundSessionImpl implements BackgroundSession {
   readonly id: string
 
-  // ── In-memory, connection-scoped accumulator ──────────────────────────────
+  // ── In-memory, connection-scoped accumulator (Option B) ───────────────────
   private parseContext: ParseContext = { state: {}, sessionId: null }
   private cum: Event[] = []
   private cursor = 0
@@ -104,7 +104,6 @@ class BackgroundSessionImpl implements BackgroundSession {
   private startedAt = 0
   private cancelled = false
   private crashEmitted = false
-  private cleanedUp = false
 
   constructor(
     readonly agent: AgentDefinition,
@@ -155,7 +154,6 @@ class BackgroundSessionImpl implements BackgroundSession {
       command: this.renderCommand(spec),
       cwd: spec.cwd,
       env: spec.env,
-      processName: this.agent.name,
       // Nest each turn's job under the session dir (one dir per job).
       root: this.sessionDir,
     })
@@ -167,7 +165,6 @@ class BackgroundSessionImpl implements BackgroundSession {
     this.parseContext = { state: {}, sessionId }
     this.startedAt = Date.now()
     this.cancelled = false
-    this.cleanedUp = false
 
     await this.writeMeta({
       currentTurn,
@@ -178,9 +175,9 @@ class BackgroundSessionImpl implements BackgroundSession {
       cancelled: false,
     })
 
-    debugLog(`background turn started agent=${this.agent.name} pid=${handle.pid}`, sessionId)
+    debugLog(`background turn started agent=${this.agent.name} pgid=${handle.pgid}`, sessionId)
 
-    return { executionId: randomUUID(), pid: handle.pid, outputFile: handle.outputFile }
+    return { executionId: randomUUID(), pid: handle.pgid, outputFile: handle.outputFile }
   }
 
   poll(): Promise<PollResult> {
@@ -257,7 +254,7 @@ class BackgroundSessionImpl implements BackgroundSession {
 
   async getPid(): Promise<number | null> {
     const handle = await this.reattach()
-    return handle?.pid ?? null
+    return handle?.pgid ?? null
   }
 
   async cancel(): Promise<void> {
@@ -333,17 +330,6 @@ class BackgroundSessionImpl implements BackgroundSession {
       fresh.push(crash)
       this.crashEmitted = true
       this.logCrash(full.raw)
-    }
-
-    // Clean up orphaned processes when the job finishes, so daemonized
-    // children (e.g. MCP servers that re-session'd themselves) don't
-    // accumulate across turns and consume sandbox RAM.
-    if (!status.alive && !this.cleanedUp && handle.processName) {
-      this.cleanedUp = true
-      await this.sandbox.executeCommand?.(
-        `pkill -9 -f ${quote(handle.processName)} 2>/dev/null || true`,
-        10
-      )
     }
 
     const running = status.state === "running" && !sawEnd
