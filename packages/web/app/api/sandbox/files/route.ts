@@ -2,6 +2,7 @@ import { Daytona } from "@daytonaio/sdk"
 import { ensureSandboxStarted } from "@/lib/sandbox"
 import { escapeShell } from "@background-agents/sdk"
 import { PATHS } from "@background-agents/common"
+import { IMAGE_MIME_TYPES } from "@/lib/file-preview/types"
 import { internalError, badRequest, notFound } from "@/lib/db/api-helpers"
 
 export const maxDuration = 30
@@ -18,14 +19,7 @@ function resolveFilePath(filePath: string): string {
 }
 
 const BINARY_CONTENT_TYPES: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-  ico: "image/x-icon",
-  bmp: "image/bmp",
+  ...IMAGE_MIME_TYPES,
   pdf: "application/pdf",
 }
 

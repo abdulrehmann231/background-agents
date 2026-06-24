@@ -2,7 +2,7 @@
  * File type detection utilities
  */
 
-import { FileType, EXT_TO_LANG, CODE_EXTENSIONS, TEXT_EXTENSIONS } from './types'
+import { FileType, EXT_TO_LANG, CODE_EXTENSIONS, TEXT_EXTENSIONS, IMAGE_EXTENSIONS } from './types'
 
 /**
  * Get the file extension from a filename or path
@@ -70,8 +70,7 @@ export function getFileTypeFromPath(filePath: string): FileType {
   if (name === 'dockerfile' || name === 'makefile') return 'code'
 
   // Images (by extension)
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'bmp']
-  if (imageExtensions.includes(ext)) return 'image'
+  if (IMAGE_EXTENSIONS.includes(ext)) return 'image'
 
   // PDFs
   if (ext === 'pdf') return 'pdf'
@@ -92,9 +91,16 @@ export function getFileTypeFromPath(filePath: string): FileType {
 const MARKDOWN_EXTENSIONS = ['md', 'mdx', 'markdown']
 
 /**
- * Check if a file path points to a markdown file
+ * Check if a filename or path points to a markdown file
  */
 export function isMarkdownPath(filePath: string): boolean {
   const ext = getFileExtension(filePath)
   return MARKDOWN_EXTENSIONS.includes(ext)
+}
+
+/**
+ * Check if a file is a markdown file
+ */
+export function isMarkdownFile(file: File): boolean {
+  return isMarkdownPath(file.name)
 }
