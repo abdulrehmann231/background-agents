@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client"
 import { randomUUID } from "crypto"
 import { format } from "date-fns"
 import { createSandboxGit } from "@background-agents/daytona-git"
-import { getEnvForModel, resolveCliModel, CUSTOM_MODEL_VALUE, type Agent } from "@background-agents/common"
+import { getEnvForModel, resolveCliModel, ENDPOINT_MODEL_PREFIX, type Agent } from "@background-agents/common"
+import { getUserEndpoints } from "@/lib/server/custom-endpoints"
 
 import { prisma } from "@/lib/db/prisma"
 import { decryptUserCredentials, getUserCredentials } from "@/lib/db/api-helpers"
@@ -140,14 +141,15 @@ export async function startJobExecution(
     },
   })
 
-  // 6. Get user credentials
+  // 6. Get user credentials + custom endpoints
   let credentials = await getUserCredentials(job.userId)
+  const customEndpoints = await getUserEndpoints(job.userId)
 
   // Shared-pool fallback for Claude Code (skipped for custom-endpoint runs,
   // which use the user's own endpoint rather than the shared pool).
   if (
     job.agent === "claude-code" &&
-    job.model !== CUSTOM_MODEL_VALUE &&
+    !job.model?.startsWith(ENDPOINT_MODEL_PREFIX) &&
     !credentials.CLAUDE_CODE_CREDENTIALS
   ) {
     try {
@@ -162,7 +164,7 @@ export async function startJobExecution(
 
   // 7. Create background session
   const repoPath = `${PATHS.SANDBOX_HOME}/project`
-  const env = getEnvForModel(job.model ?? undefined, job.agent as Agent, credentials)
+  const env = getEnvForModel(job.model ?? undefined, job.agent as Agent, credentials, customEndpoints)
 
   // Load job-scoped MCP servers. The loader marks rows with status="error" and
   // a descriptive lastError if the GitHub App is gone or any other auth issue
@@ -179,7 +181,7 @@ export async function startJobExecution(
     repoPath,
     previewUrlPattern: previewUrlPattern ?? undefined,
     agent: job.agent as Agent,
-    model: resolveCliModel(job.model ?? undefined, credentials),
+    model: resolveCliModel(job.model ?? undefined, customEndpoints),
     env: Object.keys(env).length > 0 ? env : undefined,
     mcpServers,
   })

@@ -1,6 +1,6 @@
 export { GeneralSection } from "./GeneralSection"
 export { ApiKeysSection, type HighlightKey } from "./ApiKeysSection"
-export { CustomModelSection } from "./CustomModelSection"
+export { CustomEndpointsSection } from "./CustomEndpointsSection"
 export { UsageSection } from "./UsageSection"
 export { GitSection } from "./GitSection"
 export { NotificationsSection } from "./NotificationsSection"

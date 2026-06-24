@@ -59,6 +59,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
     copiedUrl,
     rotating,
     availableModels,
+    customEndpoints,
     timezoneName,
     effectiveIntervalMinutes,
     showContinueOption,
@@ -362,9 +363,9 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                         setShowAgentDropdown(false)
                       }}
                       className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      title={getModelLabel(agent, model)}
+                      title={getModelLabel(agent, model, customEndpoints)}
                     >
-                      <span className="hidden sm:inline">{getModelLabel(agent, model)}</span>
+                      <span className="hidden sm:inline">{getModelLabel(agent, model, customEndpoints)}</span>
                       <span className="sm:hidden">Model</span>
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>

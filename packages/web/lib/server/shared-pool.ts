@@ -16,7 +16,7 @@
 
 import {
   agentToProvider,
-  CUSTOM_MODEL_VALUE,
+  ENDPOINT_MODEL_PREFIX,
   type Agent,
   type Credentials,
   type ProviderName,
@@ -52,9 +52,11 @@ export function resolvePool(
   storedCreds: Credentials,
   model?: string
 ): UsagePool {
+  // A custom endpoint (any `endpoint:<id>`) is the user's own endpoint, never the
+  // shared pool — regardless of agent.
+  if (model?.startsWith(ENDPOINT_MODEL_PREFIX)) return "user"
   switch (agent) {
     case "claude-code":
-      if (model === CUSTOM_MODEL_VALUE) return "user"
       return storedCreds.CLAUDE_CODE_CREDENTIALS ? "user" : "shared"
     case "gemini":
       return storedCreds.GEMINI_API_KEY ? "user" : "shared"

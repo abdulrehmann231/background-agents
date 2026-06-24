@@ -11,7 +11,7 @@
 import { useEffect, useCallback, useMemo, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useQueryClient } from "@tanstack/react-query"
-import type { Chat, ChatStatus } from "@/lib/types"
+import type { Chat, ChatStatus, CustomEndpoint } from "@/lib/types"
 import { getDefaultModelForAgent } from "@/lib/types"
 import type { Credentials } from "@/lib/credentials"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
@@ -197,7 +197,7 @@ export function useChatWithSync() {
     removeChat,
   } = useChatOperations({ chats, currentChatId, createChatMutation })
 
-  const updateSettings = useCallback(async (data: { settings?: Partial<typeof settings>; credentials?: Credentials }): Promise<{ ok: boolean; error?: string }> => {
+  const updateSettings = useCallback(async (data: { settings?: Partial<typeof settings>; credentials?: Credentials; customEndpoints?: CustomEndpoint[] }): Promise<{ ok: boolean; error?: string }> => {
     try {
       await updateSettingsMutation.mutateAsync(data)
       return { ok: true }

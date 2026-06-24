@@ -6,8 +6,8 @@
  * handle communication with the server.
  */
 
-import type { Chat, Message, Settings } from "@/lib/types"
-import type { Credentials, CredentialFlags, CredentialId } from "@/lib/credentials"
+import type { Chat, Message, Settings, CustomEndpoint } from "@/lib/types"
+import type { Credentials, CredentialFlags } from "@/lib/credentials"
 
 // =============================================================================
 // Types
@@ -60,7 +60,7 @@ export interface ChatWithMessagesResponse extends ChatResponse {
 export interface SettingsResponse {
   settings: Settings
   credentialFlags: CredentialFlags
-  credentialValues?: Partial<Record<CredentialId, string>>
+  customEndpoints?: CustomEndpoint[]
   claudeLimitResetAt?: string | null
   claudeLimitRemaining?: number | null
   claudeLimitUsed?: number | null
@@ -209,6 +209,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 export async function updateSettings(data: {
   settings?: Partial<Settings>
   credentials?: Credentials
+  customEndpoints?: CustomEndpoint[]
 }): Promise<SettingsResponse> {
   return fetchApi<SettingsResponse>("/api/user/settings", {
     method: "PATCH",

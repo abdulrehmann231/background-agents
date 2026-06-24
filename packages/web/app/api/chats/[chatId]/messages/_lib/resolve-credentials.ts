@@ -2,7 +2,7 @@ import { getGitHubToken, getUserCredentials } from "@/lib/db/api-helpers"
 import { logActivityAsync } from "@/lib/db/activity-log"
 import { checkSharedPoolUsage } from "@/lib/db/usage-limit"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
-import { CUSTOM_MODEL_VALUE } from "@background-agents/common"
+import { ENDPOINT_MODEL_PREFIX } from "@background-agents/common"
 import type { Agent } from "@/lib/agent-session"
 import type { Credentials } from "@/lib/credentials"
 import type { MessagePayload } from "./types"
@@ -67,7 +67,9 @@ export async function resolveSendCredentials(
   let useSharedClaude = false
   if (
     payload.agent === "claude-code" &&
-    payload.model !== CUSTOM_MODEL_VALUE &&
+    // A custom endpoint (any `endpoint:<id>`) supplies its own auth, so never
+    // fall back to the shared Claude pool for it.
+    !payload.model?.startsWith(ENDPOINT_MODEL_PREFIX) &&
     !credentials.CLAUDE_CODE_CREDENTIALS
   ) {
     try {

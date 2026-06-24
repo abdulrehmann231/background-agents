@@ -63,13 +63,6 @@ export type CredentialId =
   | "GEMINI_API_KEY"
   | "KILO_API_KEY"
   | "KIMI_API_KEY"
-  // Custom Anthropic-compatible endpoint ("Custom model" tab). Stored encrypted
-  // like every other credential; mapped to the standard ANTHROPIC_* env vars at
-  // injection time (see getEnvForModel / buildCustomModelEnv). Auth (API key or
-  // bearer token) is supplied through CUSTOM_MODEL_HEADERS, not a dedicated field.
-  | "CUSTOM_MODEL_BASE_URL"
-  | "CUSTOM_MODEL_HEADERS"
-  | "CUSTOM_MODEL_NAME"
 
 export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // Server has a shared Claude credential pool (e.g. the rotating row written
@@ -87,6 +80,60 @@ export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   OPENCODE_API_KEY_USER?: boolean
 }
 export type Credentials = Partial<Record<CredentialId, string>>
+
+// =============================================================================
+// Custom endpoints
+// =============================================================================
+
+/**
+ * Which runtime drives a custom endpoint. The type the user picks in the
+ * "Custom endpoints" settings tab *is* the agent the endpoint runs on:
+ *   anthropic → Claude Code (ANTHROPIC_* env vars)
+ *   codex     → Codex (~/.codex/config.toml)
+ *   opencode  → OpenCode (~/.config/opencode/opencode.json)
+ */
+export type CustomEndpointType = "anthropic" | "codex" | "opencode"
+
+/**
+ * A user-defined custom endpoint. Users manage a list of these (add / edit /
+ * duplicate / delete) in settings; each appears by name in the model dropdown
+ * under its runtime agent. Auth is supplied through the `headers` blob (e.g.
+ * `x-api-key:` / `Authorization:`), not a dedicated field. The `headers` value
+ * is the only secret-bearing field and is encrypted at rest.
+ */
+export interface CustomEndpoint {
+  /** Stable id; a chat's `model` is `endpoint:<id>` when this endpoint is selected. */
+  id: string
+  /** Display name, shown in the settings list and the model dropdown. */
+  name: string
+  type: CustomEndpointType
+  /** Endpoint base URL (e.g. https://api.anthropic.com, https://openrouter.ai/api/v1). */
+  baseUrl: string
+  /** Model id passed to the CLI. Optional for anthropic/codex; required for opencode. */
+  model: string
+  /** Newline-separated `Name: Value` header lines; auth lives here. */
+  headers: string
+}
+
+/** Maps an endpoint type to the agent that runs it. */
+export const ENDPOINT_TYPE_TO_AGENT: Record<CustomEndpointType, Agent> = {
+  anthropic: "claude-code",
+  codex: "codex",
+  opencode: "opencode",
+}
+
+/** Prefix marking a model value that references a custom endpoint by id. */
+export const ENDPOINT_MODEL_PREFIX = "endpoint:"
+
+/** Resolve the selected endpoint for a model value, or undefined if not one. */
+export function findEndpoint(
+  model: string | undefined,
+  endpoints: CustomEndpoint[] | undefined
+): CustomEndpoint | undefined {
+  if (!model || !model.startsWith(ENDPOINT_MODEL_PREFIX)) return undefined
+  const id = model.slice(ENDPOINT_MODEL_PREFIX.length)
+  return endpoints?.find((e) => e.id === id)
+}
 
 /** Env vars to inject for a given provider. */
 const PROVIDER_ENV: Record<ProviderId, CredentialId[]> = {
@@ -108,18 +155,11 @@ export interface ModelOption {
   label: string
   /**
    * Which provider's API key is required for this model. "none" means no key
-   * needed. "custom" means the user-configured custom Anthropic endpoint (see
-   * the CUSTOM_MODEL_* credentials).
+   * needed — which also covers custom-endpoint options (value `endpoint:<id>`),
+   * whose connection config travels with the endpoint itself.
    */
-  requiresKey?: ProviderId | "none" | "custom"
+  requiresKey?: ProviderId | "none"
 }
-
-/**
- * Sentinel model value for the user-configured custom Anthropic endpoint.
- * When selected (claude-code only), the stored CUSTOM_MODEL_* credentials are
- * injected as ANTHROPIC_* env vars instead of the shared pool / API key.
- */
-export const CUSTOM_MODEL_VALUE = "custom"
 
 /**
  * Models allowed to run on the server-shared OpenCode API key.
@@ -152,7 +192,6 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "sonnet", label: "Sonnet", requiresKey: "anthropic" },
     { value: "opus", label: "Opus", requiresKey: "anthropic" },
     { value: "haiku", label: "Haiku", requiresKey: "anthropic" },
-    { value: CUSTOM_MODEL_VALUE, label: "Custom model", requiresKey: "custom" },
   ],
   "eliza": [
     { value: "eliza-classic-1.0", label: "Eliza Classic", requiresKey: "none" },
@@ -384,13 +423,9 @@ export function hasCredentialsForModel(
   flags: CredentialFlags | null | undefined,
   agent?: Agent
 ): boolean {
+  // Custom-endpoint options (value `endpoint:<id>`) carry their own connection
+  // config, so they need no provider key — they're "none" and return above.
   if (!model.requiresKey || model.requiresKey === "none") return true
-  if (model.requiresKey === "custom") {
-    // Custom endpoint is usable once a base URL is configured. Auth, if the
-    // endpoint needs it, is supplied via custom headers (x-api-key /
-    // Authorization) — see buildCustomModelEnv — so it isn't required here.
-    return !!flags?.CUSTOM_MODEL_BASE_URL
-  }
   if (model.requiresKey === "anthropic") {
     // OpenCode and Pi require an API key — they can't drive a subscription session.
     if (agent === "opencode" || agent === "pi") return !!flags?.ANTHROPIC_API_KEY
@@ -443,13 +478,15 @@ export function getDefaultModelForAgent(
 export function getEnvForModel(
   model: string | undefined,
   agent: Agent | undefined,
-  credentials: Credentials
+  credentials: Credentials,
+  endpoints?: CustomEndpoint[]
 ): Record<string, string> {
-  // Custom Anthropic endpoint wins over everything (incl. the shared pool /
-  // subscription token) when the user explicitly selects the custom model.
-  if ((!agent || agent === "claude-code") && model === CUSTOM_MODEL_VALUE) {
-    return buildCustomModelEnv(credentials)
-  }
+  // A selected custom endpoint wins over everything (incl. the shared pool /
+  // subscription token). It emits the same env var names the SDK setup functions
+  // already consume (ANTHROPIC_* / CUSTOM_CODEX_* / CUSTOM_OPENCODE_*), so the
+  // sandbox side is unchanged — only the source of the values differs.
+  const endpoint = findEndpoint(model, endpoints)
+  if (endpoint) return buildEndpointEnv(endpoint)
 
   // Claude Code: subscription token wins over API key.
   if ((!agent || agent === "claude-code") && credentials.CLAUDE_CODE_CREDENTIALS) {
@@ -458,7 +495,6 @@ export function getEnvForModel(
 
   const opt = agent ? (agentModels[agent] ?? []).find((m) => m.value === model) : undefined
   if (!opt?.requiresKey || opt.requiresKey === "none") return {}
-  if (opt.requiresKey === "custom") return buildCustomModelEnv(credentials)
 
   const env: Record<string, string> = {}
   for (const id of PROVIDER_ENV[opt.requiresKey]) {
@@ -511,21 +547,33 @@ export function parseCustomHeaders(raw: string): ParsedCustomHeaders {
   return { apiKey, authToken, headers: kept.length > 0 ? kept.join("\n") : undefined }
 }
 
+/** Build the env vars for a selected custom endpoint, dispatching on its type. */
+export function buildEndpointEnv(endpoint: CustomEndpoint): Record<string, string> {
+  switch (endpoint.type) {
+    case "anthropic":
+      return buildCustomModelEnv(endpoint)
+    case "codex":
+      return buildCodexCustomEnv(endpoint)
+    case "opencode":
+      return buildOpencodeCustomEnv(endpoint)
+  }
+}
+
 /**
- * Map the stored CUSTOM_MODEL_* credentials to the standard Anthropic env vars
- * the Claude CLI understands:
- *   CUSTOM_MODEL_BASE_URL → ANTHROPIC_BASE_URL
- *   CUSTOM_MODEL_HEADERS  → ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN (auth headers,
- *                           promoted) + ANTHROPIC_CUSTOM_HEADERS (the rest)
- * The model NAME is applied separately as the CLI --model arg (resolveCliModel).
+ * Map an Anthropic-type endpoint to the standard Anthropic env vars the Claude
+ * CLI understands:
+ *   baseUrl → ANTHROPIC_BASE_URL
+ *   headers → ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN (auth headers, promoted)
+ *             + ANTHROPIC_CUSTOM_HEADERS (the rest)
+ * The model is applied separately as the CLI --model arg (resolveCliModel).
  * Deliberately never includes CLAUDE_CODE_CREDENTIALS, so a custom run can never
  * leak the shared-pool token.
  */
-export function buildCustomModelEnv(credentials: Credentials): Record<string, string> {
+export function buildCustomModelEnv(endpoint: CustomEndpoint): Record<string, string> {
   const env: Record<string, string> = {}
-  if (credentials.CUSTOM_MODEL_BASE_URL) env.ANTHROPIC_BASE_URL = credentials.CUSTOM_MODEL_BASE_URL
-  if (credentials.CUSTOM_MODEL_HEADERS) {
-    const { apiKey, authToken, headers } = parseCustomHeaders(credentials.CUSTOM_MODEL_HEADERS)
+  if (endpoint.baseUrl) env.ANTHROPIC_BASE_URL = endpoint.baseUrl
+  if (endpoint.headers) {
+    const { apiKey, authToken, headers } = parseCustomHeaders(endpoint.headers)
     if (apiKey) env.ANTHROPIC_API_KEY = apiKey
     if (authToken) env.ANTHROPIC_AUTH_TOKEN = authToken
     if (headers) env.ANTHROPIC_CUSTOM_HEADERS = headers
@@ -533,28 +581,127 @@ export function buildCustomModelEnv(credentials: Credentials): Record<string, st
   return env
 }
 
+/** Return the verbatim value of a named header from a `Name: Value` blob. */
+function extractHeaderValue(raw: string, headerName: string): string | undefined {
+  const target = headerName.toLowerCase()
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const idx = trimmed.indexOf(":")
+    if (idx <= 0) continue
+    if (trimmed.slice(0, idx).trim().toLowerCase() === target) {
+      return trimmed.slice(idx + 1).trim() || undefined
+    }
+  }
+  return undefined
+}
+
 /**
- * Resolve the model string passed to the CLI's --model flag. For the custom
- * endpoint the dropdown value is the "custom" sentinel, so translate it to the
- * user's configured model name (or undefined → endpoint default). All other
- * models pass through unchanged.
+ * Pass the stored CUSTOM_CODEX_* credentials through to the sandbox. The Codex
+ * CLI takes a custom endpoint via ~/.codex/config.toml rather than env vars, so
+ * the SDK's codexSetup reads these back and generates the config file — see
+ * buildCodexConfigToml in the SDK.
+ *
+ * Auth handling: Codex drops the Authorization header for a custom base_url when
+ * it's supplied via `env_key` or a static http_header (the header is lost on the
+ * transport fallback — see openai/codex#15492). The path that survives is
+ * `env_http_headers`, which injects a header from a named env var. So we copy the
+ * user's *full* `Authorization` value (incl. the `Bearer ` prefix, verbatim) into
+ * a CUSTOM_CODEX_AUTHORIZATION env var; the generated config maps the
+ * Authorization header to it via env_http_headers. The raw blob still rides along
+ * for any non-auth headers.
+ *
+ * Deliberately never includes OPENAI_API_KEY, so a custom Codex run can't fall
+ * back to a stored OpenAI key.
+ */
+export function buildCodexCustomEnv(endpoint: CustomEndpoint): Record<string, string> {
+  const env: Record<string, string> = {}
+  if (endpoint.baseUrl) env.CUSTOM_CODEX_BASE_URL = endpoint.baseUrl
+  if (endpoint.model) env.CUSTOM_CODEX_NAME = endpoint.model
+  if (endpoint.headers) {
+    env.CUSTOM_CODEX_HEADERS = endpoint.headers
+    const authorization = extractHeaderValue(endpoint.headers, "Authorization")
+    if (authorization) env.CUSTOM_CODEX_AUTHORIZATION = authorization
+  }
+  return env
+}
+
+/**
+ * Pass the stored CUSTOM_OPENCODE_* credentials through to the sandbox. OpenCode
+ * takes a custom provider via ~/.config/opencode/opencode.json, so the SDK's
+ * opencodeSetup reads these back and writes that file — see buildOpencodeConfigJson.
+ *
+ * Auth: OpenCode's openai-compatible provider sends `Authorization: Bearer
+ * <apiKey>`, so we promote the user's Authorization token (Bearer stripped) into
+ * CUSTOM_OPENCODE_API_KEY, which the config references via `{env:...}`. Other
+ * headers (incl. x-api-key) ride along in the blob for the SDK to emit verbatim.
+ *
+ * Deliberately never includes OPENCODE_API_KEY, so a custom run can't fall back
+ * to a stored OpenCode key.
+ */
+export function buildOpencodeCustomEnv(endpoint: CustomEndpoint): Record<string, string> {
+  const env: Record<string, string> = {}
+  if (endpoint.baseUrl) env.CUSTOM_OPENCODE_BASE_URL = endpoint.baseUrl
+  if (endpoint.model) env.CUSTOM_OPENCODE_NAME = endpoint.model
+  if (endpoint.headers) {
+    env.CUSTOM_OPENCODE_HEADERS = endpoint.headers
+    const { authToken } = parseCustomHeaders(endpoint.headers)
+    if (authToken) env.CUSTOM_OPENCODE_API_KEY = authToken
+  }
+  return env
+}
+
+/**
+ * Resolve the model string passed to the CLI's --model flag. For a custom
+ * endpoint the dropdown value is `endpoint:<id>`, so translate it to the
+ * endpoint's configured model (or undefined → endpoint default). OpenCode
+ * addresses models as `<provider>/<model>`, where "custom" is the provider id
+ * written by buildOpencodeConfigJson. All other models pass through unchanged.
  */
 export function resolveCliModel(
   model: string | undefined,
-  credentials: Credentials
+  endpoints?: CustomEndpoint[]
 ): string | undefined {
-  if (model === CUSTOM_MODEL_VALUE) {
-    return credentials.CUSTOM_MODEL_NAME || undefined
+  const endpoint = findEndpoint(model, endpoints)
+  if (endpoint) {
+    if (endpoint.type === "opencode") {
+      return endpoint.model ? `custom/${endpoint.model}` : undefined
+    }
+    return endpoint.model || undefined
   }
   return model
 }
 
 /**
- * Get model label from model value
+ * Models available for an agent, including the user's custom endpoints whose
+ * type maps to that agent (each as an `endpoint:<id>` option labeled by name).
  */
-export function getModelLabel(agent: Agent, modelValue: string | undefined): string {
+export function getAgentModels(
+  agent: Agent,
+  endpoints?: CustomEndpoint[]
+): ModelOption[] {
+  const base = agentModels[agent] ?? []
+  if (!endpoints?.length) return base
+  const extra: ModelOption[] = endpoints
+    .filter((e) => ENDPOINT_TYPE_TO_AGENT[e.type] === agent)
+    .map((e) => ({ value: ENDPOINT_MODEL_PREFIX + e.id, label: e.name, requiresKey: "none" }))
+  return [...base, ...extra]
+}
+
+/**
+ * Get model label from model value. A custom endpoint resolves to its name; a
+ * stale `endpoint:<id>` (endpoint since deleted) falls back to "Custom endpoint".
+ */
+export function getModelLabel(
+  agent: Agent,
+  modelValue: string | undefined,
+  endpoints?: CustomEndpoint[]
+): string {
   if (!modelValue) {
     modelValue = defaultAgentModel[agent]
+  }
+  if (modelValue.startsWith(ENDPOINT_MODEL_PREFIX)) {
+    return findEndpoint(modelValue, endpoints)?.name ?? "Custom endpoint"
   }
   const models = agentModels[agent] ?? []
   const model = models.find(m => m.value === modelValue)

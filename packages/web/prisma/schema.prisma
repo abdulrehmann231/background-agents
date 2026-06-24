@@ -48,6 +48,11 @@ model User {
   // { "owner/repo": { "KEY1": "encrypted_value1", ... }, ... }
   repoEnvironmentVariables Json?
 
+  // JSONB list of user-defined custom endpoints (Custom endpoints settings tab).
+  // Array<{ id, name, type: "anthropic"|"codex"|"opencode", baseUrl, model, headers }>
+  // where `headers` is encrypted at rest (it can carry auth); the rest is plaintext.
+  customEndpoints Json?
+
   // GitHub App installation id, captured in the install callback. Null until
   // the user installs our GitHub App. Used to mint short-lived installation
   // access tokens at agent-run time so the agent can call GitHub's MCP server

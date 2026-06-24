@@ -12,17 +12,15 @@ import type { CredentialFlags } from "@/lib/types"
 export const MASK = "***"
 
 /**
- * Initial input values: a real plaintext value when the server returns one (the
- * custom-model fields, which are editable), otherwise "***" for credentials the
- * server has but won't echo back, or "" when unset.
+ * Initial input values: "***" for credentials the server has but won't echo
+ * back, or "" when unset.
  */
 export function initialCredValues(
-  flags: CredentialFlags,
-  values?: Partial<Record<CredentialId, string>>
+  flags: CredentialFlags
 ): Record<CredentialId, string> {
   const out = {} as Record<CredentialId, string>
   for (const { id } of CREDENTIAL_KEYS) {
-    out[id] = values?.[id] ?? (flags[id] ? MASK : "")
+    out[id] = flags[id] ? MASK : ""
   }
   return out
 }

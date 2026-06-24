@@ -17,6 +17,7 @@ import { logActivityAsync } from "@/lib/db/activity-log"
 import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
 import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 import { resolveCliModel } from "@background-agents/common"
+import { getUserEndpoints } from "@/lib/server/custom-endpoints"
 import {
   deleteSandboxQuietly,
   discoverSkillsForRepo,
@@ -115,6 +116,10 @@ export async function POST(
   if (resolved instanceof Response) return resolved
   const { credentials, githubToken, useSharedClaude } = resolved
 
+  // The user's custom endpoints — used to resolve an `endpoint:<id>` model into
+  // the right env vars and --model arg.
+  const customEndpoints = await getUserEndpoints(userId)
+
   const daytona = new Daytona({ apiKey: daytonaApiKey })
 
   // Seeded from the chat row; kept in sync by ensureSandboxForChat so the
@@ -179,7 +184,7 @@ export async function POST(
     const { history, isAgentSwitch } = await buildAgentHistory(chatId, chat, payload)
 
     // ── Stage 4: spin up the background session (does NOT start the agent yet) ──
-    const env = await buildAgentEnv({ chat, userId, payload, credentials })
+    const env = await buildAgentEnv({ chat, userId, payload, credentials, customEndpoints })
 
     // Fetch this chat's connected MCP servers so the agent sees them as tools.
     // Best-effort — a fetch error shouldn't block the turn.
@@ -205,7 +210,7 @@ export async function POST(
       // On agent switch, don't pass the old agent's sessionId — it would crash the new CLI
       sessionId: isAgentSwitch ? undefined : (chat.sessionId ?? undefined),
       agent: payload.agent as Agent,
-      model: resolveCliModel(payload.model, credentials),
+      model: resolveCliModel(payload.model, customEndpoints),
       env: Object.keys(env).length > 0 ? env : undefined,
       planMode: payload.planMode,
       mcpServers,

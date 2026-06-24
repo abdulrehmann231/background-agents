@@ -5,7 +5,8 @@ import { ChevronDown, Key, Cpu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
-import { agentModels, agentLabels, getModelLabel, hasCredentialsForModel, getDefaultModelForAgent, ALL_AGENTS } from "@/lib/types"
+import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, ALL_AGENTS } from "@/lib/types"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
 import type { HighlightKey } from "../modals/SettingsModal"
@@ -43,12 +44,16 @@ export function AgentModelSelector({
 }: AgentModelSelectorProps) {
   const modals = useModals()
 
+  // User's custom endpoints — merged into each agent's model list by name.
+  const { data: settingsData } = useSettingsQuery()
+  const endpoints = settingsData?.customEndpoints
+
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [showAgentSheet, setShowAgentSheet] = useState(false)
   const [showModelSheet, setShowModelSheet] = useState(false)
 
-  const availableModels = agentModels[currentAgent] ?? []
+  const availableModels = getAgentModels(currentAgent, endpoints)
   const selectedModelConfig = availableModels.find(m => m.value === currentModel)
   const hasRequiredCredentials = selectedModelConfig
     ? hasCredentialsForModel(selectedModelConfig, credentialFlags, currentAgent)
@@ -88,7 +93,7 @@ export function AgentModelSelector({
 
     // Update chat's agent if possible
     if (chat && onUpdateChat) {
-      const models = agentModels[agent] ?? []
+      const models = getAgentModels(agent, endpoints)
       const newModel = models[0]?.value || currentModel
       onUpdateChat({ agent, model: newModel })
 
@@ -97,14 +102,12 @@ export function AgentModelSelector({
       if (newModelConfig && !hasCredentialsForModel(newModelConfig, credentialFlags, agent)) {
         // Open settings with the required key highlighted
         const requiredKey = newModelConfig.requiresKey
-        if (requiredKey === "custom") {
-          modals.openSettingsSection("custom-model")
-        } else if (requiredKey && requiredKey !== "none") {
+        if (requiredKey && requiredKey !== "none") {
           modals.openSettings(requiredKey as HighlightKey)
         }
       }
     }
-  }, [chat, currentModel, credentialFlags, onUpdateChat, showClaudeLimitDialog, modals])
+  }, [chat, currentModel, credentialFlags, endpoints, onUpdateChat, showClaudeLimitDialog, modals])
 
   const handleModelChange = useCallback((model: string) => {
     setShowModelDropdown(false)
@@ -117,9 +120,7 @@ export function AgentModelSelector({
       if (newModelConfig && !hasCredentialsForModel(newModelConfig, credentialFlags, currentAgent)) {
         // Open settings with the required key highlighted
         const requiredKey = newModelConfig.requiresKey
-        if (requiredKey === "custom") {
-          modals.openSettingsSection("custom-model")
-        } else if (requiredKey && requiredKey !== "none") {
+        if (requiredKey && requiredKey !== "none") {
           modals.openSettings(requiredKey as HighlightKey)
         }
       }
@@ -166,11 +167,11 @@ export function AgentModelSelector({
             "flex items-center gap-1 text-sm transition-colors cursor-pointer",
             !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
           )}
-          title={getModelLabel(currentAgent, currentModel)}
+          title={getModelLabel(currentAgent, currentModel, endpoints)}
         >
           {!hasRequiredCredentials && <Key className="h-4 w-4" />}
           <Cpu className="h-4 w-4 @[18rem]/row2:hidden" />
-          <span className="hidden @[18rem]/row2:inline">{getModelLabel(currentAgent, currentModel)}</span>
+          <span className="hidden @[18rem]/row2:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
           <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
         </button>
 
@@ -248,11 +249,11 @@ export function AgentModelSelector({
             "flex items-center gap-1 text-sm transition-colors cursor-pointer",
             !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
           )}
-          title={getModelLabel(currentAgent, currentModel)}
+          title={getModelLabel(currentAgent, currentModel, endpoints)}
         >
           {!hasRequiredCredentials && <Key className="h-3.5 w-3.5" />}
           <Cpu className="h-3.5 w-3.5 @[32rem]:hidden" />
-          <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel)}</span>
+          <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {showModelDropdown && (
