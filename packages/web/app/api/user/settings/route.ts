@@ -11,18 +11,24 @@ import {
 import {
   isCredentialId,
   normalizeStoredCredentials,
-  type CredentialId,
   type CredentialFlags,
   type Credentials,
 } from "@/lib/credentials"
+import type { CustomEndpoint } from "@background-agents/common"
+import {
+  decryptUserEndpoints,
+  encryptEndpointsForStorage,
+  readIncomingEndpoints,
+  validateEndpoints,
+} from "@/lib/server/custom-endpoints"
 import type { Settings } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
 interface SettingsResponse {
   settings: Settings
   credentialFlags: CredentialFlags
-  /** Plaintext values for the custom-model fields the UI shows unmasked (Base URL / Model ID / Headers). */
-  credentialValues: Partial<Record<CredentialId, string>>
+  /** The user's custom endpoints, headers decrypted for the owner to edit. */
+  customEndpoints: CustomEndpoint[]
   /** ISO timestamp when the daily Claude limit resets, or null if not limited */
   claudeLimitResetAt: string | null
   /** Remaining Claude Code messages today, or null if not applicable */
@@ -63,7 +69,7 @@ export async function GET(): Promise<Response> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { settings: true },
+      select: { settings: true, customEndpoints: true },
     })
 
     const effective = await (await import("@/lib/server/credential-flags")).getEffectiveCredentialFlags(userId)
@@ -71,7 +77,7 @@ export async function GET(): Promise<Response> {
     const response: SettingsResponse = {
       settings: readSettings(user?.settings),
       credentialFlags: effective.flags,
-      credentialValues: effective.credentialValues,
+      customEndpoints: decryptUserEndpoints(user?.customEndpoints),
       claudeLimitResetAt: effective.limitResetAt?.toISOString() ?? null,
       claudeLimitRemaining: effective.limitRemaining,
       claudeLimitUsed: effective.limitUsed,
@@ -92,6 +98,7 @@ export async function GET(): Promise<Response> {
 interface PatchBody {
   settings?: Partial<Settings>
   credentials?: Credentials
+  customEndpoints?: unknown
 }
 
 export async function PATCH(req: NextRequest): Promise<Response> {
@@ -102,13 +109,13 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   try {
     const body: PatchBody = await req.json()
 
-    if (!body.settings && !body.credentials) {
-      return badRequest("Must provide settings or credentials to update")
+    if (!body.settings && !body.credentials && body.customEndpoints === undefined) {
+      return badRequest("Must provide settings, credentials, or custom endpoints to update")
     }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { settings: true, credentials: true },
+      select: { settings: true, credentials: true, customEndpoints: true },
     })
 
     const newSettings: Settings = body.settings
@@ -135,11 +142,22 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       }
     }
 
+    // Custom endpoints: validate, encrypt headers, and replace the stored list
+    // wholesale (the client always sends the full list it wants persisted).
+    let newEndpoints: Prisma.InputJsonValue | undefined
+    if (body.customEndpoints !== undefined) {
+      const incoming = readIncomingEndpoints(body.customEndpoints)
+      const invalid = validateEndpoints(incoming)
+      if (invalid) return badRequest(invalid.message)
+      newEndpoints = encryptEndpointsForStorage(incoming) as unknown as Prisma.InputJsonValue
+    }
+
     await prisma.user.update({
       where: { id: userId },
       data: {
         settings: newSettings as unknown as Prisma.InputJsonValue,
         credentials: newCredentials as unknown as Prisma.InputJsonValue,
+        ...(newEndpoints !== undefined ? { customEndpoints: newEndpoints } : {}),
       },
     })
 
@@ -149,7 +167,9 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     const response: SettingsResponse = {
       settings: newSettings,
       credentialFlags: effective.flags,
-      credentialValues: effective.credentialValues,
+      customEndpoints: decryptUserEndpoints(
+        newEndpoints ?? (user?.customEndpoints as unknown)
+      ),
       claudeLimitResetAt: effective.limitResetAt?.toISOString() ?? null,
       claudeLimitRemaining: effective.limitRemaining,
       claudeLimitUsed: effective.limitUsed,

@@ -1,9 +1,9 @@
 /**
- * Unit tests for the custom Anthropic-compatible endpoint ("Custom model").
+ * Unit tests for an Anthropic-type custom endpoint.
  *
- * Covers the mapping of stored CUSTOM_MODEL_* credentials to the standard
- * ANTHROPIC_* env vars, header parsing / auth promotion, CLI model resolution,
- * and the credential gate — all pure logic in @background-agents/common.
+ * Covers the mapping of a CustomEndpoint to the standard ANTHROPIC_* env vars,
+ * header parsing / auth promotion, CLI model resolution, and that an endpoint
+ * option is always usable — all pure logic in @background-agents/common.
  */
 import { describe, it, expect } from "vitest"
 import {
@@ -12,21 +12,32 @@ import {
   parseCustomHeaders,
   resolveCliModel,
   hasCredentialsForModel,
-  agentModels,
-  CUSTOM_MODEL_VALUE,
-  type Credentials,
-  type CredentialFlags,
+  getAgentModels,
+  ENDPOINT_MODEL_PREFIX,
+  type CustomEndpoint,
 } from "@background-agents/common"
 
-const customModel = agentModels["claude-code"].find((m) => m.value === CUSTOM_MODEL_VALUE)!
+function ep(overrides: Partial<CustomEndpoint> = {}): CustomEndpoint {
+  return {
+    id: "e1",
+    name: "My Anthropic",
+    type: "anthropic",
+    baseUrl: "",
+    model: "",
+    headers: "",
+    ...overrides,
+  }
+}
+
+const MODEL = ENDPOINT_MODEL_PREFIX + "e1"
 
 describe("custom model env injection", () => {
   it("promotes an x-api-key header to ANTHROPIC_API_KEY", () => {
-    const creds: Credentials = {
-      CUSTOM_MODEL_BASE_URL: "https://api.anthropic.com",
-      CUSTOM_MODEL_HEADERS: "x-api-key: sk-ant-123",
-    }
-    const env = getEnvForModel(CUSTOM_MODEL_VALUE, "claude-code", creds)
+    const endpoint = ep({
+      baseUrl: "https://api.anthropic.com",
+      headers: "x-api-key: sk-ant-123",
+    })
+    const env = getEnvForModel(MODEL, "claude-code", {}, [endpoint])
     expect(env).toEqual({
       ANTHROPIC_BASE_URL: "https://api.anthropic.com",
       ANTHROPIC_API_KEY: "sk-ant-123",
@@ -34,10 +45,9 @@ describe("custom model env injection", () => {
   })
 
   it("promotes an Authorization header to ANTHROPIC_AUTH_TOKEN (Bearer stripped)", () => {
-    const env = buildCustomModelEnv({
-      CUSTOM_MODEL_BASE_URL: "https://gateway.example.com",
-      CUSTOM_MODEL_HEADERS: "Authorization: Bearer tok-456",
-    })
+    const env = buildCustomModelEnv(
+      ep({ baseUrl: "https://gateway.example.com", headers: "Authorization: Bearer tok-456" })
+    )
     expect(env).toEqual({
       ANTHROPIC_BASE_URL: "https://gateway.example.com",
       ANTHROPIC_AUTH_TOKEN: "tok-456",
@@ -45,26 +55,29 @@ describe("custom model env injection", () => {
   })
 
   it("never leaks the shared-pool token even if one is stored", () => {
-    const env = getEnvForModel(CUSTOM_MODEL_VALUE, "claude-code", {
-      CUSTOM_MODEL_BASE_URL: "https://gateway.example.com",
-      CUSTOM_MODEL_HEADERS: "x-api-key: sk-custom",
-      CLAUDE_CODE_CREDENTIALS: '{"claudeAiOauth":{"accessToken":"SHOULD_NOT_LEAK"}}',
-    })
+    const env = getEnvForModel(
+      MODEL,
+      "claude-code",
+      { CLAUDE_CODE_CREDENTIALS: '{"claudeAiOauth":{"accessToken":"SHOULD_NOT_LEAK"}}' },
+      [ep({ baseUrl: "https://gateway.example.com", headers: "x-api-key: sk-custom" })]
+    )
     expect(env.CLAUDE_CODE_CREDENTIALS).toBeUndefined()
     expect(env.ANTHROPIC_API_KEY).toBe("sk-custom")
   })
 
   it("keeps non-auth headers in ANTHROPIC_CUSTOM_HEADERS alongside promoted auth", () => {
-    const env = buildCustomModelEnv({
-      CUSTOM_MODEL_BASE_URL: "https://gateway.example.com",
-      CUSTOM_MODEL_HEADERS: "x-org-id: org_1\nx-api-key: sk-custom\nx-route: prod",
-    })
+    const env = buildCustomModelEnv(
+      ep({
+        baseUrl: "https://gateway.example.com",
+        headers: "x-org-id: org_1\nx-api-key: sk-custom\nx-route: prod",
+      })
+    )
     expect(env.ANTHROPIC_API_KEY).toBe("sk-custom")
     expect(env.ANTHROPIC_CUSTOM_HEADERS).toBe("x-org-id: org_1\nx-route: prod")
   })
 
   it("only sets the base URL when no headers are configured", () => {
-    const env = buildCustomModelEnv({ CUSTOM_MODEL_BASE_URL: "https://api.anthropic.com" })
+    const env = buildCustomModelEnv(ep({ baseUrl: "https://api.anthropic.com" }))
     expect(env).toEqual({ ANTHROPIC_BASE_URL: "https://api.anthropic.com" })
   })
 })
@@ -95,29 +108,30 @@ describe("parseCustomHeaders", () => {
 })
 
 describe("resolveCliModel", () => {
-  it("translates the custom sentinel to the configured model name", () => {
-    expect(resolveCliModel(CUSTOM_MODEL_VALUE, { CUSTOM_MODEL_NAME: "claude-opus-4-1" })).toBe(
-      "claude-opus-4-1"
-    )
+  it("translates an endpoint model value to its configured model name", () => {
+    expect(resolveCliModel(MODEL, [ep({ model: "claude-opus-4-1" })])).toBe("claude-opus-4-1")
   })
 
-  it("returns undefined for a custom run with no model name (endpoint default)", () => {
-    expect(resolveCliModel(CUSTOM_MODEL_VALUE, {})).toBeUndefined()
+  it("returns undefined for an endpoint with no model name (endpoint default)", () => {
+    expect(resolveCliModel(MODEL, [ep()])).toBeUndefined()
   })
 
   it("passes regular model values through unchanged", () => {
-    expect(resolveCliModel("sonnet", {})).toBe("sonnet")
+    expect(resolveCliModel("sonnet", [])).toBe("sonnet")
   })
 })
 
-describe("hasCredentialsForModel — custom", () => {
-  it("requires only a base URL (auth is supplied via headers)", () => {
-    const none: CredentialFlags = {}
-    const baseOnly: CredentialFlags = { CUSTOM_MODEL_BASE_URL: true }
-    const headersOnly: CredentialFlags = { CUSTOM_MODEL_HEADERS: true }
+describe("getAgentModels / hasCredentialsForModel — endpoints", () => {
+  it("merges an anthropic endpoint into claude-code's list, available without a key", () => {
+    const models = getAgentModels("claude-code", [ep({ name: "My Anthropic" })])
+    const option = models.find((m) => m.value === MODEL)
+    expect(option).toMatchObject({ value: MODEL, label: "My Anthropic", requiresKey: "none" })
+    expect(hasCredentialsForModel(option!, {}, "claude-code")).toBe(true)
+  })
 
-    expect(hasCredentialsForModel(customModel, none, "claude-code")).toBe(false)
-    expect(hasCredentialsForModel(customModel, headersOnly, "claude-code")).toBe(false)
-    expect(hasCredentialsForModel(customModel, baseOnly, "claude-code")).toBe(true)
+  it("only lists an endpoint under the agent its type maps to", () => {
+    const endpoints = [ep()]
+    expect(getAgentModels("codex", endpoints).some((m) => m.value === MODEL)).toBe(false)
+    expect(getAgentModels("opencode", endpoints).some((m) => m.value === MODEL)).toBe(false)
   })
 })

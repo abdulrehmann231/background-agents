@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
 import { useElectron, type LicenseDetectResult } from "@/lib/hooks/useElectron"
-import type { Settings, Theme, Agent, Credentials, CredentialFlags } from "@/lib/types"
+import type { Settings, Theme, Agent, Credentials, CredentialFlags, CustomEndpoint } from "@/lib/types"
 import { agentModels, getDefaultAgent, getDefaultModelForAgent } from "@/lib/types"
 import {
   CREDENTIAL_KEYS,
@@ -18,7 +18,7 @@ import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import {
   GeneralSection,
   ApiKeysSection,
-  CustomModelSection,
+  CustomEndpointsSection,
   UsageSection,
   GitSection,
   NotificationsSection,
@@ -34,7 +34,7 @@ import {
 export type { HighlightKey }
 
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "custom-model" | "usage" | "git" | "notifications" | "local-sync" | "appearance" | "experimental"
+export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "usage" | "git" | "notifications" | "local-sync" | "appearance" | "experimental"
 
 interface SettingsModalProps {
   open: boolean
@@ -44,6 +44,7 @@ interface SettingsModalProps {
   onSave: (data: {
     settings?: Partial<Settings>
     credentials?: Credentials
+    customEndpoints?: CustomEndpoint[]
   }) => Promise<{ ok: boolean; error?: string }>
   /** Which provider's first API key field to highlight with a red outline */
   highlightKey?: HighlightKey
@@ -57,7 +58,7 @@ type SectionDef = { key: SectionKey; label: string; icon: typeof Bot }
 const baseSections: SectionDef[] = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "api-keys", label: "API Keys", icon: Key },
-  { key: "custom-model", label: "Custom model", icon: Server },
+  { key: "custom-endpoints", label: "Custom endpoints", icon: Server },
   { key: "usage", label: "Usage", icon: Gauge },
   { key: "appearance", label: "Appearance", icon: Sun },
   { key: "git", label: "Git", icon: GitBranch },
@@ -76,24 +77,17 @@ function getSections(isDesktopApp: boolean): SectionDef[] {
   return out
 }
 
-/**
- * Custom-endpoint credential groups and their display labels, used to validate
- * required fields (Base URL, and Model ID for OpenCode) before saving.
- */
-const CUSTOM_ENDPOINT_GROUPS = [
-  { key: "custom-model", label: "Anthropic" },
-  { key: "custom-codex", label: "Codex" },
-  { key: "custom-opencode", label: "OpenCode" },
-] as const
-
 export function SettingsModal({ open, onClose, settings, credentialFlags, onSave, highlightKey, defaultSection = "general", isMobile = false }: SettingsModalProps) {
   const { setTheme } = useTheme()
   const { isDesktopApp, getClaudeLicenseAutoDetect, getLicenseDetectSettings, setLicenseDetectSettings } = useElectron()
 
-  // Plaintext values for the custom-model fields (Base URL / Model ID / Headers)
-  // so they render unmasked and editable. Read from the shared settings query cache.
+  // The user's custom endpoints (headers decrypted for editing), from the shared
+  // settings query cache. Edited locally and persisted on Save.
   const { data: settingsData } = useSettingsQuery()
-  const credentialValues = settingsData?.credentialValues
+  const initialEndpoints = useMemo<CustomEndpoint[]>(
+    () => settingsData?.customEndpoints ?? [],
+    [settingsData?.customEndpoints]
+  )
 
   // The "Local Sync" tab only exists in the desktop app.
   const sections = useMemo(() => getSections(isDesktopApp), [isDesktopApp])
@@ -115,12 +109,15 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
 
   // Form state
   const [credValues, setCredValues] = useState<Record<CredentialId, string>>(() =>
-    initialCredValues(credentialFlags, credentialValues)
+    initialCredValues(credentialFlags)
   )
   const initialCreds = useMemo(
-    () => initialCredValues(credentialFlags, credentialValues),
-    [credentialFlags, credentialValues]
+    () => initialCredValues(credentialFlags),
+    [credentialFlags]
   )
+
+  // Working copy of the custom-endpoint list, edited in the Custom endpoints tab.
+  const [endpoints, setEndpoints] = useState<CustomEndpoint[]>(initialEndpoints)
 
   // Resolve null preference against current credential flags so the dropdown
   // shows whatever new chats would actually use. Snapshotted off saved flags
@@ -163,7 +160,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   // Reset form when modal opens
   useEffect(() => {
     if (open) {
-      setCredValues(initialCredValues(credentialFlags, credentialValues))
+      setCredValues(initialCredValues(credentialFlags))
+      setEndpoints(initialEndpoints)
       setDefaultAgent(initialDefaultAgent)
       setDefaultModel(initialDefaultModel)
       setSelectedTheme(settings.theme)
@@ -174,7 +172,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
       setNotificationSound(settings.notificationSound)
       setActiveSection(defaultSection)
     }
-  }, [open, settings, credentialFlags, credentialValues, initialDefaultAgent, initialDefaultModel, defaultSection])
+  }, [open, settings, credentialFlags, initialEndpoints, initialDefaultAgent, initialDefaultModel, defaultSection])
 
   // Refresh license detection
   const refreshLicenseDetect = useCallback(async () => {
@@ -285,30 +283,38 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     licenseDetectResult.credentials &&
     !credentialFlags["CLAUDE_CODE_CREDENTIALS"] // Only if not already saved
 
-  const hasChanges = credChanged || settingsChanged || autoDetectHasNewCredentials
+  const endpointsChanged = useMemo(
+    () => JSON.stringify(endpoints) !== JSON.stringify(initialEndpoints),
+    [endpoints, initialEndpoints]
+  )
+
+  const hasChanges = credChanged || settingsChanged || endpointsChanged || autoDetectHasNewCredentials
 
   const handleSave = async () => {
     if (saveStatus.kind === "saving") return
 
-    // Validate custom-endpoint targets the user edited this session: once a target
-    // is being configured (any field filled), its required fields must be present.
-    // The `required` flag only renders the asterisk — this is what blocks a broken
-    // save. Untouched or fully-cleared targets are left alone.
-    for (const group of CUSTOM_ENDPOINT_GROUPS) {
-      const fields = CREDENTIAL_KEYS.filter((f) => f.group === group.key)
-      const changed = fields.some((f) => credValues[f.id] !== initialCreds[f.id])
-      if (!changed) continue
-      const anyFilled = fields.some((f) => credValues[f.id]?.trim())
-      if (!anyFilled) continue
-      const missing = fields.find((f) => f.required && !credValues[f.id]?.trim())
-      if (missing) {
-        setActiveSection("custom-model")
-        setSaveStatus({
-          kind: "error",
-          message: `${group.label} custom endpoint: ${missing.label} is required.`,
-        })
-        return
-      }
+    // Block save on an incomplete endpoint: name + base URL always, plus a model
+    // for OpenCode (it addresses models as <provider>/<model>). The editor's own
+    // gate normally prevents this; this is the backstop the server also enforces.
+    const badEndpoint = endpoints.find(
+      (e) =>
+        !e.name.trim() ||
+        !e.baseUrl.trim() ||
+        (e.type === "opencode" && !e.model.trim())
+    )
+    if (badEndpoint) {
+      setActiveSection("custom-endpoints")
+      setSaveStatus({
+        kind: "error",
+        message: !badEndpoint.name.trim()
+          ? "Custom endpoint: Name is required."
+          : `${badEndpoint.name.trim()}: ${
+              !badEndpoint.baseUrl.trim()
+                ? "Base URL is required."
+                : "Model is required for OpenCode endpoints."
+            }`,
+      })
+      return
     }
 
     const settingsPatch: Partial<Settings> = {}
@@ -343,6 +349,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     const data: Parameters<typeof onSave>[0] = {}
     if (Object.keys(settingsPatch).length > 0) data.settings = settingsPatch
     if (Object.keys(credentialsPatch).length > 0) data.credentials = credentialsPatch
+    if (endpointsChanged) data.customEndpoints = endpoints
 
     if (Object.keys(data).length === 0) {
       onClose()
@@ -409,12 +416,12 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             licenseDetectResult={licenseDetectResult}
           />
         )
-      case "custom-model":
+      case "custom-endpoints":
         return (
-          <CustomModelSection
+          <CustomEndpointsSection
             isMobile={isMobile}
-            credValues={credValues}
-            setCredValue={setCredValue}
+            endpoints={endpoints}
+            setEndpoints={setEndpoints}
           />
         )
       case "usage":

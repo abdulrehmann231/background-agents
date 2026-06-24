@@ -26,14 +26,6 @@ export interface CredentialField {
   placeholder?: string
   multiline?: boolean
   description?: string
-  /** Marks a field the user must fill in. Rendered with a required indicator. */
-  required?: boolean
-  /**
-   * Which settings tab renders this field. Defaults to "api-keys". Fields in a
-   * "custom-*" group are rendered on the Custom model tab (each group is a target
-   * in its selector) and filtered out of the API Keys tab.
-   */
-  group?: "api-keys" | "custom-model" | "custom-codex" | "custom-opencode"
 }
 
 export const CREDENTIAL_KEYS: readonly CredentialField[] = [
@@ -92,93 +84,6 @@ export const CREDENTIAL_KEYS: readonly CredentialField[] = [
     provider: "gemini",
     label: "Google AI (Gemini)",
     helpUrl: "https://aistudio.google.com/apikey",
-  },
-  // Custom Anthropic-compatible endpoint — rendered on the "Custom model" tab.
-  // Required field comes first; auth is supplied through the headers field.
-  {
-    id: "CUSTOM_MODEL_BASE_URL",
-    provider: "anthropic",
-    label: "Base URL",
-    placeholder: "https://api.anthropic.com",
-    required: true,
-    group: "custom-model",
-  },
-  {
-    id: "CUSTOM_MODEL_NAME",
-    provider: "anthropic",
-    label: "Model ID",
-    placeholder: "claude-opus-4-1 (sent to --model)",
-    description: "The exact model ID the endpoint expects. Leave blank to use its default.",
-    group: "custom-model",
-  },
-  {
-    id: "CUSTOM_MODEL_HEADERS",
-    provider: "anthropic",
-    label: "Headers",
-    multiline: true,
-    placeholder: "x-api-key: sk-ant-…\n# or: Authorization: Bearer <token>",
-    description:
-      "One per line — Header-Name: value. Put auth here: x-api-key or Authorization. anthropic-version is managed for you.",
-    group: "custom-model",
-  },
-  // Custom OpenAI-compatible endpoint for Codex — the "Codex" target on the
-  // Custom model tab. Mirrors the Anthropic custom-model fields: Base URL is
-  // required, auth is supplied through the Headers field rather than a separate key.
-  {
-    id: "CUSTOM_CODEX_BASE_URL",
-    provider: "openai",
-    label: "Base URL",
-    placeholder: "https://api.openai.com/v1",
-    required: true,
-    group: "custom-codex",
-  },
-  {
-    id: "CUSTOM_CODEX_NAME",
-    provider: "openai",
-    label: "Model ID",
-    placeholder: "gpt-5.5 (sent to --model)",
-    description: "The exact model ID the endpoint expects. Leave blank to use its default.",
-    group: "custom-codex",
-  },
-  {
-    id: "CUSTOM_CODEX_HEADERS",
-    provider: "openai",
-    label: "Headers",
-    multiline: true,
-    placeholder: "Authorization: Bearer sk-…\n# or: x-api-key: <token>",
-    description:
-      "One per line — Header-Name: value. Put auth here (e.g. Authorization: Bearer …); it's sent with every request.",
-    group: "custom-codex",
-  },
-  // Custom OpenAI-compatible endpoint for OpenCode — the "OpenCode" target on the
-  // Custom model tab. Model ID is required (OpenCode addresses models as
-  // <provider>/<model>); auth is supplied through the Headers field.
-  {
-    id: "CUSTOM_OPENCODE_BASE_URL",
-    provider: "openai",
-    label: "Base URL",
-    placeholder: "https://openrouter.ai/api/v1",
-    required: true,
-    group: "custom-opencode",
-  },
-  {
-    id: "CUSTOM_OPENCODE_NAME",
-    provider: "openai",
-    label: "Model ID",
-    placeholder: "gpt-4o-mini",
-    description: "The exact model ID the endpoint expects. Required for OpenCode.",
-    required: true,
-    group: "custom-opencode",
-  },
-  {
-    id: "CUSTOM_OPENCODE_HEADERS",
-    provider: "openai",
-    label: "Headers",
-    multiline: true,
-    placeholder: "Authorization: Bearer sk-…\n# or: x-api-key: <token>",
-    description:
-      "One per line — Header-Name: value. Put auth here (e.g. Authorization: Bearer …); it's sent with every request.",
-    group: "custom-opencode",
   },
 ] as const
 

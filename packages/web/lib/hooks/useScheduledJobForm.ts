@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { type ScheduledJob } from "@/lib/scheduled-jobs/types"
-import { agentModels, type Agent, NEW_REPOSITORY } from "@/lib/types"
+import { agentModels, getAgentModels, type Agent, NEW_REPOSITORY } from "@/lib/types"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import {
   UNIT_MINUTES,
   inferIntervalMode,
@@ -70,8 +71,12 @@ export function useScheduledJobForm({ open, job, onClose, onSuccess }: UseSchedu
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [rotating, setRotating] = useState(false)
 
-  // Get available models for selected agent
-  const availableModels = agentModels[agent] ?? []
+  // The user's custom endpoints, merged into the model list by name.
+  const { data: settingsData } = useSettingsQuery()
+  const customEndpoints = settingsData?.customEndpoints
+
+  // Get available models for selected agent (built-ins + matching endpoints)
+  const availableModels = getAgentModels(agent, customEndpoints)
 
   // Get timezone name for display
   const timezoneName = useMemo(() => getTimezoneName(), [])
@@ -118,13 +123,14 @@ export function useScheduledJobForm({ open, job, onClose, onSuccess }: UseSchedu
     }
   }, [open, job])
 
-  // Update model when agent changes
+  // Update model when agent changes (or endpoints load) — but keep a still-valid
+  // selection, including a custom endpoint that belongs to the current agent.
   useEffect(() => {
-    const models = agentModels[agent] ?? []
+    const models = getAgentModels(agent, customEndpoints)
     if (models.length > 0 && !models.find(m => m.value === model)) {
       setModel(models[0].value)
     }
-  }, [agent, model])
+  }, [agent, model, customEndpoints])
 
   useEffect(() => {
     if (triggerType === "incoming" && !incomingToken) {
@@ -417,6 +423,7 @@ export function useScheduledJobForm({ open, job, onClose, onSuccess }: UseSchedu
     rotating,
     // derived
     availableModels,
+    customEndpoints,
     timezoneName,
     effectiveIntervalMinutes,
     showContinueOption,

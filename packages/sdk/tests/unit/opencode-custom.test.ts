@@ -12,26 +12,25 @@ import {
   getEnvForModel,
   buildOpencodeCustomEnv,
   resolveCliModel,
-  hasCredentialsForModel,
-  agentModels,
-  CUSTOM_OPENCODE_MODEL_VALUE,
-  type Credentials,
-  type CredentialFlags,
+  ENDPOINT_MODEL_PREFIX,
+  type CustomEndpoint,
 } from "@background-agents/common"
 import { buildOpencodeConfigJson } from "../../src/agents/opencode/config"
 
-const opencodeCustomModel = agentModels["opencode"].find(
-  (m) => m.value === CUSTOM_OPENCODE_MODEL_VALUE
-)!
+function ep(overrides: Partial<CustomEndpoint> = {}): CustomEndpoint {
+  return { id: "o1", name: "My OpenCode", type: "opencode", baseUrl: "", model: "", headers: "", ...overrides }
+}
+
+const MODEL = ENDPOINT_MODEL_PREFIX + "o1"
 
 describe("buildOpencodeCustomEnv / getEnvForModel", () => {
   it("promotes the Authorization token (Bearer stripped) to CUSTOM_OPENCODE_API_KEY", () => {
-    const creds: Credentials = {
-      CUSTOM_OPENCODE_BASE_URL: "https://gw.example.com/v1",
-      CUSTOM_OPENCODE_HEADERS: "Authorization: Bearer tok-1",
-      CUSTOM_OPENCODE_NAME: "gpt-4o-mini",
-    }
-    const env = getEnvForModel(CUSTOM_OPENCODE_MODEL_VALUE, "opencode", creds)
+    const endpoint = ep({
+      baseUrl: "https://gw.example.com/v1",
+      headers: "Authorization: Bearer tok-1",
+      model: "gpt-4o-mini",
+    })
+    const env = getEnvForModel(MODEL, "opencode", {}, [endpoint])
     expect(env).toEqual({
       CUSTOM_OPENCODE_BASE_URL: "https://gw.example.com/v1",
       CUSTOM_OPENCODE_HEADERS: "Authorization: Bearer tok-1",
@@ -41,43 +40,29 @@ describe("buildOpencodeCustomEnv / getEnvForModel", () => {
   })
 
   it("never leaks a stored OpenCode key into a custom run", () => {
-    const env = getEnvForModel(CUSTOM_OPENCODE_MODEL_VALUE, "opencode", {
-      CUSTOM_OPENCODE_BASE_URL: "https://gw.example.com/v1",
-      OPENCODE_API_KEY: "sk-SHOULD_NOT_LEAK",
-    })
+    const env = getEnvForModel(MODEL, "opencode", { OPENCODE_API_KEY: "sk-SHOULD_NOT_LEAK" }, [
+      ep({ baseUrl: "https://gw.example.com/v1" }),
+    ])
     expect(env.OPENCODE_API_KEY).toBeUndefined()
     expect(env.CUSTOM_OPENCODE_BASE_URL).toBe("https://gw.example.com/v1")
   })
 
   it("leaves CUSTOM_OPENCODE_API_KEY unset when no Authorization header is given", () => {
-    const env = buildOpencodeCustomEnv({
-      CUSTOM_OPENCODE_BASE_URL: "https://gw.example.com/v1",
-      CUSTOM_OPENCODE_HEADERS: "x-api-key: sk-1",
-    })
+    const env = buildOpencodeCustomEnv(
+      ep({ baseUrl: "https://gw.example.com/v1", headers: "x-api-key: sk-1" })
+    )
     expect(env.CUSTOM_OPENCODE_API_KEY).toBeUndefined()
     expect(env.CUSTOM_OPENCODE_HEADERS).toBe("x-api-key: sk-1")
   })
 })
 
 describe("resolveCliModel — opencode custom", () => {
-  it("maps the sentinel to custom/<model id>", () => {
-    expect(
-      resolveCliModel(CUSTOM_OPENCODE_MODEL_VALUE, { CUSTOM_OPENCODE_NAME: "gpt-4o-mini" })
-    ).toBe("custom/gpt-4o-mini")
+  it("maps an endpoint model value to custom/<model id>", () => {
+    expect(resolveCliModel(MODEL, [ep({ model: "gpt-4o-mini" })])).toBe("custom/gpt-4o-mini")
   })
 
   it("returns undefined when no model id is set", () => {
-    expect(resolveCliModel(CUSTOM_OPENCODE_MODEL_VALUE, {})).toBeUndefined()
-  })
-})
-
-describe("hasCredentialsForModel — opencode custom", () => {
-  it("requires only a base URL (auth is supplied via headers)", () => {
-    const none: CredentialFlags = {}
-    const baseOnly: CredentialFlags = { CUSTOM_OPENCODE_BASE_URL: true }
-
-    expect(hasCredentialsForModel(opencodeCustomModel, none, "opencode")).toBe(false)
-    expect(hasCredentialsForModel(opencodeCustomModel, baseOnly, "opencode")).toBe(true)
+    expect(resolveCliModel(MODEL, [ep()])).toBeUndefined()
   })
 })
 

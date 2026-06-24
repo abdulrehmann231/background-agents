@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { decrypt } from "@/lib/db/encryption"
 import { NEW_REPOSITORY } from "@/lib/types"
-import { getEnvForModel } from "@background-agents/common"
+import { getEnvForModel, type CustomEndpoint } from "@background-agents/common"
 import type { Agent } from "@/lib/agent-session"
 import type { Credentials } from "@/lib/credentials"
 import type { ChatRecord, MessagePayload } from "./types"
@@ -16,10 +16,11 @@ export async function buildAgentEnv(params: {
   userId: string
   payload: MessagePayload
   credentials: Credentials
+  customEndpoints?: CustomEndpoint[]
 }): Promise<Record<string, string>> {
-  const { chat, userId, payload, credentials } = params
+  const { chat, userId, payload, credentials, customEndpoints } = params
 
-  const systemEnv = getEnvForModel(payload.model, payload.agent as Agent, credentials)
+  const systemEnv = getEnvForModel(payload.model, payload.agent as Agent, credentials, customEndpoints)
 
   // Fetch user-defined environment variables (repo-level then chat-level, chat takes precedence)
   const userEnv: Record<string, string> = {}

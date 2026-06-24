@@ -11,27 +11,26 @@ import {
   getEnvForModel,
   buildCodexCustomEnv,
   resolveCliModel,
-  hasCredentialsForModel,
-  agentModels,
-  CUSTOM_CODEX_MODEL_VALUE,
-  type Credentials,
-  type CredentialFlags,
+  ENDPOINT_MODEL_PREFIX,
+  type CustomEndpoint,
 } from "@background-agents/common"
 import { buildCodexConfigToml } from "../../src/agents/codex/config"
 import { parseHeaderLines } from "../../src/utils/headers"
 
-const codexCustomModel = agentModels["codex"].find(
-  (m) => m.value === CUSTOM_CODEX_MODEL_VALUE
-)!
+function ep(overrides: Partial<CustomEndpoint> = {}): CustomEndpoint {
+  return { id: "c1", name: "My Codex", type: "codex", baseUrl: "", model: "", headers: "", ...overrides }
+}
+
+const MODEL = ENDPOINT_MODEL_PREFIX + "c1"
 
 describe("buildCodexCustomEnv / getEnvForModel", () => {
   it("copies the full Authorization value (Bearer kept) to CUSTOM_CODEX_AUTHORIZATION", () => {
-    const creds: Credentials = {
-      CUSTOM_CODEX_BASE_URL: "https://gw.example.com/v1",
-      CUSTOM_CODEX_HEADERS: "Authorization: Bearer tok-1",
-      CUSTOM_CODEX_NAME: "gpt-5.5",
-    }
-    const env = getEnvForModel(CUSTOM_CODEX_MODEL_VALUE, "codex", creds)
+    const endpoint = ep({
+      baseUrl: "https://gw.example.com/v1",
+      headers: "Authorization: Bearer tok-1",
+      model: "gpt-5.5",
+    })
+    const env = getEnvForModel(MODEL, "codex", {}, [endpoint])
     expect(env).toEqual({
       CUSTOM_CODEX_BASE_URL: "https://gw.example.com/v1",
       CUSTOM_CODEX_HEADERS: "Authorization: Bearer tok-1",
@@ -41,51 +40,35 @@ describe("buildCodexCustomEnv / getEnvForModel", () => {
   })
 
   it("leaves CUSTOM_CODEX_AUTHORIZATION unset when no Authorization header is given", () => {
-    const env = buildCodexCustomEnv({
-      CUSTOM_CODEX_BASE_URL: "https://gw.example.com/v1",
-      CUSTOM_CODEX_HEADERS: "x-api-key: sk-1",
-    })
+    const env = buildCodexCustomEnv(
+      ep({ baseUrl: "https://gw.example.com/v1", headers: "x-api-key: sk-1" })
+    )
     expect(env.CUSTOM_CODEX_AUTHORIZATION).toBeUndefined()
     expect(env.CUSTOM_CODEX_HEADERS).toBe("x-api-key: sk-1")
   })
 
   it("never leaks a stored OpenAI key into a custom Codex run", () => {
-    const env = getEnvForModel(CUSTOM_CODEX_MODEL_VALUE, "codex", {
-      CUSTOM_CODEX_BASE_URL: "https://gw.example.com/v1",
-      OPENAI_API_KEY: "sk-SHOULD_NOT_LEAK",
-    })
+    const env = getEnvForModel(MODEL, "codex", { OPENAI_API_KEY: "sk-SHOULD_NOT_LEAK" }, [
+      ep({ baseUrl: "https://gw.example.com/v1" }),
+    ])
     expect(env.OPENAI_API_KEY).toBeUndefined()
     expect(env.CUSTOM_CODEX_BASE_URL).toBe("https://gw.example.com/v1")
   })
 
   it("only sets the base URL when no headers/model are configured", () => {
-    expect(buildCodexCustomEnv({ CUSTOM_CODEX_BASE_URL: "https://gw.example.com/v1" })).toEqual({
+    expect(buildCodexCustomEnv(ep({ baseUrl: "https://gw.example.com/v1" }))).toEqual({
       CUSTOM_CODEX_BASE_URL: "https://gw.example.com/v1",
     })
   })
 })
 
 describe("resolveCliModel — codex custom", () => {
-  it("translates the codex-custom sentinel to the configured model name", () => {
-    expect(
-      resolveCliModel(CUSTOM_CODEX_MODEL_VALUE, { CUSTOM_CODEX_NAME: "gpt-5.5" })
-    ).toBe("gpt-5.5")
+  it("translates an endpoint model value to the configured model name", () => {
+    expect(resolveCliModel(MODEL, [ep({ model: "gpt-5.5" })])).toBe("gpt-5.5")
   })
 
   it("returns undefined when no model name is set (endpoint default)", () => {
-    expect(resolveCliModel(CUSTOM_CODEX_MODEL_VALUE, {})).toBeUndefined()
-  })
-})
-
-describe("hasCredentialsForModel — codex custom", () => {
-  it("requires only a base URL (auth is supplied via headers)", () => {
-    const none: CredentialFlags = {}
-    const baseOnly: CredentialFlags = { CUSTOM_CODEX_BASE_URL: true }
-    const headersOnly: CredentialFlags = { CUSTOM_CODEX_HEADERS: true }
-
-    expect(hasCredentialsForModel(codexCustomModel, none, "codex")).toBe(false)
-    expect(hasCredentialsForModel(codexCustomModel, headersOnly, "codex")).toBe(false)
-    expect(hasCredentialsForModel(codexCustomModel, baseOnly, "codex")).toBe(true)
+    expect(resolveCliModel(MODEL, [ep()])).toBeUndefined()
   })
 })
 

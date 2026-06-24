@@ -12,7 +12,7 @@ export type {
 import type { ContentBlock } from "@background-agents/common"
 
 // Re-export agent types
-export type { Agent, ModelOption } from "@background-agents/common"
+export type { Agent, ModelOption, CustomEndpoint, CustomEndpointType } from "@background-agents/common"
 export {
   ALL_AGENTS,
   agentModels,
@@ -20,9 +20,13 @@ export {
   agentSupportsPlanMode,
   getDefaultAgent,
   getDefaultModelForAgent,
+  getAgentModels,
   getModelLabel,
   hasCredentialsForModel,
   sharedClaudePoolEligible,
+  ENDPOINT_TYPE_TO_AGENT,
+  ENDPOINT_MODEL_PREFIX,
+  findEndpoint,
 } from "@background-agents/common"
 
 // =============================================================================
