@@ -1,12 +1,15 @@
 /**
- * Tests for ensureSandboxForChat's handling of the chat session pointer when a
- * brand-new sandbox is created.
+ * Tests for ensureSandboxForChat.
  *
- * A freshly created sandbox is an empty clone with no agent conversation history
- * on disk. If the chat still carries a `sessionId` from a previous (now gone)
- * sandbox, resuming it makes the agent CLI fail with
- * "No conversation found with session ID". So any path that produces a fresh
- * sandbox must drop the stale session pointer — agent-agnostically.
+ * Two invariants:
+ *  1. A chat ends up with a usable sandbox whenever one can be created — a
+ *     deleted sandbox is recreated through the *same* path as first-time
+ *     creation (including local NEW_REPOSITORY chats), so the first message
+ *     after a deletion never errors with SANDBOX_NOT_FOUND.
+ *  2. Any path that produces a *fresh* sandbox drops the stale agent session
+ *     pointer (agent-agnostically). A fresh sandbox is an empty clone with no
+ *     on-disk history, so resuming an old `sessionId` makes the agent CLI fail
+ *     with "No conversation found with session ID".
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -28,26 +31,34 @@ vi.mock("@/lib/sandbox", () => ({
 
 import { ensureSandboxForChat, type SandboxState } from "./ensure-sandbox"
 
-const fakeSandbox = { id: "sbx-new", state: "started" }
+const freshSandbox = { id: "sbx-new", state: "started" }
 
-function baseParams(overrides: { sessionId: string | null }) {
+type ChatOverrides = {
+  sessionId?: string | null
+  sandboxId?: string | null
+  branch?: string | null
+  repo?: string
+}
+
+function setup(overrides: ChatOverrides = {}) {
   const chat = {
     id: "chat-1",
-    repo: "octocat/hello",
+    repo: overrides.repo ?? "octocat/hello",
     baseBranch: "main",
-    branch: null,
-    sandboxId: null,
+    branch: overrides.branch ?? null,
+    sandboxId: overrides.sandboxId ?? null,
     previewUrlPattern: null,
-    sessionId: overrides.sessionId,
+    sessionId: overrides.sessionId ?? null,
   }
   const state: SandboxState = {
-    sandboxId: null,
-    branch: null,
+    sandboxId: chat.sandboxId,
+    branch: chat.branch,
     previewUrlPattern: null,
     createdSandbox: false,
   }
-  return {
-    daytona: { get: vi.fn().mockResolvedValue(fakeSandbox) } as never,
+  const daytonaGet = vi.fn()
+  const params = {
+    daytona: { get: daytonaGet } as never,
     chat: chat as never,
     chatId: "chat-1",
     payload: {
@@ -57,55 +68,122 @@ function baseParams(overrides: { sessionId: string | null }) {
       userMessageId: "u1",
       assistantMessageId: "a1",
     } as never,
-    githubToken: "ghtoken",
+    githubToken: "ghtoken" as string | null,
     userId: "user-1",
     state,
-    chatRef: chat,
+  }
+  return { chat, params, daytonaGet }
+}
+
+/** The DB update that records the new sandbox as ready. */
+function readyUpdate() {
+  return chatUpdate.mock.calls
+    .map((c) => c[0] as { data?: Record<string, unknown> })
+    .find((a) => a.data?.status === "ready")
+}
+
+function createArg() {
+  return createSandboxForChat.mock.calls[0]?.[0] as {
+    newBranch: string
+    restoreExistingBranch: boolean
+    repo: string
   }
 }
 
 beforeEach(() => {
   chatUpdate.mockReset().mockResolvedValue(undefined)
   createSandboxForChat.mockReset().mockResolvedValue({
-    sandbox: fakeSandbox,
+    sandbox: freshSandbox,
     sandboxId: "sbx-new",
     branch: "agent/abcd1234",
     previewUrlPattern: null,
     repoName: "project",
+    branchRestored: false,
   })
   ensureSandboxStarted.mockReset().mockResolvedValue(undefined)
   installSkillsForRepo.mockReset().mockResolvedValue({ installed: 0, total: 0 })
 })
 
-describe("ensureSandboxForChat — fresh sandbox creation", () => {
-  it("clears a stale session pointer so the agent does not resume a dead session", async () => {
-    const params = baseParams({ sessionId: "stale-session-123" })
+describe("ensureSandboxForChat — first-time creation", () => {
+  it("creates a sandbox and clears any stale session pointer", async () => {
+    const { chat, params } = setup({ sessionId: "stale-123" })
 
     const result = await ensureSandboxForChat(params)
 
-    // Should not have early-returned a SANDBOX_NOT_FOUND response.
     expect(result).not.toBeInstanceOf(Response)
+    expect(createSandboxForChat).toHaveBeenCalledOnce()
+    expect(createArg().restoreExistingBranch).toBe(false)
+    expect(chat.sessionId).toBeNull()
+    expect(readyUpdate()!.data).toHaveProperty("sessionId", null)
+  })
+})
 
-    // The in-memory chat row the caller reads for `--resume` must be cleared.
-    expect(params.chatRef.sessionId).toBeNull()
+describe("ensureSandboxForChat — reuse", () => {
+  it("reuses an existing sandbox without recreating", async () => {
+    const { params, daytonaGet } = setup({ sandboxId: "old-sbx", branch: "agent/work" })
+    daytonaGet.mockResolvedValue({ id: "old-sbx", state: "stopped" })
 
-    // The DB update that records the new sandbox must also null the session.
-    const readyUpdate = chatUpdate.mock.calls
-      .map((c) => c[0] as { data?: Record<string, unknown> })
-      .find((a) => a.data?.status === "ready")
-    expect(readyUpdate).toBeDefined()
-    expect(readyUpdate!.data).toHaveProperty("sessionId", null)
+    const result = await ensureSandboxForChat(params)
+
+    expect(result).not.toBeInstanceOf(Response)
+    expect(createSandboxForChat).not.toHaveBeenCalled()
+    expect(ensureSandboxStarted).toHaveBeenCalledWith({ id: "old-sbx", state: "stopped" })
+  })
+})
+
+describe("ensureSandboxForChat — deleted sandbox recreation", () => {
+  it("recreates and restores the branch when daytona.get 404s, resetting the session", async () => {
+    const { chat, params, daytonaGet } = setup({
+      sandboxId: "old-sbx",
+      branch: "agent/work",
+      sessionId: "stale-123",
+    })
+    daytonaGet.mockRejectedValue(new Error("404 not found"))
+
+    const result = await ensureSandboxForChat(params)
+
+    expect(result).not.toBeInstanceOf(Response)
+    expect(createSandboxForChat).toHaveBeenCalledOnce()
+    expect(createArg()).toMatchObject({ newBranch: "agent/work", restoreExistingBranch: true })
+    expect(chat.sessionId).toBeNull()
+    expect(readyUpdate()!.data).toHaveProperty("sessionId", null)
   })
 
-  it("is a no-op for the session pointer on a brand-new chat (already null)", async () => {
-    const params = baseParams({ sessionId: null })
+  it("recreates a deleted LOCAL (NEW_REPOSITORY) sandbox instead of erroring", async () => {
+    // Regression: local chats used to get SANDBOX_NOT_FOUND on the first
+    // message after a deletion, succeeding only on the retry.
+    const { params, daytonaGet } = setup({ sandboxId: "old-sbx", repo: "__new__" })
+    daytonaGet.mockRejectedValue(new Error("404 not found"))
 
-    await ensureSandboxForChat(params)
+    const result = await ensureSandboxForChat(params)
 
-    expect(params.chatRef.sessionId).toBeNull()
-    const readyUpdate = chatUpdate.mock.calls
-      .map((c) => c[0] as { data?: Record<string, unknown> })
-      .find((a) => a.data?.status === "ready")
-    expect(readyUpdate!.data).toHaveProperty("sessionId", null)
+    expect(result).not.toBeInstanceOf(Response)
+    expect(createSandboxForChat).toHaveBeenCalledOnce()
+    expect(createArg().repo).toBe("__new__")
+  })
+
+  it("falls back to a fresh branch when the chat has no branch to restore", async () => {
+    const { params, daytonaGet } = setup({ sandboxId: "old-sbx", branch: null })
+    daytonaGet.mockRejectedValue(new Error("404 not found"))
+
+    const result = await ensureSandboxForChat(params)
+
+    expect(result).not.toBeInstanceOf(Response)
+    expect(createArg().restoreExistingBranch).toBe(false)
+    expect(createArg().newBranch).toMatch(/^agent\//)
+  })
+})
+
+describe("ensureSandboxForChat — unrecoverable", () => {
+  it("returns 410 only when a cloned repo has no GitHub token to re-clone with", async () => {
+    const { params, daytonaGet } = setup({ sandboxId: "old-sbx", branch: "agent/work" })
+    params.githubToken = null
+    daytonaGet.mockRejectedValue(new Error("404 not found"))
+
+    const result = await ensureSandboxForChat(params)
+
+    expect(result).toBeInstanceOf(Response)
+    expect((result as Response).status).toBe(410)
+    expect(createSandboxForChat).not.toHaveBeenCalled()
   })
 })

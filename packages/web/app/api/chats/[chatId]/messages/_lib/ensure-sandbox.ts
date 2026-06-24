@@ -33,14 +33,26 @@ export interface EnsuredSandbox {
 }
 
 /**
- * Ensure the chat has a live, started sandbox: create one if the chat has none,
- * or transparently recreate one that was deleted out from under us (e.g. by the
- * cleanup cron). Keeps `state` in sync as it goes — so a throw mid-flight leaves
- * the handler enough to clean up — and, on a newly created sandbox, installs the
- * repo's skills.
+ * Ensure the chat has a live, started sandbox.
+ *
+ * If the chat already has a sandbox we reuse it. Otherwise — whether the chat
+ * never had one, or its sandbox was deleted out from under us (e.g. by the
+ * cleanup cron, surfacing as a 404 from `daytona.get`) — we create a fresh one
+ * through the *same* path. A deleted sandbox is just a chat with no usable
+ * sandbox; recreating it is identical to first-time creation except that we
+ * restore the chat's existing branch when it has one. (This is why there is no
+ * separate "recreate" branch with its own rules: a divergent recreate path used
+ * to reject things first-time creation happily handles — e.g. local
+ * `NEW_REPOSITORY` chats — so the first message after a deletion failed with
+ * SANDBOX_NOT_FOUND and only the *retry* succeeded by falling through to
+ * creation.)
+ *
+ * Keeps `state` in sync as it goes so a throw mid-flight leaves the handler
+ * enough to clean up, and installs the repo's skills on a newly created sandbox.
  *
  * Returns the started sandbox + resolved ids, or a `Response`
- * (410 SANDBOX_NOT_FOUND) when a deleted sandbox cannot be recreated.
+ * (410 SANDBOX_NOT_FOUND) when no sandbox can be created (a cloned repo with no
+ * GitHub token to clone from).
  */
 export async function ensureSandboxForChat(params: {
   daytona: Daytona
@@ -56,16 +68,48 @@ export async function ensureSandboxForChat(params: {
   let sandboxId = state.sandboxId
   let branch = state.branch
   let previewUrlPattern = state.previewUrlPattern
-  let createdSandbox = false
 
-  // ── Stage 1: ensure sandbox ────────────────────────────────────────────
-  if (!sandboxId) {
+  // ── Reuse the chat's existing sandbox if it's still there ──────────────
+  let sandbox: DaytonaSandbox | null = null
+  if (sandboxId) {
+    try {
+      sandbox = await daytona.get(sandboxId)
+    } catch {
+      // The recorded sandbox is gone (deleted out from under us). Fall through
+      // and create a fresh one below, restoring the branch if we have one.
+      console.log(`[chats/messages] Sandbox ${sandboxId} not found for chat ${chatId}; creating a new one`)
+      sandbox = null
+    }
+  }
+
+  // ── Otherwise create one (first-time *or* recreation — same path) ──────
+  let createdSandbox = false
+  if (!sandbox) {
+    const isNewRepo = chat.repo === NEW_REPOSITORY || chat.repo === "__new__"
+
+    // A cloned repo can only be (re)created with a token to clone it. This is
+    // the one genuinely unrecoverable case — everything else we can build.
+    if (!isNewRepo && !githubToken) {
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
+      })
+      return Response.json(
+        { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found. GitHub re-authentication required to recreate." },
+        { status: 410 }
+      )
+    }
+
     await prisma.chat.update({
       where: { id: chatId },
       data: { status: "creating" },
     })
 
-    const newBranch = payload.newBranch ?? `agent/${randomUUID().slice(0, 8)}`
+    // Restore the chat's branch when it has one (recreation); otherwise create
+    // a fresh branch (first message of a new chat).
+    const restoreExistingBranch = !!branch
+    const newBranch = branch ?? payload.newBranch ?? `agent/${randomUUID().slice(0, 8)}`
+
     const created = await createSandboxForChat({
       daytona,
       repo: chat.repo,
@@ -73,7 +117,10 @@ export async function ensureSandboxForChat(params: {
       newBranch,
       githubToken: githubToken ?? undefined,
       userId,
+      restoreExistingBranch,
     })
+
+    sandbox = created.sandbox
     sandboxId = created.sandboxId
     branch = created.branch
     previewUrlPattern = created.previewUrlPattern ?? null
@@ -84,14 +131,11 @@ export async function ensureSandboxForChat(params: {
     state.createdSandbox = true
 
     // A freshly created sandbox is a clean clone with no agent conversation
-    // history on disk. If this chat carried a stale session pointer (e.g. a
-    // prior sandbox was deleted and a failure path nulled `sandboxId` while
-    // leaving `sessionId` set), resuming it would make the agent CLI fail with
-    // "No conversation found with session ID". Drop the pointer so the agent
-    // starts a new conversation — both in the DB (future requests) and in
-    // memory (this request's resume read below). Agent-agnostic: sessionId is
-    // the generic resume pointer used by every agent. Mirrors the recreation
-    // path in Stage 2.
+    // history on disk. Drop any stale session pointer so the agent starts a new
+    // conversation instead of resuming a session the CLI can't find ("No
+    // conversation found with session ID"). Clear it both in the DB (future
+    // requests) and in memory (this request's resume read below). Agent-
+    // agnostic: sessionId is the generic resume pointer used by every agent.
     await prisma.chat.update({
       where: { id: chatId },
       data: {
@@ -105,120 +149,13 @@ export async function ensureSandboxForChat(params: {
     chat.sessionId = null
   }
 
-  // ── Stage 2: get sandbox object ────────────────────────────────────────
-  let sandbox: DaytonaSandbox
-  try {
-    sandbox = await daytona.get(sandboxId)
-  } catch {
-    // Sandbox was deleted (e.g., cleanup cronjob). Attempt transparent recreation.
-
-    // Cannot recreate NEW_REPOSITORY chats - no remote to clone from
-    if (chat.repo === NEW_REPOSITORY || chat.repo === "__new__") {
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
-      })
-      return Response.json(
-        { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found. Cannot recreate sandbox for local repository." },
-        { status: 410 }
-      )
-    }
-
-    // Cannot recreate without GitHub token
-    if (!githubToken) {
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
-      })
-      return Response.json(
-        { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found. GitHub re-authentication required to recreate." },
-        { status: 410 }
-      )
-    }
-
-    // Cannot recreate without existing branch name
-    if (!chat.branch) {
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
-      })
-      return Response.json(
-        { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found. No branch to restore." },
-        { status: 410 }
-      )
-    }
-
-    console.log(`[chats/messages] Sandbox ${sandboxId} not found, attempting recreation for chat ${chatId}`)
-
-    try {
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: { status: "creating" },
-      })
-
-      const recreated = await createSandboxForChat({
-        daytona,
-        repo: chat.repo,
-        baseBranch: chat.baseBranch ?? "main",
-        newBranch: chat.branch,
-        githubToken,
-        userId,
-        restoreExistingBranch: true,
-      })
-
-      sandboxId = recreated.sandboxId
-      branch = recreated.branch
-      previewUrlPattern = recreated.previewUrlPattern ?? null
-      createdSandbox = true // Important: mark as created for cleanup on downstream failures
-      state.sandboxId = sandboxId
-      state.branch = branch
-      state.previewUrlPattern = previewUrlPattern
-      state.createdSandbox = true
-
-      // The recreated sandbox is a fresh clone with no agent conversation
-      // history on disk (it only ever lived in the now-deleted sandbox).
-      // Drop the stale session pointer so the agent starts a new conversation
-      // instead of resuming a session the CLI can't find. Clear it both in the
-      // DB (for future requests) and in memory (so this request's resume read
-      // below sees no session). Agent-agnostic: sessionId is the generic
-      // resume pointer used by every agent.
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: {
-          sandboxId,
-          previewUrlPattern,
-          sessionId: null,
-          status: "ready",
-        },
-      })
-      chat.sessionId = null
-
-      sandbox = recreated.sandbox
-
-      console.log(`[chats/messages] Successfully recreated sandbox ${sandboxId} for chat ${chatId}, branchRestored=${recreated.branchRestored}`)
-    } catch (recreationError) {
-      console.error(`[chats/messages] Failed to recreate sandbox for chat ${chatId}:`, recreationError)
-
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
-      })
-      return Response.json(
-        { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found and recreation failed." },
-        { status: 410 }
-      )
-    }
-  }
-
   await ensureSandboxStarted(sandbox)
 
-  // ── Stage 2a: restore repo-scoped skills ──────────────────────────────
-  // On newly created sandboxes (including recreation after deletion),
-  // install all skills associated with this user+repo so the agent has
-  // them available from the first prompt.
+  // On a newly created sandbox (first-time or recreation), install all skills
+  // associated with this user+repo so the agent has them from the first prompt.
   if (createdSandbox && chat.repo !== NEW_REPOSITORY) {
     await installSkillsForRepo(sandbox, userId, chat.repo)
   }
 
-  return { sandbox, sandboxId, branch, previewUrlPattern, createdSandbox }
+  return { sandbox, sandboxId: sandboxId as string, branch, previewUrlPattern, createdSandbox }
 }
