@@ -24,6 +24,7 @@ export {
   getModelLabel,
   hasCredentialsForModel,
   sharedClaudePoolEligible,
+  usesSharedPool,
   ENDPOINT_TYPE_TO_AGENT,
   ENDPOINT_MODEL_PREFIX,
   findEndpoint,

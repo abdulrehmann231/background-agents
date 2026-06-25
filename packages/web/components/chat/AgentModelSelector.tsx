@@ -5,7 +5,7 @@ import { ChevronDown, Key, Cpu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
-import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, ALL_AGENTS } from "@/lib/types"
+import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, usesSharedPool, ALL_AGENTS } from "@/lib/types"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
@@ -30,6 +30,20 @@ interface AgentModelSelectorProps {
 }
 
 const agents = ALL_AGENTS
+
+/**
+ * Small green dot marking an agent that currently runs on the server's shared
+ * free pool (no personal key). Hidden once the user supplies their own key.
+ */
+function FreePoolDot() {
+  return (
+    <span
+      className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0"
+      title="Free shared usage"
+      aria-label="Free shared usage"
+    />
+  )
+}
 
 export function AgentModelSelector({
   chat,
@@ -132,6 +146,7 @@ export function AgentModelSelector({
     value: agent,
     label: agentLabels[agent],
     icon: <AgentIcon agent={agent} className="h-5 w-5" />,
+    badge: usesSharedPool(agent, credentialFlags) ? <FreePoolDot /> : undefined,
   }))
 
   // Prepare model options for mobile bottom sheet
@@ -228,7 +243,12 @@ export function AgentModelSelector({
                 )}
               >
                 <AgentIcon agent={agent} className="h-3.5 w-3.5" />
-                {agentLabels[agent]}
+                <span>{agentLabels[agent]}</span>
+                {usesSharedPool(agent, credentialFlags) && (
+                  <span className="ml-auto">
+                    <FreePoolDot />
+                  </span>
+                )}
               </button>
             ))}
           </div>

@@ -78,6 +78,10 @@ export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   OPENCODE_API_KEY_SHARED?: boolean
   // Whether the OPENCODE_API_KEY is a user-provided credential stored in DB
   OPENCODE_API_KEY_USER?: boolean
+  // Whether the GEMINI_API_KEY originates from the server environment (shared)
+  GEMINI_API_KEY_SHARED?: boolean
+  // Whether the GEMINI_API_KEY is a user-provided credential stored in DB
+  GEMINI_API_KEY_USER?: boolean
 }
 export type Credentials = Partial<Record<CredentialId, string>>
 
@@ -413,6 +417,30 @@ export function hasOwnAnthropicCredentials(flags: CredentialFlags | null | undef
  */
 export function sharedClaudePoolEligible(flags: CredentialFlags | null | undefined): boolean {
   return !!flags?.CLAUDE_SHARED_POOL_AVAILABLE && !hasOwnAnthropicCredentials(flags)
+}
+
+/**
+ * Whether the given agent would currently run on the server's shared/free
+ * credential pool — i.e. the user has no personal key for it. This is the
+ * client-safe mirror of the server's resolvePool(): it reads CredentialFlags
+ * instead of decrypted credentials, so the UI can show a "free usage" hint in
+ * the agent menu. Returns false for agents that have no shared pool, and false
+ * once the user supplies their own key (then it's their own usage, not free).
+ */
+export function usesSharedPool(
+  agent: Agent,
+  flags: CredentialFlags | null | undefined
+): boolean {
+  switch (agent) {
+    case "claude-code":
+      return sharedClaudePoolEligible(flags)
+    case "gemini":
+      return !!flags?.GEMINI_API_KEY_SHARED && !flags?.GEMINI_API_KEY_USER
+    case "opencode":
+      return !!flags?.OPENCODE_API_KEY_SHARED && !flags?.OPENCODE_API_KEY_USER
+    default:
+      return false
+  }
 }
 
 /**

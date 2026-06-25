@@ -123,6 +123,8 @@ interface MobileSelectOption {
   icon?: React.ReactNode
   description?: string
   disabled?: boolean
+  /** Optional trailing element (e.g. a status dot), shown before the selected indicator. */
+  badge?: React.ReactNode
 }
 
 interface MobileSelectProps {
@@ -177,6 +179,7 @@ export function MobileSelect({
                 <div className="text-sm text-muted-foreground">{option.description}</div>
               )}
             </div>
+            {option.badge && <span className="shrink-0">{option.badge}</span>}
             {option.value === value && (
               <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
             )}
