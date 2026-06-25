@@ -43,6 +43,7 @@ interface ChatWithMessagesResponse {
   model: string | null
   planModeEnabled: boolean
   displayName: string | null
+  shareId: string | null
   status: string
   parentChatId: string | null
   needsSync: boolean
@@ -125,6 +126,7 @@ export async function GET(
       model: chat.model,
       planModeEnabled: chat.planModeEnabled,
       displayName: chat.displayName,
+      shareId: chat.shareId,
       status: chat.status,
       parentChatId: chat.parentChatId,
       needsSync: chat.needsSync,
