@@ -41,6 +41,7 @@ export {
   hasOwnAnthropicCredentials,
   sharedClaudePoolEligible,
   agentUsesSharedPool,
+  agentHasFreeUsage,
   hasCredentialsForModel,
   getDefaultModelForAgent,
   getAgentModels,

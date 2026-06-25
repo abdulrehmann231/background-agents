@@ -9,8 +9,12 @@
 
 export type Agent = "claude-code" | "opencode" | "codex" | "copilot" | "eliza" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
 
-/** All agent ids, in display order. */
-export const ALL_AGENTS: Agent[] = ["claude-code", "opencode", "codex", "copilot", "gemini", "goose", "kilo", "kimi", "pi", "eliza"]
+/**
+ * All agent ids, in display order. Agents backed by a server shared pool
+ * (claude-code, opencode, gemini) lead, followed by Kilo (free models, no
+ * shared pool), then the remaining providers.
+ */
+export const ALL_AGENTS: Agent[] = ["claude-code", "opencode", "gemini", "kilo", "codex", "copilot", "goose", "kimi", "pi", "eliza"]
 
 /** SDK provider names (must match ProviderName from SDK) */
 export type ProviderName = "claude" | "codex" | "copilot" | "eliza" | "opencode" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
@@ -439,6 +443,21 @@ export function agentUsesSharedPool(
     default:
       return false
   }
+}
+
+/**
+ * Whether picking this agent gives free usage out of the box — either a
+ * server-provided shared pool (see agentUsesSharedPool) or always-free models
+ * that need no API key. Kilo qualifies via its free auto-router and free model
+ * tier, which stay available even when the user adds their own Kilo key. Used to
+ * surface the "Free usage available" green dot in the agent picker.
+ */
+export function agentHasFreeUsage(
+  agent: Agent,
+  flags: CredentialFlags | null | undefined
+): boolean {
+  if (agent === "kilo") return true
+  return agentUsesSharedPool(agent, flags)
 }
 
 /**

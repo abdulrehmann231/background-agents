@@ -25,6 +25,7 @@ export {
   hasCredentialsForModel,
   sharedClaudePoolEligible,
   agentUsesSharedPool,
+  agentHasFreeUsage,
   ENDPOINT_TYPE_TO_AGENT,
   ENDPOINT_MODEL_PREFIX,
   findEndpoint,
