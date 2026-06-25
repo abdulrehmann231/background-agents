@@ -1,9 +1,11 @@
-import { GitBranchPlus, X, ArrowDown } from "lucide-react"
+import { Fragment } from "react"
+import { GitBranchPlus, X, ArrowDown, GitBranch } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat, Agent } from "@/lib/types"
 import type { GitContextValue } from "@/lib/contexts/GitContext"
 import { ErrorBanner } from "./ErrorBanner"
 import { MessageBubble } from "../MessageBubble"
+import { SystemMessage } from "../message"
 
 interface ChatMessageListProps {
   chat: Chat
@@ -70,18 +72,32 @@ export function ChatMessageList({
               isRunning &&
               message.role === "assistant" &&
               index === chat.messages.length - 1
+            // A divider marks the point where the inherited parent history ends
+            // and this branch's own conversation begins.
+            const isBranchStart =
+              !message.inherited && !!chat.messages[index - 1]?.inherited
             return (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                isStreaming={isLastAssistant}
-                isMobile={isMobile}
-                repo={isNewRepo ? undefined : chat.repo}
-                onOpenFile={onOpenFile}
-                onForcePush={git.handleForcePush}
-              />
+              <Fragment key={message.id}>
+                {isBranchStart && <BranchDivider isMobile={isMobile} />}
+                <div className={cn(message.inherited && "opacity-60")}>
+                  <MessageBubble
+                    message={message}
+                    isStreaming={isLastAssistant}
+                    isMobile={isMobile}
+                    repo={isNewRepo ? undefined : chat.repo}
+                    onOpenFile={onOpenFile}
+                    onForcePush={git.handleForcePush}
+                  />
+                </div>
+              </Fragment>
             )
           })}
+          {/* Branch with no own messages yet: the divider goes after the
+              inherited history so it's clear the user continues below it. */}
+          {chat.messages.length > 0 &&
+            chat.messages[chat.messages.length - 1]?.inherited && (
+              <BranchDivider isMobile={isMobile} />
+            )}
           {/* Show loading indicator when sandbox is being created */}
           {isCreating && (
             <div className="text-2xl text-muted-foreground animate-pulse">
@@ -204,5 +220,21 @@ export function ChatMessageList({
         </button>
       )}
     </div>
+  )
+}
+
+/**
+ * Marks where the inherited parent history (shown for context, rendered muted)
+ * ends and this branch's own conversation begins. Styled like the git-operation
+ * system messages (e.g. "Rebased X onto Y").
+ */
+function BranchDivider({ isMobile }: { isMobile: boolean }) {
+  return (
+    <SystemMessage
+      icon={GitBranch}
+      content="Chat branched — history above is from the parent chat."
+      variant="success"
+      isMobile={isMobile}
+    />
   )
 }
