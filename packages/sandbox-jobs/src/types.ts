@@ -34,12 +34,18 @@ export interface JobHandle {
   readonly pgid: number
   /**
    * Absolute path to the job's own cgroup-v2 directory. Killing this cgroup is
-   * the sole cancellation mechanism: it reaps EVERY descendant, including a
+   * the primary cancellation mechanism: it reaps EVERY descendant, including a
    * child that called `setsid()` and so escaped {@link pgid} (e.g. a daemonized
    * MCP server) — which a process-group kill cannot. Requires cgroup-v2 and the
    * privilege to `mkdir` under `/sys/fs/cgroup` (provided by the sandbox image).
    */
   readonly cgroup: string
+  /**
+   * Optional process name used for a name-based sweep on cancel (`pkill -f`)
+   * as an additional backstop beyond the cgroup kill. Stored in meta for cold
+   * reattachment.
+   */
+  readonly processName?: string
 }
 
 /** Lifecycle state of a job, derived from the filesystem on each poll. */
@@ -95,6 +101,13 @@ export interface StartJobOptions {
   /** Environment variables exported before the command runs. */
   readonly env?: Record<string, string>
   /**
+   * Optional process name for a name-based sweep on cancel (`pkill -f`).
+   * When set, cancel() will also run `pkill -9 -f <processName>` as an
+   * additional backstop to catch daemonized children that may escape
+   * even the cgroup kill (e.g. processes in other cgroup namespaces).
+   */
+  readonly processName?: string
+  /**
    * Parent directory for the job directory. One subdirectory is created per
    * job. Defaults to `/tmp/sandbox-jobs`.
    */
@@ -129,9 +142,12 @@ export interface SandboxJobs {
   /** Report job status without reading output. Cold-start safe. */
   status(handle: JobHandle): Promise<JobStatus>
   /**
-   * Terminate the job and all its descendants. Kills the job cgroup (reaping
-   * even children that escaped the process group via setsid), with a
-   * process-group kill as fallback when no cgroup is available.
+   * Terminate the job and all its descendants. Sends SIGTERM first (graceful
+   * shutdown — gives the process a chance to persist state), then after a
+   * 500ms wait kills the job cgroup (reaping even children that escaped the
+   * process group via setsid), then runs a name-based `pkill -f` sweep if a
+   * processName was provided. The cgroup is removed so page-cache charges
+   * don't accumulate.
    */
   cancel(handle: JobHandle): Promise<void>
   /**

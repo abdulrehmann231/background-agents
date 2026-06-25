@@ -87,7 +87,8 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
       `{ setsid sh -c ${q(inner)} < /dev/null > /dev/null 2>&1 & echo $!; }`
 
     const pgid = parsePid(await exec(launch))
-    const handle: JobHandle = { jobId, dir, outputFile, exitFile, pgid, cgroup }
+    const processName = opts.processName
+    const handle: JobHandle = { jobId, dir, outputFile, exitFile, pgid, cgroup, processName }
 
     // Persist a small job-meta so a cold caller can attach() from just the id.
     // base64 + atomic rename: arbitrary JSON crosses the shell safely and a
@@ -97,6 +98,7 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
     const metaJson = JSON.stringify({
       jobId,
       pgid,
+      processName,
       outputFile,
       exitFile,
       dir,
@@ -112,11 +114,16 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
     return handle
   }
 
-  /** Shell that prints the `EXIT:`/`STATE:` status header (see parseHeader). */
+  /** Shell that prints the `EXIT:`/`STATE:` status header (see parseHeader).
+   *  Also cleans up the job cgroup when the process has exited, preventing
+   *  page-cache charges from accumulating in orphaned cgroups. */
   function statusHeader(handle: JobHandle): string {
     return (
       `EC=$(cat ${q(handle.exitFile)} 2>/dev/null); printf 'EXIT:%s\\n' "$EC"; ` +
-      `ST=$(ps -o state= -p ${handle.pgid} 2>/dev/null | tr -d ' \\n'); printf 'STATE:%s\\n' "$ST"; `
+      `ST=$(ps -o state= -p ${handle.pgid} 2>/dev/null | tr -d ' \\n'); printf 'STATE:%s\\n' "$ST"; ` +
+      // When the exit file exists the job is terminal — remove the cgroup so
+      // its page-cache charge doesn't accumulate as a persistent RAM floor.
+      `[ -n "$EC" ] && sudo -n rmdir ${q(handle.cgroup)} 2>/dev/null; true; `
     )
   }
 
@@ -137,14 +144,24 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
   }
 
   async function cancel(handle: JobHandle): Promise<void> {
-    // cgroup.kill atomically SIGKILLs EVERY member of the job cgroup — including
-    // children that escaped the process group via setsid() (e.g. a daemonized
-    // MCP server), which a process-group kill would miss and leak. Then record
-    // a deterministic exit sentinel so the job reads back as terminal even if
-    // the wrapper was killed before it could write `$?`, and rmdir the
-    // now-empty cgroup so job cgroups don't accumulate.
+    // Three-layer termination:
+    //   1. SIGTERM to the process group — graceful shutdown, gives the agent
+    //      (e.g. Claude Code) a chance to persist conversation state before
+    //      being killed. This is what fixes the "No conversation found" error.
+    //   2. 500ms wait — allow SIGTERM to be processed.
+    //   3. cgroup.kill — SIGKILLs EVERY member of the job cgroup, including
+    //      children that escaped the process group via setsid() (e.g. daemonized
+    //      MCP servers), which a process-group kill would miss.
+    //   4. pkill -f by name — additional backstop for processes in other cgroup
+    //      namespaces that the cgroup kill can't reach.
+    // Then record a deterministic exit sentinel so the job reads back as
+    // terminal even if the wrapper was killed before it could write `$?`, and
+    // rmdir the now-empty cgroup so page-cache charges don't accumulate.
     await exec(
-      `echo 1 | sudo -n tee ${q(`${handle.cgroup}/cgroup.kill`)} >/dev/null 2>&1; ` +
+      `kill -TERM -- -${handle.pgid} 2>/dev/null || true; ` +
+        `sleep 0.5; ` +
+        `echo 1 | sudo -n tee ${q(`${handle.cgroup}/cgroup.kill`)} >/dev/null 2>&1; ` +
+        (handle.processName ? `pkill -9 -f ${q(handle.processName)} 2>/dev/null || true; ` : "") +
         `test -f ${q(handle.exitFile)} || echo ${CANCELLED_EXIT_CODE} > ${q(handle.exitFile)}; ` +
         `sudo -n rmdir ${q(handle.cgroup)} 2>/dev/null; true`,
       10
@@ -165,6 +182,7 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
         exitFile: m.exitFile,
         pgid: m.pgid,
         cgroup: cgroupPath(jobId),
+        processName: m.processName,
       }
     } catch {
       return null

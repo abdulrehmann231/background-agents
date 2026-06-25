@@ -154,6 +154,7 @@ class BackgroundSessionImpl implements BackgroundSession {
       command: this.renderCommand(spec),
       cwd: spec.cwd,
       env: spec.env,
+      processName: this.agent.name,
       // Nest each turn's job under the session dir (one dir per job).
       root: this.sessionDir,
     })
