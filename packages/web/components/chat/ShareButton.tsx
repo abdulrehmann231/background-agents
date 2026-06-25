@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Share2, Copy, Check, Loader2, Globe, Link2Off } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { notify } from "@/lib/notify"
+import { useShareChat } from "@/lib/hooks/useShareChat"
 import {
   Popover,
   PopoverTrigger,
@@ -27,52 +27,8 @@ interface ShareButtonProps {
 
 export function ShareButton({ chatId, initialShareId }: ShareButtonProps) {
   const [open, setOpen] = useState(false)
-  const [shareId, setShareId] = useState<string | null>(initialShareId ?? null)
-  const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
-
-  const shareUrl =
-    shareId && typeof window !== "undefined"
-      ? `${window.location.origin}/share/${shareId}`
-      : ""
-
-  const enableShare = async () => {
-    setBusy(true)
-    try {
-      const res = await fetch(`/api/chats/${chatId}/share`, { method: "POST" })
-      if (!res.ok) throw new Error("Failed to create link")
-      const data = (await res.json()) as { shareId: string }
-      setShareId(data.shareId)
-    } catch {
-      notify({ title: "Couldn't create share link" })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const revokeShare = async () => {
-    setBusy(true)
-    try {
-      const res = await fetch(`/api/chats/${chatId}/share`, { method: "DELETE" })
-      if (!res.ok) throw new Error("Failed to revoke link")
-      setShareId(null)
-    } catch {
-      notify({ title: "Couldn't revoke share link" })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const copyLink = async () => {
-    if (!shareUrl) return
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      notify({ title: "Couldn't copy link" })
-    }
-  }
+  const { shareId, busy, copied, shareUrl, enableShare, revokeShare, copyLink } =
+    useShareChat(chatId, initialShareId)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
