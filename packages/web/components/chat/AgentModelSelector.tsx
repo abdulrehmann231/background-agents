@@ -47,7 +47,7 @@ const agents = ALL_AGENTS
 /**
  * Picker status for an agent's readiness dot:
  *  - "ready"     → green dot (free usage available or the user is set up)
- *  - "exhausted" → red dot (its only usage was a shared pool that's now used up)
+ *  - "exhausted" → yellow dot (its only usage was a shared pool that's now used up)
  *  - null        → no dot (needs setup)
  * Single source of truth for the dot color and its tooltip/description text.
  */
@@ -349,7 +349,7 @@ export function AgentModelSelector({
                     className={cn(
                       "h-2 w-2 shrink-0 rounded-full",
                       status?.tone === "exhausted"
-                        ? "bg-red-500"
+                        ? "bg-yellow-500"
                         : status?.tone === "ready"
                           ? "bg-green-500"
                           : "bg-transparent"

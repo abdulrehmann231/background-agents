@@ -450,7 +450,7 @@ export function agentUsesSharedPool(
  * leaving nothing the user can actually run. Currently only the Claude shared
  * pool is metered (CLAUDE_DAILY_LIMIT_EXCEEDED); "exhausted" means the limit is
  * hit AND the user has no personal Anthropic credentials to fall back on. The
- * agent picker shows a red dot for this state — distinct from "ready" (green)
+ * agent picker shows a yellow dot for this state — distinct from "ready" (green)
  * and "needs setup" (no dot).
  */
 export function agentSharedPoolExhausted(
