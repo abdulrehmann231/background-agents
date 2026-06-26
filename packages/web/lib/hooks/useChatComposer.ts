@@ -22,7 +22,7 @@ import {
   agentModels,
   hasCredentialsForModel,
   getDefaultAgent,
-  getDefaultModelForAgent,
+  resolveModelForAgent,
   agentSupportsPlanMode,
 } from "@/lib/types"
 import { filterSlashCommandsWithConflict } from "@background-agents/common"
@@ -126,7 +126,7 @@ export function useChatComposer({
   // Get current agent/model (from chat, the user's preference, or auto-resolved
   // from credential flags). Uses ?? so we don't trip over the empty string.
   const currentAgent = (chat?.agent ?? settings.defaultAgent ?? getDefaultAgent()) as Agent
-  const currentModel = chat?.model ?? settings.defaultModel ?? getDefaultModelForAgent(currentAgent, credentialFlags)
+  const currentModel = chat?.model ?? resolveModelForAgent(currentAgent, credentialFlags, settings.defaultModel)
 
   // Check if the selected model has required credentials
   const availableModels = agentModels[currentAgent] ?? []

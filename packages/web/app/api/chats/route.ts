@@ -10,7 +10,7 @@ import { logActivityAsync } from "@/lib/db/activity-log"
 import {
   agentModels,
   getDefaultAgent,
-  getDefaultModelForAgent,
+  resolveModelForAgent,
   hasCredentialsForModel,
   type Agent,
 } from "@background-agents/common"
@@ -165,18 +165,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       ? requestedAgent
       : getDefaultAgent()
 
-    let finalModel: string | null = body.model ?? null
-    if (!finalModel) {
-      const settingsModel = userSettings.defaultModel
-      const settingsModelConfig = settingsModel
-        ? (agentModels[finalAgent] ?? []).find((m) => m.value === settingsModel)
-        : undefined
-      finalModel =
-        settingsModelConfig &&
-        hasCredentialsForModel(settingsModelConfig, flags, finalAgent)
-          ? settingsModel!
-          : getDefaultModelForAgent(finalAgent, flags)
-    }
+    const finalModel: string =
+      body.model ?? resolveModelForAgent(finalAgent, flags, userSettings.defaultModel)
 
     const chat = await prisma.chat.create({
       data: {

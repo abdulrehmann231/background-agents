@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import {
   NEW_REPOSITORY,
   getDefaultAgent,
-  getDefaultModelForAgent,
+  resolveModelForAgent,
   type Agent,
   type Chat,
   type CredentialFlags,
@@ -139,7 +139,7 @@ export function useDraftChat({
     // This applies when there's no session AND either no chat ID or the chat ID is a draft
     if (!session && (!currentChatId || isDraftChatId(currentChatId))) {
       const resolvedAgent = (draftAgent ?? settings.defaultAgent ?? getDefaultAgent()) as Agent
-      const resolvedModel = draftModel ?? settings.defaultModel ?? getDefaultModelForAgent(resolvedAgent, credentialFlags)
+      const resolvedModel = draftModel ?? resolveModelForAgent(resolvedAgent, credentialFlags, settings.defaultModel)
       return {
         id: currentChatId ?? unauthDraftIdRef.current,
         repo: NEW_REPOSITORY,
@@ -160,7 +160,7 @@ export function useDraftChat({
     // Case 2: Authenticated user with a draft chat ID - use draftChatConfig
     if (session && currentChatId && isDraftChatId(currentChatId) && draftChatConfig) {
       const resolvedAgent = (draftChatConfig.agent ?? settings.defaultAgent ?? getDefaultAgent()) as Agent
-      const resolvedModel = draftChatConfig.model ?? settings.defaultModel ?? getDefaultModelForAgent(resolvedAgent, credentialFlags)
+      const resolvedModel = draftChatConfig.model ?? resolveModelForAgent(resolvedAgent, credentialFlags, settings.defaultModel)
       const messages = messagesFor(currentChatId)
       return {
         id: currentChatId,

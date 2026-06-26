@@ -20,6 +20,7 @@ export {
   agentSupportsPlanMode,
   getDefaultAgent,
   getDefaultModelForAgent,
+  resolveModelForAgent,
   getAgentModels,
   getModelLabel,
   hasCredentialsForModel,

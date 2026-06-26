@@ -531,6 +531,36 @@ export function getDefaultModelForAgent(
 }
 
 /**
+ * Resolve which model an agent should use, honoring the user's saved default
+ * model preference when it makes sense.
+ *
+ * `preferredModel` is the user's settings default (`settings.defaultModel`). It
+ * is stored as a pair with `settings.defaultAgent`, so it only ever belongs to
+ * one agent. We honor it only when it actually belongs to the agent we're
+ * resolving for AND the user can use it right now (free or configured — no lock
+ * icon); otherwise the preference is irrelevant or broken and we fall back to
+ * the standard default (first usable model, else the hardcoded default).
+ *
+ * Membership is checked against `getAgentModels`, so a saved preference pointing
+ * at a custom endpoint resolves correctly when endpoints are supplied.
+ */
+export function resolveModelForAgent(
+  agent: Agent,
+  flags: CredentialFlags | null | undefined,
+  preferredModel: string | null | undefined,
+  endpoints?: CustomEndpoint[]
+): string {
+  if (preferredModel) {
+    const models = getAgentModels(agent, endpoints)
+    const preferredConfig = models.find(m => m.value === preferredModel)
+    if (preferredConfig && hasCredentialsForModel(preferredConfig, flags, agent)) {
+      return preferredModel
+    }
+  }
+  return getDefaultModelForAgent(agent, flags)
+}
+
+/**
  * Pick env vars to inject for a given agent + model. The credentials map is
  * already keyed by env var name, so this is a relevance filter with two
  * special cases: claude-code prefers the subscription token over the API

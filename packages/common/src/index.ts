@@ -45,6 +45,7 @@ export {
   agentIsReady,
   hasCredentialsForModel,
   getDefaultModelForAgent,
+  resolveModelForAgent,
   getAgentModels,
   getModelLabel,
   getEnvForModel,

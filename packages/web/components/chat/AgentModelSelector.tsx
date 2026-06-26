@@ -5,7 +5,7 @@ import { ChevronDown, Cpu, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
-import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, getDefaultAgent, ALL_AGENTS } from "@/lib/types"
+import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, resolveModelForAgent, ALL_AGENTS } from "@/lib/types"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
@@ -106,21 +106,11 @@ export function AgentModelSelector({
 
     // Update chat's agent if possible
     if (chat && onUpdateChat) {
+      // Pick a model that works right now for the agent we're switching to:
+      // honor the user's saved default model when it belongs to this agent and
+      // is usable, otherwise the first free/configured model (see resolver).
       const models = getAgentModels(agent, endpoints)
-
-      // Pick the default model for the agent we're switching to:
-      // 1. If this is the user's default agent and they have a default model set
-      //    (and it's still valid for this agent), honor that preference.
-      // 2. Otherwise, the first model that's free or configured (no lock icon).
-      // 3. Otherwise, just the first model in the list.
-      const defaultAgent = (settingsData?.settings?.defaultAgent ?? getDefaultAgent()) as Agent
-      const settingsDefaultModel = settingsData?.settings?.defaultModel
-      const preferredModel =
-        agent === defaultAgent && settingsDefaultModel && models.some(m => m.value === settingsDefaultModel)
-          ? settingsDefaultModel
-          : undefined
-      const firstUnlocked = models.find(m => hasCredentialsForModel(m, credentialFlags, agent))
-      const newModel = preferredModel || firstUnlocked?.value || models[0]?.value || currentModel
+      const newModel = resolveModelForAgent(agent, credentialFlags, settingsData?.settings?.defaultModel, endpoints)
       onUpdateChat({ agent, model: newModel })
 
       // Check if the new model requires credentials we don't have

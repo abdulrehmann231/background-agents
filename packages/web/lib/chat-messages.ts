@@ -7,7 +7,7 @@
 // in chat-messages.test.ts instead of being buried inline in the hook.
 
 import type { Chat, Message, Settings, Agent, CredentialFlags } from "@/lib/types"
-import { getDefaultAgent, getDefaultModelForAgent, sharedClaudePoolEligible } from "@/lib/types"
+import { getDefaultAgent, resolveModelForAgent, sharedClaudePoolEligible } from "@/lib/types"
 import type { SettingsData } from "@/lib/query"
 import { generateBranchName } from "@/lib/utils"
 
@@ -138,7 +138,7 @@ export function resolveAgentAndModel(
 ): { agent: Agent; model: string } {
   const agent = (explicitAgent ?? chat.agent ?? settings.defaultAgent ?? getDefaultAgent()) as Agent
   const model =
-    explicitModel ?? chat.model ?? settings.defaultModel ?? getDefaultModelForAgent(agent, credentialFlags)
+    explicitModel ?? chat.model ?? resolveModelForAgent(agent, credentialFlags, settings.defaultModel)
   return { agent, model }
 }
 
