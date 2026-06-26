@@ -319,13 +319,16 @@ export function AgentModelSelector({
               >
                 <AgentIcon agent={agent} className="h-3.5 w-3.5" />
                 <span className="flex-1 truncate">{agentLabels[agent]}</span>
-                {agentIsReady(agent, credentialFlags) && (
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-green-500"
-                    title={agentHasFreeUsage(agent, credentialFlags) ? "Free usage available" : "Ready to use"}
-                    aria-label={agentHasFreeUsage(agent, credentialFlags) ? "Free usage available" : "Ready to use"}
-                  />
-                )}
+                <span
+                  className={cn(
+                    "h-2 w-2 shrink-0 rounded-full",
+                    agentIsReady(agent, credentialFlags)
+                      ? "bg-green-500"
+                      : "bg-transparent"
+                  )}
+                  title={agentIsReady(agent, credentialFlags) ? (agentHasFreeUsage(agent, credentialFlags) ? "Free usage available" : "Ready to use") : undefined}
+                  aria-label={agentIsReady(agent, credentialFlags) ? (agentHasFreeUsage(agent, credentialFlags) ? "Free usage available" : "Ready to use") : undefined}
+                />
               </button>
             ))}
           </div>
