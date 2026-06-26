@@ -6,7 +6,16 @@ import { cn } from "@/lib/utils"
 import type { Message } from "@/lib/types"
 import type { SharedChat } from "@/lib/server/shared-chat"
 import { MessageBubble } from "@/components/MessageBubble"
-import { SystemMessage } from "@/components/message"
+
+/** Minimal centered divider marking where inherited parent history ends. */
+function BranchDivider() {
+  return (
+    <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground">
+      <GitBranch className="h-3 w-3 shrink-0" />
+      <span>History above is inherited from the parent chat</span>
+    </div>
+  )
+}
 
 // =============================================================================
 // SharedChatView — public, read-only rendering of a shared chat
@@ -66,13 +75,7 @@ export function SharedChatView({ chat }: SharedChatViewProps) {
                 !message.inherited && !!chat.messages[index - 1]?.inherited
               return (
                 <Fragment key={message.id}>
-                  {isBranchStart && (
-                    <SystemMessage
-                      icon={GitBranch}
-                      content="Chat branched — history above is from the parent chat."
-                      variant="success"
-                    />
-                  )}
+                  {isBranchStart && <BranchDivider />}
                   <div className={cn(message.inherited && "opacity-60")}>
                     <MessageBubble
                       // SharedMessage carries the same fields MessageBubble reads;
@@ -89,13 +92,7 @@ export function SharedChatView({ chat }: SharedChatViewProps) {
           {/* Branch with no own messages yet: the divider goes after the
               inherited history so it's clear the conversation continues below. */}
           {chat.messages.length > 0 &&
-            chat.messages[chat.messages.length - 1]?.inherited && (
-              <SystemMessage
-                icon={GitBranch}
-                content="Chat branched — history above is from the parent chat."
-                variant="success"
-              />
-            )}
+            chat.messages[chat.messages.length - 1]?.inherited && <BranchDivider />}
         </div>
       </main>
     </div>

@@ -5,7 +5,6 @@ import type { Chat, Agent } from "@/lib/types"
 import type { GitContextValue } from "@/lib/contexts/GitContext"
 import { ErrorBanner } from "./ErrorBanner"
 import { MessageBubble } from "../MessageBubble"
-import { SystemMessage } from "../message"
 
 interface ChatMessageListProps {
   chat: Chat
@@ -225,16 +224,13 @@ export function ChatMessageList({
 
 /**
  * Marks where the inherited parent history (shown for context, rendered muted)
- * ends and this branch's own conversation begins. Styled like the git-operation
- * system messages (e.g. "Rebased X onto Y").
+ * ends and this branch's own conversation begins. Minimal centered divider.
  */
-function BranchDivider({ isMobile }: { isMobile: boolean }) {
+function BranchDivider({ isMobile: _isMobile }: { isMobile: boolean }) {
   return (
-    <SystemMessage
-      icon={GitBranch}
-      content="Chat branched — history above is from the parent chat."
-      variant="success"
-      isMobile={isMobile}
-    />
+    <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground">
+      <GitBranch className="h-3 w-3 shrink-0" />
+      <span>History above is inherited from the parent chat</span>
+    </div>
   )
 }
