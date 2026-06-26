@@ -140,6 +140,13 @@ export function getAgentSandboxImage(): Image {
         // Install Kilo CLI
         "npm install -g @kilocode/cli"
       )
+      // Create daytona user (non-root) - Claude Code refuses to run as root.
+      // Must come before the Kimi install below, which chowns its output to
+      // the daytona user (and uses /home/daytona as HOME).
+      .runCommands(
+        "useradd -m -s /bin/bash daytona || true && " +
+          "echo 'daytona ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers"
+      )
       .runCommands(
         // Install Kimi Code CLI (Moonshot). Shell-script installer, not npm —
         // run with HOME pointed at the daytona user so the `kimi` binary lands
@@ -154,11 +161,6 @@ export function getAgentSandboxImage(): Image {
         // Install tokscale (token/cost metering). Binary embeds at build time
         // via @tokscale/cli's platform optionalDependency — no runtime download.
         `npm install -g tokscale@${TOKSCALE_VERSION}`
-      )
-      // Create daytona user (non-root) - Claude Code refuses to run as root
-      .runCommands(
-        "useradd -m -s /bin/bash daytona || true && " +
-          "echo 'daytona ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers"
       )
       // Install Goose binary
       .runCommands(
