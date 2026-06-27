@@ -1,7 +1,7 @@
 {
   "name": "@background-agents/agent-configuration",
   "version": "0.1.0",
-  "description": "Translation layer between coding agents' configuration formats (MCP servers and command-permission policies)",
+  "description": "Translation layer between coding agents' configuration formats",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "type": "module",
