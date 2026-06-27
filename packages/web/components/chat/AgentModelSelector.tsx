@@ -1,15 +1,28 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { ChevronDown, Key, Cpu } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { ChevronDown, Cpu, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
-import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, ALL_AGENTS } from "@/lib/types"
+import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, resolveModelForAgent, ALL_AGENTS } from "@/lib/types"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
 import type { HighlightKey } from "../modals/SettingsModal"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 
 // =============================================================================
 // AgentModelSelector - Dropdown selectors for agent and model
@@ -30,6 +43,29 @@ interface AgentModelSelectorProps {
 }
 
 const agents = ALL_AGENTS
+
+/**
+ * Picker status for an agent's readiness dot:
+ *  - "ready"     → green dot (free usage available or the user is set up)
+ *  - "exhausted" → yellow dot (its only usage was a shared pool that's now used up)
+ *  - null        → no dot (needs setup)
+ * Single source of truth for the dot color and its tooltip/description text.
+ */
+function getAgentStatus(
+  agent: Agent,
+  flags: CredentialFlags
+): { tone: "ready" | "exhausted"; label: string } | null {
+  if (agentSharedPoolExhausted(agent, flags)) {
+    return { tone: "exhausted", label: "Free usage limit reached" }
+  }
+  if (agentIsReady(agent, flags)) {
+    return {
+      tone: "ready",
+      label: agentHasFreeUsage(agent, flags) ? "Free usage available" : "Ready to use",
+    }
+  }
+  return null
+}
 
 export function AgentModelSelector({
   chat,
@@ -52,6 +88,7 @@ export function AgentModelSelector({
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [showAgentSheet, setShowAgentSheet] = useState(false)
   const [showModelSheet, setShowModelSheet] = useState(false)
+  const [search, setSearch] = useState("")
 
   const availableModels = getAgentModels(currentAgent, endpoints)
   const selectedModelConfig = availableModels.find(m => m.value === currentModel)
@@ -74,7 +111,6 @@ export function AgentModelSelector({
       const target = e.target as HTMLElement
       if (!target.closest('[data-dropdown]')) {
         setShowAgentDropdown(false)
-        setShowModelDropdown(false)
       }
     }
     document.addEventListener('click', handleClickOutside)
@@ -93,8 +129,11 @@ export function AgentModelSelector({
 
     // Update chat's agent if possible
     if (chat && onUpdateChat) {
+      // Pick a model that works right now for the agent we're switching to:
+      // honor the user's saved default model when it belongs to this agent and
+      // is usable, otherwise the first free/configured model (see resolver).
       const models = getAgentModels(agent, endpoints)
-      const newModel = models[0]?.value || currentModel
+      const newModel = resolveModelForAgent(agent, credentialFlags, settingsData?.settings?.defaultModel, endpoints)
       onUpdateChat({ agent, model: newModel })
 
       // Check if the new model requires credentials we don't have
@@ -107,7 +146,7 @@ export function AgentModelSelector({
         }
       }
     }
-  }, [chat, currentModel, credentialFlags, endpoints, onUpdateChat, showClaudeLimitDialog, modals])
+  }, [chat, currentModel, credentialFlags, endpoints, settingsData, onUpdateChat, showClaudeLimitDialog, modals])
 
   const handleModelChange = useCallback((model: string) => {
     setShowModelDropdown(false)
@@ -127,14 +166,86 @@ export function AgentModelSelector({
     }
   }, [chat, availableModels, credentialFlags, currentAgent, onUpdateChat, modals])
 
+  // Determine which section heading a model belongs to
+  const getModelSection = useCallback((model: ModelOption): string => {
+    if (model.requiresKey === "none") return "Free"
+    if (model.value.startsWith("endpoint:")) return "Custom Endpoints"
+
+    if (currentAgent === "opencode") {
+      if (model.value.startsWith("opencode-go/")) return "OpenCode Go"
+      if (model.value.startsWith("opencode/")) return "OpenCode Zen"
+      if (model.value.startsWith("anthropic/")) return "Anthropic Direct"
+      if (model.value.startsWith("openai/")) return "OpenAI Direct"
+      return "OpenCode"
+    }
+
+    if (currentAgent === "kilo") {
+      if (model.value.includes("/anthropic/")) return "Anthropic"
+      if (model.value.includes("/openai/")) return "OpenAI"
+      if (model.value.includes("/google/")) return "Google"
+      if (model.value.includes("/deepseek/")) return "DeepSeek"
+      return "Other Models"
+    }
+
+    switch (model.requiresKey) {
+      case "anthropic": return "Anthropic"
+      case "openai": return "OpenAI"
+      case "gemini": return "Google"
+      case "github": return "GitHub"
+      case "kimi": return "Moonshot"
+      case "kilo": return "Kilo"
+      case "opencode": return "OpenCode"
+      default: return "Other"
+    }
+  }, [currentAgent])
+
+  // Filter, group, and sort models: ready sections first, locked sections last
+  const modelSections = useMemo(() => {
+    let models = availableModels
+    if (search.trim()) {
+      const searchLower = search.toLowerCase()
+      models = availableModels.filter((m) =>
+        m.label.toLowerCase().includes(searchLower)
+      )
+    }
+
+    const readySections = new Map<string, ModelOption[]>()
+    const lockedSections = new Map<string, ModelOption[]>()
+    const readyOrder: string[] = []
+    const lockedOrder: string[] = []
+
+    for (const model of models) {
+      const hasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
+      const isLocked = model.requiresKey !== "none" && !hasCredentials
+      const targetMap = isLocked ? lockedSections : readySections
+      const targetOrder = isLocked ? lockedOrder : readyOrder
+      const section = getModelSection(model)
+
+      if (!targetMap.has(section)) {
+        targetMap.set(section, [])
+        targetOrder.push(section)
+      }
+      targetMap.get(section)!.push(model)
+    }
+
+    const result: { label: string; models: ModelOption[] }[] = []
+    for (const label of readyOrder) {
+      result.push({ label, models: readySections.get(label)! })
+    }
+    for (const label of lockedOrder) {
+      result.push({ label, models: lockedSections.get(label)! })
+    }
+    return result
+  }, [availableModels, search, credentialFlags, currentAgent, getModelSection])
+
   // Prepare agent options for mobile bottom sheet
   const agentOptions = agents.map(agent => ({
     value: agent,
     label: agentLabels[agent],
     icon: <AgentIcon agent={agent} className="h-5 w-5" />,
-    // Surface free usage: shared-pool agents (until the user adds their own key)
-    // and agents with always-free models like Kilo.
-    description: agentHasFreeUsage(agent, credentialFlags) ? "Free usage available" : undefined,
+    // Surface the agent's status: ready to use (free or configured), or a
+    // used-up free pool with nothing else to fall back on.
+    description: getAgentStatus(agent, credentialFlags)?.label,
   }))
 
   // Prepare model options for mobile bottom sheet
@@ -145,7 +256,7 @@ export function AgentModelSelector({
       value: model.value,
       label: model.label,
       description: needsKey ? "Requires API key" : undefined,
-      icon: needsKey ? <Key className="h-5 w-5 text-red-500" /> : undefined,
+      icon: needsKey ? <Lock className="h-5 w-5 text-muted-foreground" /> : undefined,
     }
   })
 
@@ -172,7 +283,7 @@ export function AgentModelSelector({
           )}
           title={getModelLabel(currentAgent, currentModel, endpoints)}
         >
-          {!hasRequiredCredentials && <Key className="h-4 w-4" />}
+          {!hasRequiredCredentials && <Lock className="h-4 w-4" />}
           <Cpu className="h-4 w-4 @[18rem]/row2:hidden" />
           <span className="hidden @[18rem]/row2:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
           <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
@@ -220,74 +331,105 @@ export function AgentModelSelector({
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {showAgentDropdown && (
-          <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40">
-            {agents.map((agent) => (
-              <button
-                key={agent}
-                onClick={() => handleAgentChange(agent)}
-                className={cn(
-                  "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
-                  agent === currentAgent && "bg-accent"
-                )}
-              >
-                <AgentIcon agent={agent} className="h-3.5 w-3.5" />
-                <span className="flex-1 truncate">{agentLabels[agent]}</span>
-                {agentHasFreeUsage(agent, credentialFlags) && (
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-green-500"
-                    title="Free usage available"
-                    aria-label="Free usage available"
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Model selector - Desktop */}
-      <div className="relative" data-dropdown>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            const opening = !showModelDropdown
-            setShowModelDropdown(opening)
-            setShowAgentDropdown(false)
-            if (opening) onDropdownOpen?.()
-          }}
-          className={cn(
-            "flex items-center gap-1 text-sm transition-colors cursor-pointer",
-            !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
-          )}
-          title={getModelLabel(currentAgent, currentModel, endpoints)}
-        >
-          {!hasRequiredCredentials && <Key className="h-3.5 w-3.5" />}
-          <Cpu className="h-3.5 w-3.5 @[32rem]:hidden" />
-          <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
-        {showModelDropdown && (
-          <div className="absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52">
-            {availableModels.map((model: ModelOption) => {
-              const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
-              const needsKey = model.requiresKey !== "none" && !modelHasCredentials
+          <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-48">
+            {agents.map((agent) => {
+              const status = getAgentStatus(agent, credentialFlags)
               return (
                 <button
-                  key={model.value}
-                  onClick={() => handleModelChange(model.value)}
+                  key={agent}
+                  onClick={() => handleAgentChange(agent)}
                   className={cn(
-                    "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer",
-                    model.value === currentModel && "bg-accent"
+                    "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer",
+                    agent === currentAgent && "bg-accent"
                   )}
                 >
-                  <span>{model.label}</span>
-                  {needsKey && <Key className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                  <AgentIcon agent={agent} className="h-3.5 w-3.5" />
+                  <span className="flex-1 truncate">{agentLabels[agent]}</span>
+                  <span
+                    className={cn(
+                      "h-2 w-2 shrink-0 rounded-full",
+                      status?.tone === "exhausted"
+                        ? "bg-yellow-500"
+                        : status?.tone === "ready"
+                          ? "bg-green-500"
+                          : "bg-transparent"
+                    )}
+                    title={status?.label}
+                    aria-label={status?.label}
+                  />
                 </button>
               )
             })}
           </div>
         )}
       </div>
+
+      {/* Model selector - Desktop */}
+      <Popover open={showModelDropdown} onOpenChange={(open) => {
+        setShowModelDropdown(open)
+        if (open) {
+          setShowAgentDropdown(false)
+          onDropdownOpen?.()
+        } else {
+          setSearch("")
+        }
+      }}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              "flex items-center gap-1 text-sm transition-colors cursor-pointer",
+              !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
+            )}
+            title={getModelLabel(currentAgent, currentModel, endpoints)}
+          >
+            {!hasRequiredCredentials && <Lock className="h-3.5 w-3.5" />}
+            <Cpu className="h-3.5 w-3.5 @[32rem]:hidden" />
+            <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-64 p-0"
+          align="end"
+          side="top"
+          sideOffset={4}
+        >
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Search models..."
+              value={search}
+              onValueChange={setSearch}
+            />
+            <CommandList>
+              <CommandEmpty>No models found</CommandEmpty>
+              {modelSections.map((section) => (
+                <CommandGroup key={section.label} heading={section.label}>
+                  {section.models.map((model) => {
+                    const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
+                    const needsKey = model.requiresKey !== "none" && !modelHasCredentials
+                    return (
+                      <CommandItem
+                        key={model.value}
+                        value={model.value}
+                        onSelect={() => handleModelChange(model.value)}
+                        className={cn(
+                          "flex items-center justify-between cursor-pointer",
+                          model.value === currentModel && "bg-accent"
+                        )}
+                      >
+                        <span>{model.label}</span>
+                        {needsKey && (
+                          <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        )}
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </>
   )
 }

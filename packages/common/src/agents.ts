@@ -206,46 +206,46 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   ],
   "opencode": [
     // Free models (opencode/) - no API key needed
-    { value: "opencode/big-pickle", label: "Big Pickle (Free)", requiresKey: "none" },
-    { value: "opencode/nemotron-3-ultra-free", label: "Nemotron 3 Ultra (Free)", requiresKey: "none" },
-    { value: "opencode/deepseek-v4-flash-free", label: "DeepSeek V4 Flash (Free)", requiresKey: "none" },
-    { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5 (Free)", requiresKey: "none" },
+    { value: "opencode/big-pickle", label: "Big Pickle", requiresKey: "none" },
+    { value: "opencode/nemotron-3-ultra-free", label: "Nemotron 3 Ultra", requiresKey: "none" },
+    { value: "opencode/deepseek-v4-flash-free", label: "DeepSeek V4 Flash", requiresKey: "none" },
+    { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5", requiresKey: "none" },
     // Curated OpenCode Go models (opencode-go/ prefix), runnable on the
     // server-shared Go subscription key. Shown first when OPENCODE_API_KEY is
     // available. These route through Go, not Zen — see SHARED_OPENCODE_ALLOWED.
-    { value: "opencode-go/glm-5", label: "GLM-5 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/glm-5.1", label: "GLM-5.1 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/kimi-k2.5", label: "Kimi K2.5 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/mimo-v2.5", label: "MiMo v2.5 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/mimo-v2.5-pro", label: "MiMo v2.5 Pro (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/minimax-m2.5", label: "MiniMax M2.5 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/minimax-m2.7", label: "MiniMax M2.7 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/minimax-m3", label: "MiniMax M3 (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/qwen3.6-plus", label: "Qwen3.6 Plus (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/qwen3.7-max", label: "Qwen3.7 Max (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/deepseek-v4-pro", label: "DeepSeek V4 Pro (Go)", requiresKey: "opencode" },
-    { value: "opencode-go/deepseek-v4-flash", label: "DeepSeek V4 Flash (Go)", requiresKey: "opencode" },
+    { value: "opencode-go/glm-5", label: "GLM-5", requiresKey: "opencode" },
+    { value: "opencode-go/glm-5.1", label: "GLM-5.1", requiresKey: "opencode" },
+    { value: "opencode-go/kimi-k2.5", label: "Kimi K2.5", requiresKey: "opencode" },
+    { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6", requiresKey: "opencode" },
+    { value: "opencode-go/mimo-v2.5", label: "MiMo v2.5", requiresKey: "opencode" },
+    { value: "opencode-go/mimo-v2.5-pro", label: "MiMo v2.5 Pro", requiresKey: "opencode" },
+    { value: "opencode-go/minimax-m2.5", label: "MiniMax M2.5", requiresKey: "opencode" },
+    { value: "opencode-go/minimax-m2.7", label: "MiniMax M2.7", requiresKey: "opencode" },
+    { value: "opencode-go/minimax-m3", label: "MiniMax M3", requiresKey: "opencode" },
+    { value: "opencode-go/qwen3.6-plus", label: "Qwen3.6 Plus", requiresKey: "opencode" },
+    { value: "opencode-go/qwen3.7-max", label: "Qwen3.7 Max", requiresKey: "opencode" },
+    { value: "opencode-go/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "opencode" },
+    { value: "opencode-go/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "opencode" },
 
     // Remaining paid models — route through OpenCode Zen (pay-as-you-go credits).
     // Preserve original order, excluding duplicates.
-    { value: "opencode/claude-sonnet-4", label: "Claude Sonnet 4 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-sonnet-4-5", label: "Claude Sonnet 4.5 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-haiku-4-5", label: "Claude Haiku 4.5 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-5", label: "Claude Opus 4.5 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-6", label: "Claude Opus 4.6 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-7", label: "Claude Opus 4.7 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/claude-opus-4-8", label: "Claude Opus 4.8 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gpt-5", label: "GPT-5 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gpt-5-codex", label: "GPT-5 Codex (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.1-codex", label: "GPT-5.1 Codex (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gpt-5-nano", label: "GPT-5 Nano (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.4", label: "GPT-5.4 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.5", label: "GPT-5.5 (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gemini-3-flash", label: "Gemini 3 Flash (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gemini-3.5-flash", label: "Gemini 3.5 Flash (Zen)", requiresKey: "opencode" },
-    { value: "opencode/gemini-3.1-pro", label: "Gemini 3.1 Pro (Zen)", requiresKey: "opencode" },
+    { value: "opencode/claude-sonnet-4", label: "Claude Sonnet 4", requiresKey: "opencode" },
+    { value: "opencode/claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "opencode" },
+    { value: "opencode/claude-sonnet-4-6", label: "Claude Sonnet 4.6", requiresKey: "opencode" },
+    { value: "opencode/claude-haiku-4-5", label: "Claude Haiku 4.5", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-5", label: "Claude Opus 4.5", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-6", label: "Claude Opus 4.6", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "opencode" },
+    { value: "opencode/gpt-5", label: "GPT-5", requiresKey: "opencode" },
+    { value: "opencode/gpt-5-codex", label: "GPT-5 Codex", requiresKey: "opencode" },
+    { value: "opencode/gpt-5.1-codex", label: "GPT-5.1 Codex", requiresKey: "opencode" },
+    { value: "opencode/gpt-5-nano", label: "GPT-5 Nano", requiresKey: "opencode" },
+    { value: "opencode/gpt-5.4", label: "GPT-5.4", requiresKey: "opencode" },
+    { value: "opencode/gpt-5.5", label: "GPT-5.5", requiresKey: "opencode" },
+    { value: "opencode/gemini-3-flash", label: "Gemini 3 Flash", requiresKey: "opencode" },
+    { value: "opencode/gemini-3.5-flash", label: "Gemini 3.5 Flash", requiresKey: "opencode" },
+    { value: "opencode/gemini-3.1-pro", label: "Gemini 3.1 Pro", requiresKey: "opencode" },
     // Anthropic direct models — route to Anthropic on the user's own Anthropic key
     { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
     { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6", requiresKey: "anthropic" },
@@ -279,7 +279,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "openai/o4-mini", label: "o4 Mini", requiresKey: "openai" },
   ],
   "codex": [
-    { value: "gpt-5.5", label: "GPT-5.5 (Recommended)", requiresKey: "openai" },
+    { value: "gpt-5.5", label: "GPT-5.5", requiresKey: "openai" },
     { value: "gpt-5.4", label: "GPT-5.4", requiresKey: "openai" },
     { value: "gpt-5.4-mini", label: "GPT-5.4 Mini", requiresKey: "openai" },
     { value: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", requiresKey: "openai" },
@@ -299,13 +299,13 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gemini-3-flash", label: "Gemini 3 Flash", requiresKey: "github" },
   ],
   "gemini": [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recommended)", requiresKey: "gemini" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", requiresKey: "gemini" },
     { value: "gemini-3-pro-preview", label: "Gemini 3 Pro", requiresKey: "gemini" },
     { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini" },
   ],
   "goose": [
-    { value: "gpt-4o", label: "GPT-4o (Recommended)", requiresKey: "openai" },
+    { value: "gpt-4o", label: "GPT-4o", requiresKey: "openai" },
     { value: "gpt-4-turbo", label: "GPT-4 Turbo", requiresKey: "openai" },
     { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
     { value: "claude-opus-4-5", label: "Claude Opus 4.5", requiresKey: "anthropic" },
@@ -318,9 +318,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "kilo/kilo-auto/frontier", label: "Auto Frontier", requiresKey: "kilo" },
     { value: "kilo/kilo-auto/small", label: "Auto Small", requiresKey: "kilo" },
     // Free models
-    { value: "kilo/deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash (Free)", requiresKey: "none" },
-    { value: "kilo/nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super (Free)", requiresKey: "none" },
-    { value: "kilo/stepfun/step-3.5-flash:free", label: "Step 3.5 Flash (Free)", requiresKey: "none" },
+    { value: "kilo/deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", requiresKey: "none" },
+    { value: "kilo/nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super", requiresKey: "none" },
+    { value: "kilo/stepfun/step-3.5-flash:free", label: "Step 3.5 Flash", requiresKey: "none" },
     // Anthropic via Kilo gateway
     { value: "kilo/anthropic/claude-opus-4.7", label: "Claude Opus 4.7", requiresKey: "kilo" },
     { value: "kilo/anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6", requiresKey: "kilo" },
@@ -347,14 +347,14 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // Moonshot (Kimi) models, routed through the user's KIMI_API_KEY against
     // https://api.moonshot.ai/v1. Each value must match a [models."<id>"] entry
     // declared in the generated ~/.kimi-code/config.toml (see the kimi agent).
-    { value: "kimi-k2.7-code", label: "Kimi K2.7 Code (Recommended)", requiresKey: "kimi" },
+    { value: "kimi-k2.7-code", label: "Kimi K2.7 Code", requiresKey: "kimi" },
     { value: "kimi-k2.7-code-highspeed", label: "Kimi K2.7 Code Highspeed", requiresKey: "kimi" },
     { value: "kimi-k2.6", label: "Kimi K2.6", requiresKey: "kimi" },
     { value: "kimi-k2.5", label: "Kimi K2.5", requiresKey: "kimi" },
   ],
   "pi": [
     // Anthropic models (default provider)
-    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5 (Recommended)", requiresKey: "anthropic" },
+    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
     { value: "claude-opus-4-5", label: "Claude Opus 4.5", requiresKey: "anthropic" },
     { value: "claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "anthropic" },
     { value: "claude-haiku-4-5", label: "Claude Haiku 4.5", requiresKey: "anthropic" },
@@ -446,18 +446,56 @@ export function agentUsesSharedPool(
 }
 
 /**
+ * Whether the agent's only route to usage is a shared pool that's been used up,
+ * leaving nothing the user can actually run. Currently only the Claude shared
+ * pool is metered (CLAUDE_DAILY_LIMIT_EXCEEDED); "exhausted" means the limit is
+ * hit AND the user has no personal Anthropic credentials to fall back on. The
+ * agent picker shows a yellow dot for this state — distinct from "ready" (green)
+ * and "needs setup" (no dot).
+ */
+export function agentSharedPoolExhausted(
+  agent: Agent,
+  flags: CredentialFlags | null | undefined
+): boolean {
+  if (agent !== "claude-code") return false
+  return (
+    !!flags?.CLAUDE_DAILY_LIMIT_EXCEEDED &&
+    !!flags?.CLAUDE_SHARED_POOL_AVAILABLE &&
+    !hasOwnAnthropicCredentials(flags)
+  )
+}
+
+/**
  * Whether picking this agent gives free usage out of the box — either a
  * server-provided shared pool (see agentUsesSharedPool) or always-free models
  * that need no API key. Kilo qualifies via its free auto-router and free model
  * tier, which stay available even when the user adds their own Kilo key. Used to
- * surface the "Free usage available" green dot in the agent picker.
+ * surface the "Free usage available" green dot in the agent picker. Returns
+ * false once a metered shared pool is exhausted (see agentSharedPoolExhausted).
  */
 export function agentHasFreeUsage(
   agent: Agent,
   flags: CredentialFlags | null | undefined
 ): boolean {
+  if (agentSharedPoolExhausted(agent, flags)) return false
   if (agent === "kilo") return true
   return agentUsesSharedPool(agent, flags)
+}
+
+/**
+ * Whether picking this agent would work right now without any further setup —
+ * either it has free usage (see agentHasFreeUsage) or the user has the
+ * credentials needed for at least one of its models (their own API key, a
+ * subscription token, etc.). Used to surface the green "ready to use" dot in the
+ * agent picker so it covers any agent that's set up to go, not just free ones.
+ */
+export function agentIsReady(
+  agent: Agent,
+  flags: CredentialFlags | null | undefined
+): boolean {
+  if (agentHasFreeUsage(agent, flags)) return true
+  const models = agentModels[agent] ?? []
+  return models.some((m) => hasCredentialsForModel(m, flags, agent))
 }
 
 /**
@@ -512,6 +550,67 @@ export function getDefaultModelForAgent(
 
   const firstAvailable = allModels.find(m => hasCredentialsForModel(m, flags, agent))
   return firstAvailable?.value || defaultModel
+}
+
+/**
+ * Resolve which model an agent should use, honoring the user's saved default
+ * model preference when it makes sense.
+ *
+ * `preferredModel` is the user's settings default (`settings.defaultModel`). It
+ * is stored as a pair with `settings.defaultAgent`, so it only ever belongs to
+ * one agent. We honor it only when it actually belongs to the agent we're
+ * resolving for AND the user can use it right now (free or configured — no lock
+ * icon); otherwise the preference is irrelevant or broken and we fall back to
+ * the standard default (first usable model, else the hardcoded default).
+ *
+ * Membership is checked against `getAgentModels`, so a saved preference pointing
+ * at a custom endpoint resolves correctly when endpoints are supplied.
+ */
+export function resolveModelForAgent(
+  agent: Agent,
+  flags: CredentialFlags | null | undefined,
+  preferredModel: string | null | undefined,
+  endpoints?: CustomEndpoint[]
+): string {
+  if (preferredModel) {
+    const models = getAgentModels(agent, endpoints)
+    const preferredConfig = models.find(m => m.value === preferredModel)
+    if (preferredConfig && hasCredentialsForModel(preferredConfig, flags, agent)) {
+      return preferredModel
+    }
+  }
+  return getDefaultModelForAgent(agent, flags)
+}
+
+/**
+ * Resolve which agent to use, following the precedence:
+ * caller-preferred → user's saved default → the hardcoded default agent.
+ * Centralizes the `as Agent` cast so call sites don't each repeat it.
+ */
+export function resolveAgent(
+  preferred: string | null | undefined,
+  settingsDefault: string | null | undefined
+): Agent {
+  return (preferred ?? settingsDefault ?? getDefaultAgent()) as Agent
+}
+
+/**
+ * Resolve an agent and its model together — the canonical pairing used wherever
+ * a new send/draft/chat needs both. The caller passes whatever it already knows
+ * (an explicit choice, the chat's current value, etc.) as the preferred values;
+ * everything else falls back through the user's settings to the defaults via
+ * resolveAgent / resolveModelForAgent.
+ */
+export function resolveAgentAndModel(
+  preferredAgent: string | null | undefined,
+  preferredModel: string | null | undefined,
+  settings: { defaultAgent?: string | null; defaultModel?: string | null },
+  flags: CredentialFlags | null | undefined,
+  endpoints?: CustomEndpoint[]
+): { agent: Agent; model: string } {
+  const agent = resolveAgent(preferredAgent, settings.defaultAgent)
+  const model = preferredModel ?? resolveModelForAgent(agent, flags, settings.defaultModel, endpoints)
+  return { agent, model }
 }
 
 /**
