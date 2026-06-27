@@ -1,30 +1,55 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 import { FileCode2 } from "lucide-react"
 import type { PanelPlugin, PanelProps, PreviewItem } from "../types"
 import { HighlightedCode, getFileTypeFromPath, ImageFullPreview, PdfFullPreview, isMarkdownPath, MarkdownPreview } from "@/lib/file-preview"
 import { PanelState } from "./PanelState"
+import { useSandboxResource, assertSandboxOk } from "@/lib/hooks/useSandboxResource"
+
+/** Parsed file payload — text content, or an object URL for binary previews. */
+type FileData =
+  | { kind: "text"; content: string }
+  | { kind: "binary"; blobUrl: string }
+
+/** Fetch and parse a file from the sandbox. Throws via {@link assertSandboxOk}. */
+async function loadFileData(args: {
+  sandboxId: string
+  filePath: string
+  fileType: string
+  autoStart: boolean
+  signal: AbortSignal
+}): Promise<FileData> {
+  const { sandboxId, filePath, fileType, autoStart, signal } = args
+  const isBinary = fileType === "image" || fileType === "pdf"
+  const action = isBinary ? "read-file-binary" : "read-file"
+
+  const res = await fetch("/api/sandbox/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sandboxId, action, filePath, autoStart }),
+    signal,
+  })
+  await assertSandboxOk(res)
+
+  if (isBinary) {
+    const blob = await res.blob()
+    // Don't leak an object URL for a load that was aborted mid-flight.
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+    return { kind: "binary", blobUrl: URL.createObjectURL(blob) }
+  }
+
+  const data = await res.json().catch(() => ({}) as { content?: unknown })
+  return { kind: "text", content: typeof data.content === "string" ? data.content : "" }
+}
 
 function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartProp }: PanelProps) {
-  const [content, setContent] = useState<string | null>(null)
-  const [blobUrl, setBlobUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  // The sandbox is stopped and this passive read declined to boot it. Bumping
-  // `resumeCount` (via the Resume button) re-runs the load with autoStart=true.
-  const [needsResume, setNeedsResume] = useState(false)
-  // The sandbox no longer exists (410). Distinct from `needsResume` (stopped)
-  // so we can show an "expired" message instead.
-  const [expired, setExpired] = useState(false)
-  const [resumeCount, setResumeCount] = useState(0)
-
   const filePath = item.type === "file" ? item.filePath : ""
   const fileType = getFileTypeFromPath(filePath)
 
   // Re-fetch when the agent finishes editing this file. Each completed
   // Edit/Write tool call targeting this path (output attached = tool finished)
-  // bumps the count, which re-runs the load effect below.
+  // bumps the count, which re-runs the load below.
   const editSignal = useMemo(() => {
     if (!filePath || !messages) return 0
     let count = 0
@@ -45,176 +70,48 @@ function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartPr
     return count
   }, [messages, filePath])
 
-  useEffect(() => {
-    if (!sandboxId) {
-      setError("No sandbox.")
-      setLoading(false)
-      return
-    }
-    if (!filePath) {
-      setError("No file path.")
-      setLoading(false)
-      return
-    }
+  const { status, data, error, retry } = useSandboxResource<FileData>({
+    sandboxId,
+    explicitStart: Boolean(autoStartProp),
+    deps: [filePath, fileType, editSignal],
+    load: ({ autoStart, signal }) =>
+      loadFileData({ sandboxId: sandboxId!, filePath, fileType, autoStart, signal }),
+  })
 
-    let cancelled = false
-
-    const loadFile = async () => {
-      setLoading(true)
-      setError(null)
-      setNeedsResume(false)
-      setExpired(false)
-
-      // This is a passive panel read: don't boot a stopped sandbox unless the
-      // user explicitly asked to (the refresh button bumps resumeCount, and the
-      // top-bar refresh passes autoStartProp).
-      const autoStart = resumeCount > 0 || Boolean(autoStartProp)
-
-      try {
-        if (fileType === "image" || fileType === "pdf") {
-          // Fetch binary content
-          const res = await fetch("/api/sandbox/files", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sandboxId, action: "read-file-binary", filePath, autoStart }),
-          })
-
-          if (cancelled) return
-
-          if (res.status === 409) {
-            setNeedsResume(true)
-            return
-          }
-          if (res.status === 410) {
-            setExpired(true)
-            return
-          }
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}))
-            setError(data.error || `Failed to load ${filePath}`)
-            return
-          }
-
-          const blob = await res.blob()
-          if (cancelled) return
-
-          const url = URL.createObjectURL(blob)
-          setBlobUrl(url)
-        } else {
-          // Fetch text content
-          const res = await fetch("/api/sandbox/files", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sandboxId, action: "read-file", filePath, autoStart }),
-          })
-
-          if (cancelled) return
-
-          if (res.status === 409) {
-            setNeedsResume(true)
-            return
-          }
-          if (res.status === 410) {
-            setExpired(true)
-            return
-          }
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            setError(data.error || `Failed to load ${filePath}`)
-            setContent(null)
-          } else {
-            setContent(typeof data.content === "string" ? data.content : "")
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load")
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadFile()
-
-    return () => {
-      cancelled = true
-      // Clean up blob URL
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl)
-      }
-    }
-  }, [sandboxId, filePath, fileType, editSignal, resumeCount])
-
-  // Cleanup blob URL on unmount
+  // Revoke the previous object URL when it changes or on unmount.
+  const blobUrl = data?.kind === "binary" ? data.blobUrl : null
   useEffect(() => {
     return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl)
-      }
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
   }, [blobUrl])
 
-  if (loading) {
-    return <PanelState status="loading" />
+  if (status === "loading") return <PanelState status="loading" />
+  if (status === "stopped") return <PanelState status="stopped" onRefresh={retry} />
+  if (status === "expired") return <PanelState status="expired" onRefresh={retry} />
+  if (status === "error") {
+    return <PanelState status="error" message={error ?? undefined} onRefresh={retry} />
   }
 
-  if (needsResume) {
-    return <PanelState status="stopped" onRefresh={() => setResumeCount((c) => c + 1)} />
-  }
-
-  if (expired) {
-    return <PanelState status="expired" onRefresh={() => setResumeCount((c) => c + 1)} />
-  }
-
-  if (error) {
-    return <PanelState status="error" message={error} onRefresh={() => setResumeCount((c) => c + 1)} />
-  }
+  const content = data?.kind === "text" ? data.content : ""
 
   // Image preview
   if (fileType === "image" && blobUrl) {
-    return (
-      <ImageFullPreview
-        src={blobUrl}
-        alt={filePath}
-        className="h-full"
-      />
-    )
+    return <ImageFullPreview src={blobUrl} alt={filePath} className="h-full" />
   }
 
   // PDF preview
   if (fileType === "pdf" && blobUrl) {
-    return (
-      <PdfFullPreview
-        src={blobUrl}
-        title={filePath}
-        className="h-full"
-        height="100%"
-      />
-    )
+    return <PdfFullPreview src={blobUrl} title={filePath} className="h-full" height="100%" />
   }
 
   // Markdown preview with GitHub-style rendering
   if (isMarkdownPath(filePath)) {
-    return (
-      <MarkdownPreview
-        content={content ?? ""}
-        className="h-full"
-        currentFilePath={filePath}
-      />
-    )
+    return <MarkdownPreview content={content} className="h-full" currentFilePath={filePath} />
   }
 
   // Code/text preview with syntax highlighting
-  return (
-    <HighlightedCode
-      code={content ?? ""}
-      filename={filePath}
-      className="h-full"
-    />
-  )
+  return <HighlightedCode code={content} filename={filePath} className="h-full" />
 }
 
 export const FileViewerPlugin: PanelPlugin = {
