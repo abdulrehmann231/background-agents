@@ -6,12 +6,20 @@ import type { FitAddon as XFitAddon } from "xterm-addon-fit"
 import { useTheme } from "next-themes"
 import { TerminalSquare, Loader2 } from "lucide-react"
 import type { PanelPlugin, PanelProps, PreviewItem } from "../types"
+import { PanelState } from "./PanelState"
+import { classifyResponse } from "@/lib/sandbox-lifecycle"
 
 // ---------------------------------------------------------------------------
 // Terminal session cache (kept alive across close/reopen within a chat)
 // ---------------------------------------------------------------------------
 
-type TerminalSessionStatus = "connecting" | "connected" | "error" | "disconnected"
+type TerminalSessionStatus =
+  | "connecting"
+  | "connected"
+  | "error"
+  | "disconnected"
+  | "stopped"
+  | "expired"
 
 interface TerminalSession {
   /** Detached div that xterm renders into. Moved between containers on remount. */
@@ -96,8 +104,16 @@ async function setupAndConnect(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sandboxId, action: "setup" }),
     })
+    // Stopped (409) / expired (410) get a dedicated PanelState in the UI.
+    const cls = classifyResponse(res)
+    if (cls.kind === "state") {
+      session.status = cls.state
+      session.errorMessage = null
+      notify(session)
+      return
+    }
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || data.status !== "running" || !data.websocketUrl) {
+    if (cls.kind === "error" || data.status !== "running" || !data.websocketUrl) {
       session.status = "error"
       session.errorMessage = data.error || "Failed to start terminal server"
       notify(session)
@@ -193,7 +209,7 @@ async function connectTerminal(
   session.resizeObserver = ro
 }
 
-function TerminalComponent({ item, sandboxId }: PanelProps) {
+function TerminalComponent({ item, sandboxId, onRefresh }: PanelProps) {
   const { resolvedTheme } = useTheme()
   const hostRef = useRef<HTMLDivElement>(null)
   const [, setTick] = useState(0)
@@ -234,10 +250,10 @@ function TerminalComponent({ item, sandboxId }: PanelProps) {
 
     if (isNew) {
       setupAndConnect(session, sandboxId, theme)
-    } else if (session.status === "error" || session.status === "disconnected") {
-      // A previously-opened session whose socket has died. Reopening it should
-      // start a fresh connection rather than leaving the panel stuck on the
-      // stale error/disconnected state.
+    } else if (session.status !== "connected" && session.status !== "connecting") {
+      // A previously-opened session that died or hit a lifecycle state
+      // (error/disconnected/stopped/expired). Reopening it should start a fresh
+      // connection rather than leaving the panel stuck on the stale state.
       resetSessionForReconnect(session)
       notify(session)
       setupAndConnect(session, sandboxId, theme)
@@ -274,6 +290,14 @@ function TerminalComponent({ item, sandboxId }: PanelProps) {
   const status = session?.status ?? "connecting"
   const errorMessage = session?.errorMessage ?? null
 
+  // Sandbox lifecycle states share the cross-panel PanelState UI.
+  if (status === "stopped" || status === "expired") {
+    return <PanelState status={status} onRefresh={onRefresh} />
+  }
+  if (status === "error") {
+    return <PanelState status="error" message={errorMessage ?? "Terminal error"} onRefresh={onRefresh} />
+  }
+
   return (
     <div className="flex-1 h-full w-full relative" style={{ backgroundColor: theme.background }}>
       <div
@@ -281,7 +305,7 @@ function TerminalComponent({ item, sandboxId }: PanelProps) {
         className="h-full w-full"
         style={{
           padding: "6px 8px",
-          ...(status === "connecting" || status === "error" ? { visibility: "hidden" as const } : {}),
+          ...(status === "connecting" ? { visibility: "hidden" as const } : {}),
         }}
       />
       {status === "connecting" && (
@@ -289,14 +313,6 @@ function TerminalComponent({ item, sandboxId }: PanelProps) {
           <div className="flex flex-col items-center gap-2">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Starting terminal…</span>
-          </div>
-        </div>
-      )}
-      {status === "error" && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-sm text-red-500">Terminal error</span>
-            <span className="text-xs text-muted-foreground">{errorMessage}</span>
           </div>
         </div>
       )}

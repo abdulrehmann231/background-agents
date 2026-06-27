@@ -1,5 +1,6 @@
 import { Daytona } from "@daytonaio/sdk"
 import { createSandboxGit } from "@background-agents/sandbox-git"
+import { ensureSandboxStarted } from "@/lib/sandbox"
 import { PATHS } from "@/lib/constants"
 import { createGitOperationMessage } from "@/lib/db/git-messages"
 import { requireGitHubAuth, isGitHubAuthError } from "@/lib/db/api-helpers"
@@ -8,6 +9,25 @@ import {
   pushViaTemporaryBranch,
   type TempBranchPushResult,
 } from "@/lib/git/sandbox-git-ops"
+
+// Booting a stopped sandbox (ensureSandboxStarted) can take up to ~120s, so
+// give working-tree actions headroom on top of the git work itself.
+export const maxDuration = 120
+
+/**
+ * Actions that operate on the sandbox working tree and therefore require it to
+ * be running. For these we boot a stopped sandbox (an explicit user action,
+ * mirroring the other /api/sandbox/* routes). The remaining actions are handled
+ * without booting: `merge` and `delete-remote-branch` run through GitHub's API,
+ * and `check-rebase-status` is a passive poll that returns defaults when stopped.
+ */
+const WORKING_TREE_ACTIONS = new Set([
+  "list-branches",
+  "rebase",
+  "abort-rebase",
+  "abort-merge",
+  "force-push",
+])
 
 /**
  * Map a failed {@link pushViaTemporaryBranch} to the user-facing git-operation
@@ -66,6 +86,11 @@ export async function POST(req: Request) {
     const sandbox = await daytona.get(sandboxId)
     const git = createSandboxGit(sandbox)
 
+    // Working-tree actions need the sandbox running; boot it if stopped.
+    if (WORKING_TREE_ACTIONS.has(action)) {
+      await ensureSandboxStarted(sandbox)
+    }
+
     switch (action) {
       case "list-branches": {
         // Fetch all remote branches
@@ -93,10 +118,20 @@ export async function POST(req: Request) {
           return Response.json({ error: "Missing repository owner or name for merge" }, { status: 400 })
         }
 
-        // Get current branch in sandbox
-        const currentStatus = await git.status(repoPath)
-        const localBranch = currentStatus.currentBranch
-        const isMergingIntoActiveBranch = localBranch === targetBranch
+        // A clean merge runs entirely through GitHub's merge API and needs no
+        // sandbox. We only touch the working tree when the sandbox is actually
+        // running — to detect whether we're merging into the checked-out branch
+        // (which gates conflict replication and the post-merge pull). A stopped
+        // sandbox has no active checkout, so treat it as "not the active branch"
+        // and let auto-pull-before-run sync it when it next wakes. This keeps
+        // merge working while the sandbox is stopped instead of failing on the
+        // up-front `git.status` ("failed to resolve container IP").
+        const sandboxStarted = sandbox.state === "started"
+        let isMergingIntoActiveBranch = false
+        if (sandboxStarted) {
+          const currentStatus = await git.status(repoPath)
+          isMergingIntoActiveBranch = currentStatus.currentBranch === targetBranch
+        }
 
         // Use GitHub's merge API
         const commitMessage = squash
@@ -370,6 +405,11 @@ export async function POST(req: Request) {
       }
 
       case "check-rebase-status": {
+        // Passive poll (runs on mount). Never boot a stopped sandbox just to
+        // check status — report "nothing in progress" instead.
+        if (sandbox.state !== "started") {
+          return Response.json({ inRebase: false, inMerge: false, conflictedFiles: [] })
+        }
         const rebaseCheck = await sandbox.process.executeCommand(
           `test -d ${repoPath}/.git/rebase-merge -o -d ${repoPath}/.git/rebase-apply && echo "yes" || echo "no"`
         )

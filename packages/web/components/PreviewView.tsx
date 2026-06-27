@@ -83,10 +83,13 @@ export function PreviewView({
   onCloseItem,
   messages,
 }: PreviewViewProps) {
-  const [refreshKey, setRefreshKey] = useState(0)
-  // A top-bar refresh is an explicit user action, so it may boot a stopped
-  // sandbox. Passed down to panels as `autoStart`.
-  const [refreshAutoStart, setRefreshAutoStart] = useState(false)
+  // The single refresh nonce. Bumped by the top-bar button AND by any in-panel
+  // retry (panels call `onRefresh`). Included in the panel key so a bump
+  // remounts and reloads it.
+  const [refreshNonce, setRefreshNonce] = useState(0)
+  // A refresh is an explicit user action, so it may boot a stopped sandbox.
+  // Passed down as `explicitStart`; reset when switching items.
+  const [explicitStart, setExplicitStart] = useState(false)
   const [scale, setScale] = useState(1)
   const [isDownloading, setIsDownloading] = useState(false)
   // Track when the dropdown just opened to ignore the initial pointerup
@@ -149,12 +152,12 @@ export function PreviewView({
 
   const Icon = plugin.getIcon()
 
-  // Reset the auto-start intent when switching to a different preview item, so
-  // only an explicit refresh of the current item can boot a stopped sandbox.
+  // Reset the explicit-start intent when switching to a different preview item,
+  // so only an explicit refresh of the current item can boot a stopped sandbox.
   const itemKey = getItemKey(item)
   if (prevItemKeyRef.current !== itemKey) {
     prevItemKeyRef.current = itemKey
-    if (refreshAutoStart) setRefreshAutoStart(false)
+    if (explicitStart) setExplicitStart(false)
   }
 
   // When the item is a file and we have a repo/branch, build the GitHub URL
@@ -180,8 +183,8 @@ export function PreviewView({
       disposeTerminalSession(item.id)
     }
     // Explicit user action — refreshing should boot a stopped sandbox.
-    setRefreshAutoStart(true)
-    setRefreshKey((k) => k + 1)
+    setExplicitStart(true)
+    setRefreshNonce((k) => k + 1)
   }
 
   // Check if we have multiple items to show dropdown
@@ -336,17 +339,16 @@ export function PreviewView({
             </button>
           )}
 
-          {/* Refresh button - not shown for terminals */}
-          {item.type !== "terminal" && (
-            <button
-              onClick={handleRefresh}
-              className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
-              title="Refresh"
-              aria-label="Refresh preview"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {/* Refresh button. For terminals this reconnects (disposes the
+              cached session); for files/servers it reloads the panel. */}
+          <button
+            onClick={handleRefresh}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+            title={item.type === "terminal" ? "Reconnect" : "Refresh"}
+            aria-label={item.type === "terminal" ? "Reconnect terminal" : "Refresh preview"}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={onClose}
             className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
@@ -360,12 +362,14 @@ export function PreviewView({
         {/* Body - render the plugin component */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <Component
-            key={`${getItemKey(item)}-${refreshKey}`}
+            key={`${getItemKey(item)}-${refreshNonce}`}
             item={item}
             sandboxId={sandboxId}
             scale={scale}
             messages={messages}
-            autoStart={refreshAutoStart}
+            refreshNonce={refreshNonce}
+            explicitStart={explicitStart}
+            onRefresh={handleRefresh}
           />
         </div>
       </div>
