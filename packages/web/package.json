@@ -18,7 +18,7 @@
     "@ai-sdk/openai": "^1.3.22",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@auth/prisma-adapter": "^2.9.1",
-    "@background-agents/agent-policy": "*",
+    "@background-agents/agent-configuration": "*",
     "@background-agents/claude-credentials": "*",
     "@background-agents/common": "*",
     "@background-agents/sandbox-git": "*",

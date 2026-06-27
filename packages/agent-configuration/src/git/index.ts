@@ -6,7 +6,7 @@
  *
  * @example
  * ```ts
- * import { setupClaudeHooks, OPENCODE_PERMISSION_ENV } from '@background-agents/agent-policy/git'
+ * import { setupClaudeHooks, OPENCODE_PERMISSION_ENV } from '@background-agents/agent-configuration/git'
  *
  * // For Claude Code
  * await setupClaudeHooks(sandbox)

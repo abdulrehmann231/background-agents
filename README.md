@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/ee6de7e9-a32e-45bd-acfa-3da1763b80ea
 
 | Package | Description | Maintainer |
 |---------|-------------|------------|
-| [`agent-policy`](packages/agent-policy) | Agent configuration and policy rules for blocking dangerous operations | <a href="https://github.com/jamesmurdza"><img src="https://github.com/jamesmurdza.png?size=64" width="28" height="28"></a> <a href="https://github.com/abdulrehmann231"><img src="https://github.com/abdulrehmann231.png?size=64" width="28" height="28"></a> |
+| [`agent-configuration`](packages/agent-configuration) | Agent configuration and policy rules for blocking dangerous operations | <a href="https://github.com/jamesmurdza"><img src="https://github.com/jamesmurdza.png?size=64" width="28" height="28"></a> <a href="https://github.com/abdulrehmann231"><img src="https://github.com/abdulrehmann231.png?size=64" width="28" height="28"></a> |
 | [`claude-credentials`](packages/claude-credentials) | Claude Code OAuth credential generation via ccauth and Daytona | <a href="https://github.com/synacktraa"><img src="https://github.com/synacktraa.png?size=64" width="28" height="28"></a> |
 | [`common`](packages/common) | Shared utilities and types | <a href="https://github.com/jamesmurdza"><img src="https://github.com/jamesmurdza.png?size=64" width="28" height="28"></a> |
 | [`desktop`](packages/desktop) | Electron desktop app for Background Agents | <a href="https://github.com/jamesmurdza"><img src="https://github.com/jamesmurdza.png?size=64" width="28" height="28"></a> |

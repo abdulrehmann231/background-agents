@@ -24,11 +24,11 @@ import {
   setupClaudeHooks,
   setupCodexRules,
   OPENCODE_PERMISSION_ENV,
-} from "@background-agents/agent-policy/git"
+} from "@background-agents/agent-configuration/git"
 import {
   setupMcpForAgent,
   type AgentMcpServer,
-} from "@background-agents/agent-policy/mcp"
+} from "@background-agents/agent-configuration/mcp"
 import type { Sandbox as DaytonaSandbox } from "@daytonaio/sdk"
 
 // Re-export Agent type for convenience

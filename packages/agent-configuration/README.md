@@ -1,4 +1,4 @@
-# @background-agents/agent-policy
+# @background-agents/agent-configuration
 
 Agent configuration and policy rules for AI coding agents running in Daytona sandboxes.
 
@@ -16,7 +16,7 @@ This package provides centralized configuration for AI coding agents running in 
 ## Installation
 
 ```bash
-npm install @background-agents/agent-policy
+npm install @background-agents/agent-configuration
 ```
 
 ## Usage
@@ -26,7 +26,7 @@ npm install @background-agents/agent-policy
 Claude Code uses bash hooks that intercept commands before execution:
 
 ```ts
-import { setupClaudeHooks } from '@background-agents/agent-policy'
+import { setupClaudeHooks } from '@background-agents/agent-configuration'
 
 // During agent session setup
 await setupClaudeHooks(sandbox)
@@ -37,7 +37,7 @@ await setupClaudeHooks(sandbox)
 Codex uses Starlark rules stored in `~/.codex/rules/`:
 
 ```ts
-import { setupCodexRules } from '@background-agents/agent-policy'
+import { setupCodexRules } from '@background-agents/agent-configuration'
 
 // During agent session setup
 await setupCodexRules(sandbox)
@@ -48,7 +48,7 @@ await setupCodexRules(sandbox)
 OpenCode uses a JSON permission system via environment variable:
 
 ```ts
-import { OPENCODE_PERMISSION_ENV } from '@background-agents/agent-policy'
+import { OPENCODE_PERMISSION_ENV } from '@background-agents/agent-configuration'
 
 // When starting the agent
 const env = {
@@ -81,7 +81,7 @@ All agents block the same core set of dangerous operations:
 Writes per-agent MCP server configs into the sandbox before the agent CLI starts. Currently supported agents: `claude-code`, `codex`, `gemini`, `opencode`, `goose`, `copilot`, `kilo`, `kimi`.
 
 ```ts
-import { setupMcpForAgent } from '@background-agents/agent-policy'
+import { setupMcpForAgent } from '@background-agents/agent-configuration'
 
 await setupMcpForAgent(sandbox, {
   agent: 'claude-code',
@@ -121,7 +121,7 @@ import {
   OPENCODE_PERMISSION_ENV,
   OPENCODE_PERMISSION_CONFIG,
   OPENCODE_PERMISSIONS,
-} from '@background-agents/agent-policy'
+} from '@background-agents/agent-configuration'
 ```
 
 ### MCP
@@ -131,7 +131,7 @@ import {
   setupMcpForAgent,
   type AgentMcpServer,
   type SetupMcpOptions,
-} from '@background-agents/agent-policy'
+} from '@background-agents/agent-configuration'
 ```
 
 ## License
