@@ -339,17 +339,16 @@ export function PreviewView({
             </button>
           )}
 
-          {/* Refresh button - not shown for terminals */}
-          {item.type !== "terminal" && (
-            <button
-              onClick={handleRefresh}
-              className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
-              title="Refresh"
-              aria-label="Refresh preview"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {/* Refresh button. For terminals this reconnects (disposes the
+              cached session); for files/servers it reloads the panel. */}
+          <button
+            onClick={handleRefresh}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+            title={item.type === "terminal" ? "Reconnect" : "Refresh"}
+            aria-label={item.type === "terminal" ? "Reconnect terminal" : "Refresh preview"}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={onClose}
             className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
