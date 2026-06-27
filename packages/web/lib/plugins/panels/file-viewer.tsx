@@ -43,7 +43,7 @@ async function loadFileData(args: {
   return { kind: "text", content: typeof data.content === "string" ? data.content : "" }
 }
 
-function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartProp }: PanelProps) {
+function FileViewerComponent({ item, sandboxId, messages, explicitStart, onRefresh }: PanelProps) {
   const filePath = item.type === "file" ? item.filePath : ""
   const fileType = getFileTypeFromPath(filePath)
 
@@ -70,9 +70,9 @@ function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartPr
     return count
   }, [messages, filePath])
 
-  const { status, data, error, retry } = useSandboxResource<FileData>({
+  const { status, data, error } = useSandboxResource<FileData>({
     sandboxId,
-    explicitStart: Boolean(autoStartProp),
+    explicitStart,
     deps: [filePath, fileType, editSignal],
     load: ({ autoStart, signal }) =>
       loadFileData({ sandboxId: sandboxId!, filePath, fileType, autoStart, signal }),
@@ -87,10 +87,10 @@ function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartPr
   }, [blobUrl])
 
   if (status === "loading") return <PanelState status="loading" />
-  if (status === "stopped") return <PanelState status="stopped" onRefresh={retry} />
-  if (status === "expired") return <PanelState status="expired" onRefresh={retry} />
+  if (status === "stopped") return <PanelState status="stopped" onRefresh={onRefresh} />
+  if (status === "expired") return <PanelState status="expired" onRefresh={onRefresh} />
   if (status === "error") {
-    return <PanelState status="error" message={error ?? undefined} onRefresh={retry} />
+    return <PanelState status="error" message={error ?? undefined} onRefresh={onRefresh} />
   }
 
   const content = data?.kind === "text" ? data.content : ""

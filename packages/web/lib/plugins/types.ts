@@ -17,13 +17,24 @@ export interface PanelProps {
   sandboxId: string | null
   /** Optional scale factor for preview (e.g., 0.5, 0.75, 1) */
   scale?: number
-  /**
-   * Set when the user explicitly refreshed via the top-bar refresh button.
-   * Lets a panel boot a stopped sandbox (otherwise passive reads stay passive).
-   */
-  autoStart?: boolean
   /** All messages in the current chat, for plugins that need live content */
   messages?: import("@/lib/types").Message[]
+  /**
+   * Bumped on every explicit refresh (top-bar button or an in-panel retry).
+   * Included in the panel's React key, so a bump remounts and reloads it.
+   */
+  refreshNonce: number
+  /**
+   * True when the current mount was caused by an explicit user refresh, so the
+   * panel may boot a stopped sandbox. Resets when switching preview items, so
+   * merely opening a stopped sandbox's file never auto-boots it.
+   */
+  explicitStart: boolean
+  /**
+   * The single refresh path. A panel's in-panel retry (e.g. PanelState's
+   * button) calls this so it behaves exactly like the top-bar refresh.
+   */
+  onRefresh: () => void
 }
 
 /**

@@ -36,8 +36,6 @@ export interface SandboxResource<T> {
   data: T | null
   /** Error message when status is "error". */
   error: string | null
-  /** Re-run as an explicit user action — boots the sandbox if it's stopped. */
-  retry: () => void
 }
 
 export interface UseSandboxResourceOptions<T> {
@@ -46,12 +44,12 @@ export interface UseSandboxResourceOptions<T> {
   deps?: unknown[]
   /**
    * True when the current mount was triggered by an explicit user refresh, so
-   * even the first load may boot a stopped sandbox.
+   * this load may boot a stopped sandbox. Refresh remounts the panel (see
+   * PanelProps.refreshNonce), so a fresh load is the single retry path.
    */
   explicitStart?: boolean
   /**
-   * Perform the request. `autoStart` is true when the user explicitly asked to
-   * boot the sandbox (retry pressed, or `explicitStart`). Call
+   * Perform the request. `autoStart` mirrors `explicitStart`. Call
    * {@link assertSandboxOk} on the response, then parse and return the data.
    */
   load: (args: { autoStart: boolean; signal: AbortSignal }) => Promise<T>
@@ -59,8 +57,8 @@ export interface UseSandboxResourceOptions<T> {
 
 /**
  * Encapsulates the loading / ready / stopped / expired / error state machine
- * shared by sandbox-backed preview panels, including abort-on-unmount and an
- * explicit-retry path. Panels supply only the request via `load`.
+ * shared by sandbox-backed preview panels, including abort-on-unmount. Panels
+ * supply only the request via `load`; retry happens by remount (`refreshNonce`).
  */
 export function useSandboxResource<T>({
   sandboxId,
@@ -71,7 +69,6 @@ export function useSandboxResource<T>({
   const [status, setStatus] = useState<ResourceStatus>("loading")
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     if (!sandboxId) {
@@ -82,8 +79,7 @@ export function useSandboxResource<T>({
 
     let cancelled = false
     const controller = new AbortController()
-    // First load is passive unless the user explicitly refreshed; any retry is.
-    const autoStart = retryCount > 0 || Boolean(explicitStart)
+    const autoStart = Boolean(explicitStart)
 
     setStatus("loading")
     setError(null)
@@ -110,7 +106,7 @@ export function useSandboxResource<T>({
     }
     // `load` is intentionally excluded — it's a fresh closure each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sandboxId, retryCount, explicitStart, ...deps])
+  }, [sandboxId, explicitStart, ...deps])
 
-  return { status, data, error, retry: () => setRetryCount((c) => c + 1) }
+  return { status, data, error }
 }
