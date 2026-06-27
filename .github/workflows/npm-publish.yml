@@ -1,16 +1,18 @@
-name: Publish desktop launcher to npm
+name: Publish to npm
 
-# Publishes the `background-agents` npx launcher (packages/launcher) to the npm
-# registry whenever a version tag is pushed. The published version is taken from
-# the tag (e.g. tag "v1.0.1" -> npm version 1.0.1).
+# Publishes to the npm registry on a version tag push (e.g. "v1.0.1") or via the
+# manual "Run workflow" button.
+#
+# Two independent jobs:
+#   1. publish-launcher  — the `background-agents` npx launcher (packages/launcher),
+#                          versioned from the pushed tag.
+#   2. publish-packages  — the reusable `@background-agents/*` libraries, each
+#                          versioned from its OWN package.json and skipped if that
+#                          version is already on npm (so the job is idempotent and
+#                          safe to re-run).
 #
 # Requires an `NPM_TOKEN` repository secret (an npm automation/publish token with
-# rights to the `background-agents` package).
-#
-# NOTE: Like release-workflow.yml, this lives outside `.github/workflows/`
-# because pushing there needs the GitHub `workflow` OAuth scope. Move it into
-# `.github/workflows/` (once your token has that scope, or via the GitHub web UI)
-# to activate it.
+# rights to the `background-agents` package and the `@background-agents` scope).
 
 on:
   push:
@@ -19,12 +21,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 1.0.0). Blank = use packages/launcher/package.json."
+        description: "Launcher version to publish (e.g. 1.0.0). Blank = use packages/launcher/package.json. Does not affect the @background-agents/* libraries."
         required: false
         type: string
 
 jobs:
-  publish:
+  publish-launcher:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,5 +60,70 @@ jobs:
 
       - name: Publish to npm
         run: npm publish -w background-agents --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        # `npm ci` runs each package's `prepare` script, building its dist/ output.
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Publish @background-agents/* libraries
+        # For each listed package: read its name+version from package.json, and
+        # publish only if that exact version is not already on npm. `npm publish`
+        # re-runs the package's prepare/prepublishOnly so dist/ is fresh in the
+        # tarball.
+        #
+        # Listed in dependency order (a package is published before anything that
+        # depends on it, e.g. sandbox-jobs before sdk).
+        #
+        # IMPORTANT: a package only publishes *correctly* once it has proper
+        # packaging — a build that emits dist/, a `files` field, and entry points
+        # (main/module/types/exports) pointing at dist (see daytona-git as the
+        # reference). Until a package is converted, leave it commented out so a
+        # release tag doesn't publish a broken (src-pointing) tarball.
+        run: |
+          set -euo pipefail
+          # Uncomment each package in your refactor PR, once it has proper
+          # packaging (dist build + files + dist-pointing entry points).
+          # daytona-git is the reference; uncomment it when its refactor lands.
+          PACKAGES=(
+            # daytona-git
+            # common
+            # sandbox-jobs
+            # claude-credentials
+            # agent-configuration
+            # mcp-providers
+            # skills
+            # sandbox-image
+            # daytona-terminal
+            # sdk            # depends on sandbox-jobs — publish that first
+          )
+          for pkg in "${PACKAGES[@]}"; do
+            dir="packages/$pkg"
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "= skip $name@$version (already on npm)"
+            else
+              echo "+ publish $name@$version"
+              npm publish --workspace "$name" --access public
+            fi
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
