@@ -1,46 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { FileCode2, Loader2, RefreshCw } from "lucide-react"
+import { FileCode2 } from "lucide-react"
 import type { PanelPlugin, PanelProps, PreviewItem } from "../types"
 import { HighlightedCode, getFileTypeFromPath, ImageFullPreview, PdfFullPreview, isMarkdownPath, MarkdownPreview } from "@/lib/file-preview"
-import { cn } from "@/lib/utils"
-
-/**
- * Centered status panel with a refresh button above the message. Used for the
- * stopped/expired sandbox states and for generic load errors.
- */
-function PanelStatus({
-  message,
-  destructive,
-  onRetry,
-  actionTitle = "Refresh",
-}: {
-  message: string
-  destructive?: boolean
-  onRetry: () => void
-  actionTitle?: string
-}) {
-  return (
-    <div
-      className={cn(
-        "h-full flex flex-col items-center justify-center gap-3 p-4 text-center text-sm",
-        destructive ? "text-destructive" : "text-muted-foreground"
-      )}
-    >
-      <button
-        type="button"
-        onClick={onRetry}
-        title={actionTitle}
-        aria-label={actionTitle}
-        className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent cursor-pointer"
-      >
-        <RefreshCw className="h-5 w-5" />
-      </button>
-      <div>{message}</div>
-    </div>
-  )
-}
+import { PanelState } from "./PanelState"
 
 function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartProp }: PanelProps) {
   const [content, setContent] = useState<string | null>(null)
@@ -194,40 +158,19 @@ function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartPr
   }, [blobUrl])
 
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-      </div>
-    )
+    return <PanelState status="loading" />
   }
 
   if (needsResume) {
-    return (
-      <PanelStatus
-        message="This sandbox is stopped."
-        actionTitle="Start sandbox"
-        onRetry={() => setResumeCount((c) => c + 1)}
-      />
-    )
+    return <PanelState status="stopped" onRefresh={() => setResumeCount((c) => c + 1)} />
   }
 
   if (expired) {
-    return (
-      <PanelStatus
-        message="This sandbox expired."
-        onRetry={() => setResumeCount((c) => c + 1)}
-      />
-    )
+    return <PanelState status="expired" onRefresh={() => setResumeCount((c) => c + 1)} />
   }
 
   if (error) {
-    return (
-      <PanelStatus
-        message={error}
-        destructive
-        onRetry={() => setResumeCount((c) => c + 1)}
-      />
-    )
+    return <PanelState status="error" message={error} onRefresh={() => setResumeCount((c) => c + 1)} />
   }
 
   // Image preview
