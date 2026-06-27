@@ -41,7 +41,7 @@ npm run start:electron
 
 Override the target with `BACKGROUND_AGENTS_URL` if needed.
 
-### Standalone (from `packages/electron/`)
+### Standalone (from `packages/desktop/`)
 
 Requires a backend already running at `http://localhost:4000` (or override `BACKGROUND_AGENTS_URL`):
 
@@ -73,7 +73,7 @@ add it via the GitHub web UI.)
 Trigger a release by pushing a version tag:
 
 ```bash
-# bump "version" in packages/electron/package.json first
+# bump "version" in packages/desktop/package.json first
 git tag v0.1.1 && git push origin v0.1.1
 ```
 

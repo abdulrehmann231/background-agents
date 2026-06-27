@@ -1,5 +1,5 @@
 {
-  "name": "@background-agents/daytona-git",
+  "name": "@background-agents/sandbox-git",
   "version": "0.1.0",
   "description": "Git operations for Daytona sandboxes without the toolbox dependency",
   "main": "src/index.ts",

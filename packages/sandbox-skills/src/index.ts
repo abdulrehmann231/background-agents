@@ -1,5 +1,5 @@
 /**
- * @background-agents/skills
+ * @background-agents/sandbox-skills
  *
  * Skills registry client and sandbox operations for Daytona.
  *
@@ -10,8 +10,8 @@
  *
  * Quick Start:
  * ```typescript
- * import { searchSkills } from "@background-agents/skills/registry"
- * import { installSkill, uninstallSkill } from "@background-agents/skills/sandbox"
+ * import { searchSkills } from "@background-agents/sandbox-skills/registry"
+ * import { installSkill, uninstallSkill } from "@background-agents/sandbox-skills/sandbox"
  *
  * // Search for skills
  * const { results } = await searchSkills("react")

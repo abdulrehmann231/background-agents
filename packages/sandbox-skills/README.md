@@ -1,4 +1,4 @@
-# @background-agents/skills
+# @background-agents/sandbox-skills
 
 Skills registry client and sandbox operations for Daytona sandboxes.
 
@@ -16,7 +16,7 @@ This is an internal workspace package. It's automatically available to other pac
 ```json
 {
   "dependencies": {
-    "@background-agents/skills": "*"
+    "@background-agents/sandbox-skills": "*"
   }
 }
 ```
@@ -26,7 +26,7 @@ This is an internal workspace package. It's automatically available to other pac
 ### Search for Skills
 
 ```typescript
-import { searchSkills, SKILLS_API_BASE } from "@background-agents/skills/registry"
+import { searchSkills, SKILLS_API_BASE } from "@background-agents/sandbox-skills/registry"
 
 // Search the Skills.sh registry
 const { results } = await searchSkills("react")
@@ -40,7 +40,7 @@ for (const skill of results) {
 
 ```typescript
 import { Daytona } from "@daytonaio/sdk"
-import { installSkill, uninstallSkill, listAvailableSkills } from "@background-agents/skills/sandbox"
+import { installSkill, uninstallSkill, listAvailableSkills } from "@background-agents/sandbox-skills/sandbox"
 
 const daytona = new Daytona({ apiKey: process.env.DAYTONA_API_KEY })
 const sandbox = await daytona.create()
@@ -68,13 +68,13 @@ import type {
   SkillsInstallResult,
   SkillRecord,
   DiscoveredSkill,
-} from "@background-agents/skills"
+} from "@background-agents/sandbox-skills"
 ```
 
 ### Registry Client
 
 ```typescript
-import { searchSkills, SKILLS_API_BASE } from "@background-agents/skills/registry"
+import { searchSkills, SKILLS_API_BASE } from "@background-agents/sandbox-skills/registry"
 ```
 
 ### Sandbox Operations
@@ -89,13 +89,13 @@ import {
   getSkillNameFromHandle,
   discoverInstalledSkills,
   type OnSkillRemove,
-} from "@background-agents/skills/sandbox"
+} from "@background-agents/sandbox-skills/sandbox"
 ```
 
 ### Utilities
 
 ```typescript
-import { stripAnsi, parseSkillList, extractCleanError } from "@background-agents/skills/utils"
+import { stripAnsi, parseSkillList, extractCleanError } from "@background-agents/sandbox-skills/utils"
 ```
 
 ## Requirements

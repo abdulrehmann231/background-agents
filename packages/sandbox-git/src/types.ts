@@ -1,5 +1,5 @@
 /**
- * Type definitions for @background-agents/daytona-git
+ * Type definitions for @background-agents/sandbox-git
  */
 
 // =============================================================================

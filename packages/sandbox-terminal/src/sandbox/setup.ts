@@ -115,7 +115,7 @@ export async function stopTerminal(sandbox: Sandbox): Promise<TerminalSetupResul
  * @example
  * ```typescript
  * import { Daytona } from "@daytonaio/sdk"
- * import { setupTerminal, WebSocketTerminal } from "@background-agents/daytona-terminal"
+ * import { setupTerminal, WebSocketTerminal } from "@background-agents/sandbox-terminal"
  *
  * const daytona = new Daytona({ apiKey: process.env.DAYTONA_API_KEY })
  * const sandbox = await daytona.create()

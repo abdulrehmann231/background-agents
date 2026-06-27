@@ -19,7 +19,7 @@ import {
   createGitHubMcpProvider,
   GITHUB_MCP_QUALIFIED_NAME,
   safeServerName,
-} from "@background-agents/mcp-providers"
+} from "@background-agents/mcp"
 import type { AgentMcpServer } from "@background-agents/agent-configuration/mcp"
 import { type McpOwner, ownerWhere } from "./owner"
 

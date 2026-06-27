@@ -1,5 +1,5 @@
 /**
- * End-to-end test for @background-agents/daytona-terminal.
+ * End-to-end test for @background-agents/sandbox-terminal.
  *
  * Boots a real Daytona sandbox, installs the PTY server with `setupTerminal`,
  * connects to the returned `wss://` URL with a Node `ws` client (the same
@@ -10,7 +10,7 @@
  * The test is skipped when DAYTONA_API_KEY is not exported, so it's safe to
  * include in `npm test`. To run explicitly:
  *
- *   DAYTONA_API_KEY=... npm test -w @background-agents/daytona-terminal -- tests/integration/terminal.test.ts
+ *   DAYTONA_API_KEY=... npm test -w @background-agents/sandbox-terminal -- tests/integration/terminal.test.ts
  *
  * The TEST_DAYTONA_API_KEY env var takes precedence over DAYTONA_API_KEY,
  * mirroring the convention used by packages/sdk.
@@ -153,7 +153,7 @@ function send(
   ws.send(JSON.stringify(msg))
 }
 
-describe.skipIf(!DAYTONA_API_KEY)("daytona-terminal end-to-end", () => {
+describe.skipIf(!DAYTONA_API_KEY)("sandbox-terminal end-to-end", () => {
   let daytona: Daytona
   let sandbox: Sandbox
   let websocketUrl: string

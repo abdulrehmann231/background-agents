@@ -1,4 +1,4 @@
-# @background-agents/daytona-terminal
+# @background-agents/sandbox-terminal
 
 WebSocket-based PTY terminal for Daytona sandboxes. Provides a full interactive terminal experience using xterm.js, with automatic server setup inside the sandbox.
 
@@ -15,14 +15,14 @@ WebSocket-based PTY terminal for Daytona sandboxes. Provides a full interactive 
 ## Installation
 
 ```bash
-npm install @background-agents/daytona-terminal @daytonaio/sdk
+npm install @background-agents/sandbox-terminal @daytonaio/sdk
 ```
 
 ## Quick Start
 
 ```typescript
 import { Daytona } from "@daytonaio/sdk"
-import { setupTerminal, WebSocketTerminal } from "@background-agents/daytona-terminal"
+import { setupTerminal, WebSocketTerminal } from "@background-agents/sandbox-terminal"
 
 // 1. Create sandbox and set up terminal
 const daytona = new Daytona({ apiKey: process.env.DAYTONA_API_KEY })
@@ -44,7 +44,7 @@ if (status === "running" && websocketUrl) {
 Sets up and starts the PTY terminal server in a Daytona sandbox. Auto-installs dependencies (ws, node-pty) if needed.
 
 ```typescript
-import { setupTerminal } from "@background-agents/daytona-terminal"
+import { setupTerminal } from "@background-agents/sandbox-terminal"
 
 const result = await setupTerminal(sandbox, {
   expiresIn: 3600,  // URL expiry in seconds (default: 3600)
@@ -67,7 +67,7 @@ const result = await setupTerminal(sandbox, {
 Check if the terminal server is running and get its URL.
 
 ```typescript
-import { getTerminalStatus } from "@background-agents/daytona-terminal"
+import { getTerminalStatus } from "@background-agents/sandbox-terminal"
 
 const { status, websocketUrl } = await getTerminalStatus(sandbox)
 ```
@@ -77,7 +77,7 @@ const { status, websocketUrl } = await getTerminalStatus(sandbox)
 Stop the terminal server.
 
 ```typescript
-import { stopTerminal } from "@background-agents/daytona-terminal"
+import { stopTerminal } from "@background-agents/sandbox-terminal"
 
 await stopTerminal(sandbox)
 ```
@@ -87,7 +87,7 @@ await stopTerminal(sandbox)
 #### `WebSocketTerminal`
 
 ```tsx
-import { WebSocketTerminal } from '@background-agents/daytona-terminal'
+import { WebSocketTerminal } from '@background-agents/sandbox-terminal'
 
 <WebSocketTerminal
   websocketUrl={websocketUrl}
@@ -122,7 +122,7 @@ import { WebSocketTerminal } from '@background-agents/daytona-terminal'
 For custom deployments, you can access the raw server code:
 
 ```typescript
-import { getPtyServerCode, getPtyServerPackageJson, PTY_SERVER_PORT } from "@background-agents/daytona-terminal/server"
+import { getPtyServerCode, getPtyServerPackageJson, PTY_SERVER_PORT } from "@background-agents/sandbox-terminal/server"
 
 // Get the Node.js server code as a string
 const serverCode = getPtyServerCode()
