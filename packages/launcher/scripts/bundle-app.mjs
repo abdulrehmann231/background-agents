@@ -13,15 +13,15 @@ import path from "node:path";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const launcherDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(launcherDir, "..", "..");
-const electronDir = path.join(repoRoot, "packages", "electron");
+const desktopDir = path.join(repoRoot, "packages", "desktop");
 const appDir = path.join(launcherDir, "app");
 
 function log(message) {
   process.stdout.write(`[bundle] ${message}\n`);
 }
 
-const distDir = path.join(electronDir, "dist");
-const assetsDir = path.join(electronDir, "assets");
+const distDir = path.join(desktopDir, "dist");
+const assetsDir = path.join(desktopDir, "assets");
 const mainJs = path.join(distDir, "main.js");
 const preloadCjs = path.join(distDir, "preload.cjs");
 
@@ -68,12 +68,12 @@ writeFileSync(
 // declare those same deps or the published package crashes with
 // ERR_MODULE_NOT_FOUND. Verify that here so a new Electron dep can't silently
 // break the launcher.
-const electronDeps = JSON.parse(
-  readFileSync(path.join(electronDir, "package.json"), "utf8")
+const desktopDeps = JSON.parse(
+  readFileSync(path.join(desktopDir, "package.json"), "utf8")
 ).dependencies || {};
 const launcherPkgPath = path.join(launcherDir, "package.json");
 const launcherDeps = JSON.parse(readFileSync(launcherPkgPath, "utf8")).dependencies || {};
-const missing = Object.keys(electronDeps).filter((d) => !(d in launcherDeps));
+const missing = Object.keys(desktopDeps).filter((d) => !(d in launcherDeps));
 if (missing.length > 0) {
   throw new Error(
     `launcher/package.json is missing runtime deps required by the bundled app: ` +
