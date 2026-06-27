@@ -160,7 +160,7 @@ function FileViewerComponent({ item, sandboxId, messages, autoStart: autoStartPr
           onClick={() => setResumeCount((c) => c + 1)}
           title="Start sandbox"
           aria-label="Start sandbox"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent cursor-pointer"
         >
           <RefreshCw className="h-5 w-5" />
         </button>
