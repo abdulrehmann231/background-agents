@@ -9,8 +9,9 @@
  * of MCP servers, a command-permission policy — and renders the correct native
  * config for whichever agent is running, then installs it into the sandbox.
  *
- * It holds no policy of its own: callers decide *what* to configure; this layer
- * only knows *how* to express it per agent.
+ * You supply the inputs; the package handles the per-agent formats. The command
+ * ruleset itself (e.g. which git operations to block) stays in your app and is
+ * passed in, so one policy renders identically across every agent.
  *
  * @example
  * ```ts
