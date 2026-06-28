@@ -148,7 +148,6 @@ export { adaptDaytonaSandbox, adaptSandbox } from "./sandbox/index"
 
 export {
   safeJsonParse,
-  ensureCliInstalled,
   getPackageName,
   extractErrorMessage,
   classifyAgentError,
