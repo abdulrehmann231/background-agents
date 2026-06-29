@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { requireAdmin, isAuthError } from "@/lib/db/api-helpers"
+import { parsePaginationParams, buildPagination } from "@/lib/db/pagination"
 
 /**
  * GET /api/admin/activity
@@ -22,8 +23,7 @@ export async function GET(request: NextRequest) {
   if (isAuthError(auth)) return auth
 
   const searchParams = request.nextUrl.searchParams
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)))
+  const { page, limit, skip } = parsePaginationParams(searchParams, { defaultLimit: 50 })
   const action = searchParams.get("action")
   const userId = searchParams.get("userId")
   const agent = searchParams.get("agent")
@@ -31,8 +31,6 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom")
   const dateTo = searchParams.get("dateTo")
   const includeFilters = searchParams.get("includeFilters") === "true"
-
-  const skip = (page - 1) * limit
 
   // Build where clause
   const where: {
@@ -126,12 +124,7 @@ export async function GET(request: NextRequest) {
       metadata: activity.metadata,
       createdAt: activity.createdAt.toISOString(),
     })),
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+    pagination: buildPagination(page, limit, total),
     ...(filters ? { filters } : {}),
   })
 }

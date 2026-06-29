@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db/prisma"
 import { requireAdmin, isAuthError } from "@/lib/db/api-helpers"
+import { parsePaginationParams, buildPagination } from "@/lib/db/pagination"
 
 /**
  * GET /api/admin/users
@@ -24,8 +25,7 @@ export async function GET(request: NextRequest) {
   if (isAuthError(auth)) return auth
 
   const searchParams = request.nextUrl.searchParams
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)))
+  const { page, limit, skip } = parsePaginationParams(searchParams, { defaultLimit: 20 })
   const search = searchParams.get("search")
   const rawSortField = searchParams.get("sortField") || "createdAt"
   const rawSortOrder = searchParams.get("sortOrder") || "desc"
@@ -43,8 +43,6 @@ export async function GET(request: NextRequest) {
     ? (rawSortField as SortField)
     : "createdAt"
   const sortOrder: "asc" | "desc" = rawSortOrder === "asc" ? "asc" : "desc"
-
-  const skip = (page - 1) * limit
 
   // Build where clause for search (Prisma form, used for findMany + count)
   const where = search
@@ -132,12 +130,7 @@ export async function GET(request: NextRequest) {
   if (orderedUserIds.length === 0) {
     return NextResponse.json({
       users: [],
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: buildPagination(page, limit, total),
     })
   }
 
@@ -206,11 +199,6 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     users: formattedUsers,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+    pagination: buildPagination(page, limit, total),
   })
 }
