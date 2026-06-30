@@ -176,6 +176,11 @@ export interface Chat {
    *  /share/<shareId> without auth. Null/undefined = private. */
   shareId?: string | null
 
+  /** When true, the chat is hidden from the main sidebar list and shown in the
+   *  "Archived" section instead. Archiving preserves everything (including the
+   *  share link); it is reversible, unlike deletion. */
+  archived?: boolean
+
   /** When this chat was branched from another chat, the parent's id. */
   parentChatId?: string
 

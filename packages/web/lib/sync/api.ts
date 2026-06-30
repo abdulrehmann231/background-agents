@@ -28,6 +28,7 @@ export interface ChatResponse {
   displayName: string | null
   shareId?: string | null
   status: string
+  archived?: boolean
   parentChatId: string | null
   needsSync: boolean
   createdAt: number
@@ -162,6 +163,7 @@ export async function updateChat(
   data: Partial<{
     displayName: string
     status: string
+    archived: boolean
     agent: string
     model: string
     planModeEnabled: boolean
@@ -242,6 +244,7 @@ export function toChatType(serverChat: ChatResponse): Chat {
     displayName: serverChat.displayName,
     shareId: serverChat.shareId ?? null,
     status: serverChat.status as Chat["status"],
+    archived: serverChat.archived ?? false,
     parentChatId: serverChat.parentChatId || undefined,
     needsSync: serverChat.needsSync,
     createdAt: serverChat.createdAt,
