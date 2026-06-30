@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { TrendingUp } from "lucide-react"
 import {
   AreaChart,
   Area,
@@ -43,6 +44,7 @@ interface MessagesByModelChartProps {
   agentData: Array<Record<string, number | string>>
   modelData: Array<Record<string, number | string>>
   metric: StatsMetric
+  metricName: string
   isHourly?: boolean
 }
 
@@ -50,6 +52,7 @@ export function MessagesByModelChart({
   agentData,
   modelData,
   metric,
+  metricName,
   isHourly = false,
 }: MessagesByModelChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("agents")
@@ -71,8 +74,17 @@ export function MessagesByModelChart({
 
   return (
     <div className="space-y-3">
-      {/* Toggle buttons - only view mode, time is controlled globally */}
-      <div className="flex items-center">
+      {/* Header: icon + dynamic title on the left, view-mode toggle on the right */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+            <TrendingUp className="h-4 w-4 text-blue-500" />
+          </div>
+          <h3 className="font-medium">
+            {metricName} by {viewMode === "agents" ? "Agent" : "Model"}
+          </h3>
+        </div>
+        {/* Toggle - only view mode, time is controlled globally */}
         <div className="flex gap-1 rounded-lg bg-muted p-1">
           <button
             onClick={() => setViewMode("agents")}
