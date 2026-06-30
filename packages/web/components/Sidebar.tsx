@@ -329,7 +329,7 @@ export function Sidebar({
   const renderArchivedSection = (variant: "desktop" | "mobile") => {
     if (archivedChats.length === 0) return null
     return (
-      <div className="mt-2 pt-2 border-t border-sidebar-border/60">
+      <div className="mb-2 pb-2 border-b border-sidebar-border/60">
         <button
           onClick={() => setArchivedExpanded((v) => !v)}
           className={cn(
@@ -486,20 +486,22 @@ export function Sidebar({
                   ))}
                 </div>
               ) : (
-                renderMobileChatTree({
-                  roots: rootChats,
-                  childrenByParent,
-                  collapsedChatIds,
-                  currentChatId,
-                  deletingChatIds,
-                  unseenChatIds,
-                  onToggleCollapsed: toggleChatCollapsed,
-                  onSelectChat: handleSelectChat,
-                  onDeleteChat,
-                  onRequestRename: (id, name) => modals.setMobileRenameChat({ id, name }),
-                })
+                <>
+                  {renderArchivedSection("mobile")}
+                  {renderMobileChatTree({
+                    roots: rootChats,
+                    childrenByParent,
+                    collapsedChatIds,
+                    currentChatId,
+                    deletingChatIds,
+                    unseenChatIds,
+                    onToggleCollapsed: toggleChatCollapsed,
+                    onSelectChat: handleSelectChat,
+                    onDeleteChat,
+                    onRequestRename: (id, name) => modals.setMobileRenameChat({ id, name }),
+                  })}
+                </>
               )}
-              {!isLoadingChats && renderArchivedSection("mobile")}
             </div>
           </div>
 
@@ -717,37 +719,39 @@ export function Sidebar({
                   ))}
                 </div>
               ) : (
-                renderChatTree({
-                  roots: rootChats,
-                  childrenByParent,
-                  collapsedChatIds,
-                  currentChatId,
-                  deletingChatIds,
-                  unseenChatIds,
-                  sidebarCollapsed: collapsed,
-                  onToggleCollapsed: toggleChatCollapsed,
-                  onSelectChat,
-                  onDeleteChat,
-                  onRenameChat,
-                  onMerge: onRequestMergeChats ? (id) => onRequestMergeChats(id) : undefined,
-                  onRebase: onRequestRebaseChat ? (id) => onRequestRebaseChat(id) : undefined,
-                  dragSourceId,
-                  dragOverId,
-                  canDrop,
-                  onDragStartChat: (id) => setDragSourceId(id),
-                  onDragEndChat: () => { setDragSourceId(null); setDragOverId(null) },
-                  onDragEnterChat: (id) => setDragOverId(id),
-                  onDragLeaveChat: (id) => setDragOverId((prev) => (prev === id ? null : prev)),
-                  onDropChat: (id) => {
-                    if (onRequestMergeChats && dragSourceId) {
-                      onRequestMergeChats(dragSourceId, id)
-                    }
-                    setDragSourceId(null)
-                    setDragOverId(null)
-                  },
-                })
+                <>
+                  {renderArchivedSection("desktop")}
+                  {renderChatTree({
+                    roots: rootChats,
+                    childrenByParent,
+                    collapsedChatIds,
+                    currentChatId,
+                    deletingChatIds,
+                    unseenChatIds,
+                    sidebarCollapsed: collapsed,
+                    onToggleCollapsed: toggleChatCollapsed,
+                    onSelectChat,
+                    onDeleteChat,
+                    onRenameChat,
+                    onMerge: onRequestMergeChats ? (id) => onRequestMergeChats(id) : undefined,
+                    onRebase: onRequestRebaseChat ? (id) => onRequestRebaseChat(id) : undefined,
+                    dragSourceId,
+                    dragOverId,
+                    canDrop,
+                    onDragStartChat: (id) => setDragSourceId(id),
+                    onDragEndChat: () => { setDragSourceId(null); setDragOverId(null) },
+                    onDragEnterChat: (id) => setDragOverId(id),
+                    onDragLeaveChat: (id) => setDragOverId((prev) => (prev === id ? null : prev)),
+                    onDropChat: (id) => {
+                      if (onRequestMergeChats && dragSourceId) {
+                        onRequestMergeChats(dragSourceId, id)
+                      }
+                      setDragSourceId(null)
+                      setDragOverId(null)
+                    },
+                  })}
+                </>
               )}
-              {!isLoadingChats && renderArchivedSection("desktop")}
             </div>
           </div>
         </>
