@@ -110,11 +110,11 @@ export function MessagesByModelChart({
       </div>
 
       {!hasData ? (
-        <div className="flex h-[220px] items-center justify-center text-muted-foreground text-sm">
+        <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
           No {viewMode === "agents" ? "agent" : "model"} usage data available
         </div>
       ) : (
-        <div className="h-[220px] w-full">
+        <div className="h-[250px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}
