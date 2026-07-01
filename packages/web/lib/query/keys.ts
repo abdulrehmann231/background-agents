@@ -22,6 +22,7 @@ export const queryKeys = {
   // GitHub
   github: {
     all: ["github"] as const,
+    user: () => [...queryKeys.github.all, "user"] as const,
     repos: () => [...queryKeys.github.all, "repos"] as const,
     branches: (owner: string, repo: string) =>
       [...queryKeys.github.all, "branches", owner, repo] as const,

@@ -127,7 +127,7 @@ export function RepoFilterDropdown({
               >
                 <Check className={cn(`${checkSize} flex-shrink-0`, repoFilter === repo ? "opacity-100" : "opacity-0")} />
                 <FolderGit2 className={cn(`${iconSize} flex-shrink-0 text-muted-foreground`)} />
-                <span className="truncate flex-1">{repo}</span>
+                <span className="truncate flex-1">{getRepoDisplayName(repo)}</span>
                 <span className="text-muted-foreground">{repoCounts.counts[repo] || 0}</span>
               </button>
             ))}

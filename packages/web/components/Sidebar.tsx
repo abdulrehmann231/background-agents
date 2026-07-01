@@ -9,6 +9,7 @@ import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
+import { useGitHubUserQuery } from "@/lib/query"
 import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH, COLLAPSE_THRESHOLD } from "@/lib/contexts"
 import { clearAllStorage } from "@/lib/storage"
 import type { Chat } from "@/lib/types"
@@ -98,6 +99,9 @@ export function Sidebar({
   const modals = useModals()
   const { data: session, status: sessionStatus } = useSession()
   const isSessionLoading = sessionStatus === "loading"
+  // Current user's GitHub login, used to drop the redundant `login/` prefix
+  // from their own repos in the filter menu.
+  const { data: currentUserLogin } = useGitHubUserQuery()
   const router = useRouter()
   const { openSearch } = usePalette()
   const { isDesktopApp } = useElectron()
@@ -231,12 +235,20 @@ export function Sidebar({
     return { counts, total, noRepoCount, archivedCount }
   }, [chats])
 
-  // Get display name for repository
+  // Get display name for repository. Repos owned by the current user are shown
+  // without their `login/` prefix (e.g. "jamesmurdza/foo" → "foo"); repos owned
+  // by anyone else keep the full "owner/name" form.
   const getRepoDisplayName = (repo: string) => {
     if (repo === NEW_REPOSITORY) return "No repository"
     if (repo === ALL_REPOSITORIES) return "Active chats"
     if (repo === ARCHIVED_CHATS) return "Archived chats"
     if (repo === NO_REPOSITORY) return "No repository"
+    if (currentUserLogin) {
+      const prefix = `${currentUserLogin}/`
+      if (repo.toLowerCase().startsWith(prefix.toLowerCase())) {
+        return repo.slice(prefix.length)
+      }
+    }
     return repo
   }
 
