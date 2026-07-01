@@ -81,6 +81,17 @@ export async function fetchAllRepos(
 }
 
 /**
+ * Fetch the authenticated user's GitHub login.
+ * Calls GET /api/github/user which reads the token from DB server-side.
+ */
+export async function fetchGitHubUserLogin(): Promise<string> {
+  const res = await fetch("/api/github/user")
+  if (!res.ok) await throwResponseError(res, "Failed to fetch GitHub user")
+  const data = await res.json()
+  return data.login
+}
+
+/**
  * Fetch branches for a repository.
  * Calls GET /api/github/branches which reads the token from DB server-side.
  */
