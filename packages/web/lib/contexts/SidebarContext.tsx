@@ -46,6 +46,7 @@ const SidebarContext = createContext<SidebarContextValue | null>(null)
 // Constants for sidebar - exported for use by components
 export const ALL_REPOSITORIES = "__all__"
 export const NO_REPOSITORY = "__none__"
+export const ARCHIVED_CHATS = "__archived__"
 export const MIN_WIDTH = 140
 export const MAX_WIDTH = 400
 export const COLLAPSED_WIDTH = 64

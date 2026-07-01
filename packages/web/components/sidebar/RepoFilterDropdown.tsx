@@ -1,8 +1,8 @@
 "use client"
 
-import { FolderGit2, ChevronDown, Check } from "lucide-react"
+import { FolderGit2, Archive, ChevronDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { ALL_REPOSITORIES, NO_REPOSITORY } from "@/lib/contexts"
+import { ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS } from "@/lib/contexts"
 import { NEW_REPOSITORY } from "@/lib/types"
 
 interface RepoFilterDropdownProps {
@@ -11,16 +11,16 @@ interface RepoFilterDropdownProps {
   repoDropdownOpen: boolean
   setRepoDropdownOpen: (open: boolean) => void
   uniqueRepos: string[]
-  repoCounts: { counts: Record<string, number>; total: number; noRepoCount: number }
+  repoCounts: { counts: Record<string, number>; total: number; noRepoCount: number; archivedCount: number }
   getRepoDisplayName: (repo: string) => string
   /** Mobile variant uses larger touch targets and rounded-lg styling. */
   variant: "mobile" | "desktop"
 }
 
 /**
- * Repository filter dropdown — surfaces "All chats" + "No repository" +
- * one entry per repo with messages. Used in both desktop and mobile
- * sidebar layouts; the only difference is the touch-target sizing.
+ * Repository filter dropdown — surfaces "Active chats" + "Archived chats" +
+ * "No repository" + one entry per repo with messages. Used in both desktop
+ * and mobile sidebar layouts; the only difference is the touch-target sizing.
  *
  * Counts come from the parent (computed once over the full chats list),
  * so each row shows how many chats would survive the filter.
@@ -66,7 +66,7 @@ export function RepoFilterDropdown({
 
       {repoDropdownOpen && (
         <div className={dropdownClassName}>
-          {/* All repositories option */}
+          {/* Active chats option */}
           <button
             onClick={() => {
               setRepoFilter(ALL_REPOSITORIES)
@@ -75,8 +75,22 @@ export function RepoFilterDropdown({
             className={itemClassName}
           >
             <Check className={cn(`${checkSize} flex-shrink-0`, repoFilter === ALL_REPOSITORIES ? "opacity-100" : "opacity-0")} />
-            <span className="flex-1">All chats</span>
+            <span className="flex-1">Active chats</span>
             <span className="text-muted-foreground">{repoCounts.total}</span>
+          </button>
+
+          {/* Archived chats option */}
+          <button
+            onClick={() => {
+              setRepoFilter(ARCHIVED_CHATS)
+              setRepoDropdownOpen(false)
+            }}
+            className={itemClassName}
+          >
+            <Check className={cn(`${checkSize} flex-shrink-0`, repoFilter === ARCHIVED_CHATS ? "opacity-100" : "opacity-0")} />
+            <Archive className={cn(`${iconSize} flex-shrink-0 text-muted-foreground`)} />
+            <span className="flex-1">Archived chats</span>
+            <span className="text-muted-foreground">{repoCounts.archivedCount}</span>
           </button>
 
           {/* No repository option */}
