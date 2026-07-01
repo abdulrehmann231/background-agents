@@ -36,6 +36,7 @@ interface ChatResponse {
   displayName: string | null
   shareId: string | null
   status: string
+  archived: boolean
   parentChatId: string | null
   needsSync: boolean
   createdAt: number
@@ -95,6 +96,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       displayName: chat.displayName,
       shareId: chat.shareId,
       status: chat.status,
+      archived: chat.archived,
       parentChatId: chat.parentChatId,
       needsSync: chat.needsSync,
       createdAt: chat.createdAt.getTime(),
@@ -197,6 +199,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       displayName: chat.displayName,
       shareId: chat.shareId,
       status: chat.status,
+      archived: chat.archived,
       parentChatId: chat.parentChatId,
       needsSync: chat.needsSync,
       createdAt: chat.createdAt.getTime(),

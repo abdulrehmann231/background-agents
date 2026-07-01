@@ -25,6 +25,7 @@ import {
   useCreateChatMutation,
   useUpdateChatMutation,
   useDeleteChatMutation,
+  useArchiveChatMutation,
   useSandboxDeleteMutation,
 } from "@/lib/query"
 
@@ -52,6 +53,7 @@ export interface ChatOperations {
     chatId: string,
     getNextChatId?: (deletedIds: string[]) => string | null
   ) => Promise<void>
+  setChatArchived: (chatId: string, archived: boolean) => Promise<void>
 }
 
 export function useChatOperations({
@@ -61,6 +63,7 @@ export function useChatOperations({
 }: UseChatOperationsArgs): ChatOperations {
   const updateChatMutation = useUpdateChatMutation()
   const deleteChatMutation = useDeleteChatMutation()
+  const archiveChatMutation = useArchiveChatMutation()
   const sandboxDeleteMutation = useSandboxDeleteMutation()
 
   const startNewChat = useCallback(async (
@@ -140,6 +143,14 @@ export function useChatOperations({
     [chats, currentChatId, deleteChatMutation, sandboxDeleteMutation]
   )
 
+  const setChatArchived = useCallback(async (chatId: string, archived: boolean) => {
+    try {
+      await archiveChatMutation.mutateAsync({ chatId, archived })
+    } catch (error) {
+      console.error("Failed to archive chat:", error)
+    }
+  }, [archiveChatMutation])
+
   const renameChat = useCallback(async (chatId: string, newName: string) => {
     try {
       await updateChatMutation.mutateAsync({ chatId, data: { displayName: newName } })
@@ -201,5 +212,6 @@ export function useChatOperations({
     updateChatById,
     updateCurrentChat,
     removeChat,
+    setChatArchived,
   }
 }

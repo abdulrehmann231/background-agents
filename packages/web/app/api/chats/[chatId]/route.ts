@@ -11,6 +11,34 @@ import {
 import { logActivityAsync } from "@/lib/db/activity-log"
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Collect a chat and all of its descendant chat ids (breadth-first over the
+ * parentChatId tree), scoped to the owner. Shared by DELETE (cascade removal)
+ * and PATCH (cascade archive) so the subtree definition stays in one place.
+ */
+async function collectChatSubtreeIds(rootId: string, userId: string): Promise<string[]> {
+  const ids: string[] = [rootId]
+  const queue = [rootId]
+
+  while (queue.length > 0) {
+    const parentId = queue.shift()!
+    const children = await prisma.chat.findMany({
+      where: { parentChatId: parentId, userId },
+      select: { id: true },
+    })
+    for (const child of children) {
+      ids.push(child.id)
+      queue.push(child.id)
+    }
+  }
+
+  return ids
+}
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -47,6 +75,7 @@ interface ChatWithMessagesResponse {
   displayName: string | null
   shareId: string | null
   status: string
+  archived: boolean
   parentChatId: string | null
   needsSync: boolean
   createdAt: number
@@ -161,6 +190,7 @@ export async function GET(
       displayName: chat.displayName,
       shareId: chat.shareId,
       status: chat.status,
+      archived: chat.archived,
       parentChatId: chat.parentChatId,
       needsSync: chat.needsSync,
       createdAt: chat.createdAt.getTime(),
@@ -200,6 +230,7 @@ export async function GET(
 interface PatchChatBody {
   displayName?: string
   status?: string
+  archived?: boolean
   agent?: string
   model?: string
   planModeEnabled?: boolean
@@ -237,6 +268,7 @@ export async function PATCH(
 
     if (body.displayName !== undefined) updateData.displayName = body.displayName
     if (body.status !== undefined) updateData.status = body.status
+    if (body.archived !== undefined) updateData.archived = body.archived
     if (body.agent !== undefined) updateData.agent = body.agent
     if (body.model !== undefined) updateData.model = body.model
     if (body.planModeEnabled !== undefined) updateData.planModeEnabled = body.planModeEnabled
@@ -259,6 +291,21 @@ export async function PATCH(
       data: updateData,
     })
 
+    // Archiving (or unarchiving) cascades to the whole branch subtree so a
+    // parent and its branched children stay together — matching DELETE's
+    // cascade. Only the descendants need the extra write; the root was just
+    // updated above.
+    if (body.archived !== undefined) {
+      const subtreeIds = await collectChatSubtreeIds(chatId, userId)
+      const descendantIds = subtreeIds.filter((id) => id !== chatId)
+      if (descendantIds.length > 0) {
+        await prisma.chat.updateMany({
+          where: { id: { in: descendantIds }, userId },
+          data: { archived: body.archived },
+        })
+      }
+    }
+
     return Response.json({
       id: updatedChat.id,
       repo: updatedChat.repo,
@@ -274,6 +321,7 @@ export async function PATCH(
       displayName: updatedChat.displayName,
       shareId: updatedChat.shareId,
       status: updatedChat.status,
+      archived: updatedChat.archived,
       parentChatId: updatedChat.parentChatId,
       needsSync: updatedChat.needsSync,
       createdAt: updatedChat.createdAt.getTime(),
@@ -306,26 +354,7 @@ export async function DELETE(
     }
 
     // Collect all descendant chat IDs (for cascade delete)
-    const collectDescendants = async (rootId: string): Promise<string[]> => {
-      const ids: string[] = [rootId]
-      const queue = [rootId]
-
-      while (queue.length > 0) {
-        const parentId = queue.shift()!
-        const children = await prisma.chat.findMany({
-          where: { parentChatId: parentId, userId },
-          select: { id: true },
-        })
-        for (const child of children) {
-          ids.push(child.id)
-          queue.push(child.id)
-        }
-      }
-
-      return ids
-    }
-
-    const chatIdsToDelete = await collectDescendants(chatId)
+    const chatIdsToDelete = await collectChatSubtreeIds(chatId, userId)
 
     // Get sandbox IDs before deletion (for cleanup)
     const chatsWithSandboxes = await prisma.chat.findMany({

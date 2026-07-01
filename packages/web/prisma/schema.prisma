@@ -136,6 +136,11 @@ model Chat {
   displayName String?
   status      String  @default("pending") // pending, creating, ready, running, error
 
+  // Archived chats are hidden from the main sidebar list (shown in a separate
+  // "Archived" section) but otherwise fully preserved — including their public
+  // share link, which keeps working. Distinct from deletion, which is permanent.
+  archived Boolean @default(false)
+
   // Public sharing: when set, this chat is viewable (read-only) at
   // /share/<shareId> without authentication. Null = private. The token is
   // unguessable and distinct from `id` so the private id never leaks.
@@ -168,6 +173,7 @@ model Chat {
 
   @@index([userId, updatedAt])
   @@index([userId, lastActiveAt])
+  @@index([userId, archived])
 }
 
 // =============================================================================

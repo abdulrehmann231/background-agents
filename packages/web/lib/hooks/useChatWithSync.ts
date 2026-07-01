@@ -195,6 +195,7 @@ export function useChatWithSync() {
     updateChatById,
     updateCurrentChat,
     removeChat,
+    setChatArchived,
   } = useChatOperations({ chats, currentChatId, createChatMutation })
 
   const updateSettings = useCallback(async (data: { settings?: Partial<typeof settings>; credentials?: Credentials; customEndpoints?: CustomEndpoint[] }): Promise<{ ok: boolean; error?: string }> => {
@@ -353,6 +354,7 @@ export function useChatWithSync() {
     startNewChat,
     selectChat,
     removeChat,
+    setChatArchived,
     renameChat,
     updateChatRepo,
     updateCurrentChat,

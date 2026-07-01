@@ -120,6 +120,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     startNewChat,
     selectChat,
     removeChat,
+    setChatArchived,
     renameChat,
     updateChatRepo,
     updateCurrentChat,
@@ -556,7 +557,18 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         unseenChatIds={unseenChatIds}
         onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
-        onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
+        onDeleteChat={(chatId) => {
+          // Only warn (via the manage-chat dialog) when there's a live share
+          // link to break; otherwise delete straight away.
+          const chat = displayChats.find((c) => c.id === chatId)
+          if (chat?.shareId) {
+            modals.setDeleteConfirmChatId(chatId)
+          } else {
+            removeChat(chatId, getNextChatId)
+          }
+        }}
+        onArchiveChat={(chatId) => setChatArchived(chatId, true)}
+        onUnarchiveChat={(chatId) => setChatArchived(chatId, false)}
         onRenameChat={renameChat}
         isMobile={isMobile}
         collapsed={isMobile ? false : sidebar.collapsed}
@@ -723,6 +735,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         onScheduledJobSuccess={() => setScheduledJobsRefreshKey((k) => k + 1)}
         onSlashCommand={handleSlashCommand}
         onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
+        onArchiveChat={(chatId) => setChatArchived(chatId, true)}
         limitReachedState={limitReachedState}
         onDismissLimitReached={dismissLimitReached}
         onContinueWithOpenCode={retryWithOpenCode}
