@@ -2,6 +2,38 @@ import { createSandboxGit, type SandboxLike } from "@background-agents/sandbox-g
 import { getUserPushOptions } from "@/lib/git/push-options"
 
 /**
+ * Whether the repo has a merge or rebase in progress.
+ *
+ * Auto-push must be skipped in this state: mid-merge/mid-rebase HEAD is a
+ * partial, not-yet-resolved snapshot, so pushing it either fails or ships
+ * incomplete history. Both the foreground (SSE stream) and background (cron
+ * lifecycle) finalizers call this before pushing so they behave identically —
+ * the background path previously pushed unconditionally, which is why pushes
+ * "sometimes failed" only when the agent finished while unwatched.
+ *
+ * Best-effort: if the state can't be determined, reports "no conflict" so a
+ * transient probe failure never blocks a legitimate push.
+ */
+export async function isInConflictState(
+  sandbox: SandboxLike,
+  repoPath: string
+): Promise<boolean> {
+  try {
+    const rebaseCheck = await sandbox.process.executeCommand(
+      `test -d ${repoPath}/.git/rebase-merge -o -d ${repoPath}/.git/rebase-apply && echo "yes" || echo "no"`
+    )
+    if (rebaseCheck.result.trim() === "yes") return true
+
+    const mergeHeadCheck = await sandbox.process.executeCommand(
+      `test -f ${repoPath}/.git/MERGE_HEAD && echo "yes" || echo "no"`
+    )
+    return mergeHeadCheck.result.trim() === "yes"
+  } catch {
+    return false
+  }
+}
+
+/**
  * List the files with unresolved merge/rebase conflicts in a sandbox repo.
  * Mirrors `git diff --name-only --diff-filter=U`, the standard way to ask git
  * for the still-conflicted paths.

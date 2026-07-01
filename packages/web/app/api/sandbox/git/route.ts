@@ -2,7 +2,7 @@ import { Daytona } from "@daytonaio/sdk"
 import { createSandboxGit } from "@background-agents/sandbox-git"
 import { ensureSandboxStarted } from "@/lib/sandbox"
 import { PATHS } from "@/lib/constants"
-import { createGitOperationMessage } from "@/lib/db/git-messages"
+import { clearPushFailureMessages, createGitOperationMessage } from "@/lib/db/git-messages"
 import { requireGitHubAuth, isGitHubAuthError } from "@/lib/db/api-helpers"
 import {
   getConflictedFiles,
@@ -459,8 +459,10 @@ export async function POST(req: Request) {
           return Response.json({ error: responseError }, { status: 500 })
         }
 
-        // Success
+        // Success — replace the "Push failed" message (and its now-dead force
+        // push link) that prompted this action with the success line.
         if (chatId) {
+          await clearPushFailureMessages(chatId)
           await createGitOperationMessage(
             chatId,
             `Force pushed ${currentBranch}.`,

@@ -11,41 +11,14 @@ import {
 } from "@/lib/agent-session"
 import { prisma } from "@/lib/db/prisma"
 import { isAuthError, requireChatStreamAccess } from "@/lib/db/api-helpers"
-import { createGitOperationMessage } from "@/lib/db/git-messages"
+import {
+  clearPushFailureMessages,
+  createPushFailedMessage,
+} from "@/lib/db/git-messages"
 import { meterAssistantTurn } from "@/lib/server/token-metering"
 import { getUserPushOptions } from "@/lib/git/push-options"
+import { isInConflictState } from "@/lib/git/sandbox-git-ops"
 import { persistAgentSnapshot } from "./_lib/persist-snapshot"
-
-/**
- * Check if the repository is in a conflict state (merge or rebase in progress)
- */
-async function isInConflictState(
-  sandbox: Awaited<ReturnType<Daytona["get"]>>,
-  repoPath: string
-): Promise<boolean> {
-  try {
-    // Check for rebase in progress
-    const rebaseCheck = await sandbox.process.executeCommand(
-      `test -d ${repoPath}/.git/rebase-merge -o -d ${repoPath}/.git/rebase-apply && echo "yes" || echo "no"`
-    )
-    if (rebaseCheck.result.trim() === "yes") {
-      return true
-    }
-
-    // Check for merge in progress
-    const mergeHeadCheck = await sandbox.process.executeCommand(
-      `test -f ${repoPath}/.git/MERGE_HEAD && echo "yes" || echo "no"`
-    )
-    if (mergeHeadCheck.result.trim() === "yes") {
-      return true
-    }
-
-    return false
-  } catch {
-    // If we can't determine conflict state, assume no conflict
-    return false
-  }
-}
 
 /**
  * Auto-push to remote after agent completion
@@ -346,15 +319,14 @@ export async function GET(req: Request) {
                   )
 
                   if (!pushResult.success) {
-                    // Create error message with force-push action
-                    await createGitOperationMessage(
-                      chatId,
-                      `Push failed: ${pushResult.error}. You can force push to overwrite the remote history.`,
-                      true,
-                      { action: "force-push" }
-                    )
+                    // Error message with a force-push recovery action. Deduped:
+                    // concurrent SSE streams / the cron finalizer can each reach
+                    // here for the same turn, and we surface the failure once.
+                    await createPushFailedMessage(chatId, pushResult.error ?? "Unknown error")
                   } else if (pushResult.pushed) {
-                    // The remote actually advanced — tell the client to notify.
+                    // The remote actually advanced — clear any stale failure
+                    // (and its dead force-push link) and tell the client to notify.
+                    await clearPushFailureMessages(chatId)
                     pushInfo = {
                       branch: pushResult.branch || chat.branch,
                       commits: pushResult.pushedCommits ?? 0,

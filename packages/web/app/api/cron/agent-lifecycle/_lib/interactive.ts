@@ -5,11 +5,15 @@ import { createSandboxGit } from "@background-agents/sandbox-git"
 import { prisma } from "@/lib/db/prisma"
 import { PATHS } from "@/lib/constants"
 import { finalizeTurn, type AgentSnapshot } from "@/lib/agent-session"
-import { createGitOperationMessage } from "@/lib/db/git-messages"
+import {
+  clearPushFailureMessages,
+  createPushFailedMessage,
+} from "@/lib/db/git-messages"
 import { meterAssistantTurn } from "@/lib/server/token-metering"
 import { stripNullBytes, stripNullBytesDeep } from "@/lib/db/pg-sanitize"
 
 import { getUserPushOptions } from "@/lib/git/push-options"
+import { isInConflictState } from "@/lib/git/sandbox-git-ops"
 import type { ChatWithMessages } from "./types"
 
 // =============================================================================
@@ -75,18 +79,28 @@ export async function finalizeInteractiveChat(
         })
 
         if (account?.access_token) {
-          const git = createSandboxGit(sandbox)
-          const pushOptions = await getUserPushOptions(chat.userId)
-          try {
-            await git.push(`${PATHS.SANDBOX_HOME}/project`, account.access_token, pushOptions)
-          } catch (err) {
-            // Create error message with force-push action (same as SSE stream)
-            await createGitOperationMessage(
-              chat.id,
-              `Push failed: ${err instanceof Error ? err.message : "Unknown error"}. You can force push to overwrite the remote history.`,
-              true,
-              { action: "force-push" }
-            )
+          const repoPath = `${PATHS.SANDBOX_HOME}/project`
+          // Mirror the SSE stream's auto-push guard: skip while a merge/rebase is
+          // still in progress. HEAD is a partial snapshot mid-conflict, so
+          // pushing it fails — which is exactly why background (unwatched)
+          // completions "sometimes" reported a push failure the foreground never
+          // hit. finalizeTurn above doesn't resolve conflicts, so re-check here.
+          if (!(await isInConflictState(sandbox, repoPath))) {
+            const git = createSandboxGit(sandbox)
+            const pushOptions = await getUserPushOptions(chat.userId)
+            try {
+              const pushResult = await git.push(repoPath, account.access_token, pushOptions)
+              if (pushResult.updated) {
+                // Push landed — drop any stale failure + its force-push link.
+                await clearPushFailureMessages(chat.id)
+              }
+            } catch (err) {
+              // Deduped error message with a force-push action (same as SSE stream).
+              await createPushFailedMessage(
+                chat.id,
+                err instanceof Error ? err.message : "Unknown error"
+              )
+            }
           }
         }
       }
