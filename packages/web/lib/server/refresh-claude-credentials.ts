@@ -13,11 +13,11 @@
 // gRPC-heavy generator import to this file.
 import "server-only"
 import { generateClaudeCredentials } from "@background-agents/claude-credentials"
+import { CLAUDE_COOKIES_KEY } from "@background-agents/claude-credentials/constants"
 import {
   readCredentials,
   writeCredentials,
   getCookies,
-  CLAUDE_COOKIES_KEY,
 } from "@/lib/claude-credentials"
 
 // Skip refresh while the live credential still has at least this much life.

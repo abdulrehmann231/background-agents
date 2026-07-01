@@ -11,14 +11,13 @@
 // client component ever imports it.
 import "server-only"
 // Constants come from the package's zero-dep `/constants` subpath, so importing
-// them never reaches the SDK. Re-exported for server-side consumers.
+// them never reaches the SDK. Anything else that needs these keys should import
+// them from that subpath directly rather than through this module.
 import {
   CLAUDE_CREDS_KEY,
   CLAUDE_COOKIES_KEY,
 } from "@background-agents/claude-credentials/constants"
 import { prisma } from "@/lib/db/prisma"
-
-export { CLAUDE_CREDS_KEY, CLAUDE_COOKIES_KEY }
 
 /**
  * Closes the Prisma connection. Handy for short-lived scripts (e.g. the
