@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto"
 import { Daytona } from "@daytonaio/sdk"
-import { createSandboxGit } from "@background-agents/sandbox-git"
 import { PATHS } from "@/lib/constants"
 import {
   cancelBackgroundAgent,
@@ -11,104 +10,9 @@ import {
 } from "@/lib/agent-session"
 import { prisma } from "@/lib/db/prisma"
 import { isAuthError, requireChatStreamAccess } from "@/lib/db/api-helpers"
-import { createGitOperationMessage } from "@/lib/db/git-messages"
 import { meterAssistantTurn } from "@/lib/server/token-metering"
-import { getUserPushOptions } from "@/lib/git/push-options"
+import { autoPushChat, type PushInfo } from "@/lib/git/auto-push"
 import { persistAgentSnapshot } from "./_lib/persist-snapshot"
-
-/**
- * Check if the repository is in a conflict state (merge or rebase in progress)
- */
-async function isInConflictState(
-  sandbox: Awaited<ReturnType<Daytona["get"]>>,
-  repoPath: string
-): Promise<boolean> {
-  try {
-    // Check for rebase in progress
-    const rebaseCheck = await sandbox.process.executeCommand(
-      `test -d ${repoPath}/.git/rebase-merge -o -d ${repoPath}/.git/rebase-apply && echo "yes" || echo "no"`
-    )
-    if (rebaseCheck.result.trim() === "yes") {
-      return true
-    }
-
-    // Check for merge in progress
-    const mergeHeadCheck = await sandbox.process.executeCommand(
-      `test -f ${repoPath}/.git/MERGE_HEAD && echo "yes" || echo "no"`
-    )
-    if (mergeHeadCheck.result.trim() === "yes") {
-      return true
-    }
-
-    return false
-  } catch {
-    // If we can't determine conflict state, assume no conflict
-    return false
-  }
-}
-
-/**
- * Auto-push to remote after agent completion
- * Returns true if push succeeded, false otherwise
- */
-async function autoPush(
-  sandbox: Awaited<ReturnType<Daytona["get"]>>,
-  repoPath: string,
-  githubToken: string,
-  options?: { noVerify?: boolean }
-): Promise<{
-  success: boolean
-  error?: string
-  skipped?: boolean
-  /** True when the push actually advanced the remote (something was delivered) */
-  pushed?: boolean
-  /** Best-effort number of commits delivered (0 when unknown) */
-  pushedCommits?: number
-  branch?: string
-  commitSha?: string
-}> {
-  try {
-    // Skip auto-push if in conflict state (merge or rebase in progress)
-    const inConflict = await isInConflictState(sandbox, repoPath)
-    if (inConflict) {
-      return { success: true, skipped: true }
-    }
-
-    // Current branch name (best-effort).
-    const branchRes = await sandbox.process.executeCommand(
-      `cd ${repoPath} && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""`
-    )
-    const branch = branchRes.result.trim()
-
-    const git = createSandboxGit(sandbox)
-    // The push result is the source of truth for "did anything get pushed":
-    // `--porcelain` reports whether the remote ref advanced or was up-to-date.
-    const pushResult = await git.push(repoPath, githubToken, { noVerify: options?.noVerify })
-
-    const headRes = await sandbox.process.executeCommand(
-      `cd ${repoPath} && git rev-parse --short HEAD 2>/dev/null || echo ""`
-    )
-    const commitSha = headRes.result.trim()
-
-    // Best-effort commit count for display. When the push reported an exact
-    // "<old>..<new>" range (existing branch), count that; otherwise fall back
-    // to commits not on any origin remote-tracking branch. Either way the
-    // notification is gated on `pushed`, not on this number.
-    let pushedCommits = 0
-    if (pushResult.updated) {
-      const range = pushResult.range ?? "HEAD --not --remotes=origin"
-      const countRes = await sandbox.process.executeCommand(
-        `cd ${repoPath} && git rev-list --count ${range} 2>/dev/null || echo 0`
-      )
-      pushedCommits = parseInt(countRes.result.trim() || "0", 10) || 0
-    }
-
-    return { success: true, pushed: pushResult.updated, pushedCommits, branch, commitSha }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error"
-    return { success: false, error: message }
-  }
-}
 
 // Allow longer streaming connections (5 minutes max)
 export const maxDuration = 300
@@ -281,7 +185,6 @@ export async function GET(req: Request) {
               await cancelBackgroundAgent(sandbox, backgroundSessionId, sessionOpts)
             }
 
-            await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
 
             // Meter token/cost usage via tokscale while the sandbox is still
@@ -316,11 +219,14 @@ export async function GET(req: Request) {
               }
             }
 
-            // Populated when the auto-push below delivers new commits, so the
-            // client can raise a "new push" notification.
-            let pushInfo: { branch: string; commits: number; commitSha?: string } | undefined
-
-            // Auto-push on successful completion if chat has a branch (GitHub repo)
+            // Auto-push BEFORE releasing the chat from "running". The push is
+            // backend-owned (autoPushChat) — this SSE handler is just a fast
+            // trigger for it. Releasing first (backgroundSessionId → null) would
+            // exclude the agent-lifecycle cron, so a crash mid-push would strand
+            // the commits; pushing first means a dead request simply falls back
+            // to the cron, which finalizes identically. Populated when the push
+            // advances the remote, so the client can raise a "new push" toast.
+            let pushInfo: PushInfo | undefined
             if (lastSnap.status === "completed" && chatId) {
               const chat = await prisma.chat.findUnique({
                 where: { id: chatId },
@@ -328,42 +234,19 @@ export async function GET(req: Request) {
               })
 
               if (chat?.branch && chat.repo && chat.repo !== "__new__") {
-                // Get GitHub token from user's account
-                const account = await prisma.account.findFirst({
-                  where: { userId: chat.userId, provider: "github" },
-                  select: { access_token: true },
-                })
-
-                if (account?.access_token) {
-                  // Get user settings for push options
-                  const pushOptions = await getUserPushOptions(chat.userId)
-
-                  const pushResult = await autoPush(
+                pushInfo =
+                  (await autoPushChat({
                     sandbox,
-                    sessionOpts.repoPath,
-                    account.access_token,
-                    pushOptions
-                  )
-
-                  if (!pushResult.success) {
-                    // Create error message with force-push action
-                    await createGitOperationMessage(
-                      chatId,
-                      `Push failed: ${pushResult.error}. You can force push to overwrite the remote history.`,
-                      true,
-                      { action: "force-push" }
-                    )
-                  } else if (pushResult.pushed) {
-                    // The remote actually advanced — tell the client to notify.
-                    pushInfo = {
-                      branch: pushResult.branch || chat.branch,
-                      commits: pushResult.pushedCommits ?? 0,
-                      commitSha: pushResult.commitSha,
-                    }
-                  }
-                }
+                    repoPath: sessionOpts.repoPath,
+                    chatId,
+                    userId: chat.userId,
+                    branch: chat.branch,
+                  })) ?? undefined
               }
             }
+
+            // Now that the push is done, release the chat from "running".
+            await persistSnapshot(lastSnap, true)
 
             // Check conflict state to include in complete event
             // This allows the frontend to update the warning icon after agent resolves conflicts

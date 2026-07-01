@@ -1,15 +1,13 @@
 import { Daytona } from "@daytonaio/sdk"
 import { Prisma } from "@prisma/client"
-import { createSandboxGit } from "@background-agents/sandbox-git"
 
 import { prisma } from "@/lib/db/prisma"
 import { PATHS } from "@/lib/constants"
 import { finalizeTurn, type AgentSnapshot } from "@/lib/agent-session"
-import { createGitOperationMessage } from "@/lib/db/git-messages"
 import { meterAssistantTurn } from "@/lib/server/token-metering"
 import { stripNullBytes, stripNullBytesDeep } from "@/lib/db/pg-sanitize"
 
-import { getUserPushOptions } from "@/lib/git/push-options"
+import { autoPushChat } from "@/lib/git/auto-push"
 import type { ChatWithMessages } from "./types"
 
 // =============================================================================
@@ -67,28 +65,17 @@ export async function finalizeInteractiveChat(
         sessionId: snapshot.sessionId,
       })
 
-      // 3. Auto-push if chat has a branch (reuse existing logic from SSE stream)
+      // 3. Auto-push before the status reset below releases the chat. Same
+      //    backend routine the SSE stream calls — conflict guard, deduped
+      //    failure message, stale-failure cleanup all live in autoPushChat.
       if (chat.branch && chat.repo && chat.repo !== "__new__") {
-        const account = await prisma.account.findFirst({
-          where: { userId: chat.userId, provider: "github" },
-          select: { access_token: true },
+        await autoPushChat({
+          sandbox,
+          repoPath: `${PATHS.SANDBOX_HOME}/project`,
+          chatId: chat.id,
+          userId: chat.userId,
+          branch: chat.branch,
         })
-
-        if (account?.access_token) {
-          const git = createSandboxGit(sandbox)
-          const pushOptions = await getUserPushOptions(chat.userId)
-          try {
-            await git.push(`${PATHS.SANDBOX_HOME}/project`, account.access_token, pushOptions)
-          } catch (err) {
-            // Create error message with force-push action (same as SSE stream)
-            await createGitOperationMessage(
-              chat.id,
-              `Push failed: ${err instanceof Error ? err.message : "Unknown error"}. You can force push to overwrite the remote history.`,
-              true,
-              { action: "force-push" }
-            )
-          }
-        }
       }
     } catch (err) {
       console.error(`[agent-lifecycle] Failed to finalize chat ${chat.id}:`, err)
