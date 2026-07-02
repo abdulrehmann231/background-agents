@@ -10,7 +10,11 @@ import {
 } from "@/lib/contexts"
 import { NEW_REPOSITORY, type Chat, type ChatStatus } from "@/lib/types"
 import type { GitHubRepo } from "@/lib/github"
-import { buildTreeOrderedChatIds, getNextChatIdAfterDeletion } from "@/lib/chat-tree"
+import {
+  buildTreeOrderedChatIds,
+  getChatIdForRepoFilter,
+  getNextChatIdAfterDeletion,
+} from "@/lib/chat-tree"
 
 /** The git-dialog setters the merge/rebase request handlers need. */
 interface GitDialogControls {
@@ -48,6 +52,12 @@ interface UseChatNavigationResult {
   treeOrderedChatIds: string[]
   handleNewChat: () => Promise<void>
   handleSelectChat: (chatId: string) => void
+  /**
+   * Change the sidebar repo filter and ensure a chat from the newly filtered
+   * list is selected (keeps the current chat if it survives the filter,
+   * otherwise selects the first chat in the filtered list).
+   */
+  handleRepoFilterChange: (filter: string) => void
   handleOpenScheduledJobs: () => void
   handleNavigateToJob: (jobId: string | null, jobName?: string) => void
   handleNavigateChat: (direction: "up" | "down") => void
@@ -90,6 +100,22 @@ export function useChatNavigation({
       window.history.pushState(null, "", ROUTES.chat.build(chatId))
     },
     [selectChat, sidebar]
+  )
+
+  // Handler for changing the repo filter from the sidebar. After switching the
+  // filter, the previously selected chat may no longer be visible (it belongs to
+  // a different repo, or is/isn't archived). In that case, select the first chat
+  // in the newly filtered list so the user always lands on a visible chat.
+  const handleRepoFilterChange = useCallback(
+    (filter: string) => {
+      sidebar.setRepoFilter(filter)
+      const nextChatId = getChatIdForRepoFilter(chats, filter, currentChatId)
+      // Only select when it differs from what's already selected (keeps the
+      // current chat if it survives the filter; selects the first visible chat
+      // otherwise). null means the filter matches no chats — leave as-is.
+      if (nextChatId && nextChatId !== currentChatId) handleSelectChat(nextChatId)
+    },
+    [sidebar, chats, currentChatId, handleSelectChat]
   )
 
   // Handler for new chat - uses current chat's repo/branch if available, otherwise repo filter
@@ -253,6 +279,7 @@ export function useChatNavigation({
     treeOrderedChatIds,
     handleNewChat,
     handleSelectChat,
+    handleRepoFilterChange,
     handleOpenScheduledJobs,
     handleNavigateToJob,
     handleNavigateChat,

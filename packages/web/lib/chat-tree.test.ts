@@ -3,6 +3,7 @@ import { ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS } from "@/lib/contexts"
 import { NEW_REPOSITORY, type Chat } from "@/lib/types"
 import {
   buildTreeOrderedChatIds,
+  getChatIdForRepoFilter,
   getNextChatIdAfterDeletion,
   isChatVisibleForFilter,
 } from "./chat-tree"
@@ -121,5 +122,39 @@ describe("selection after archiving the open chat", () => {
     const solo = [makeChat({ id: "only" })]
     const soloOrder = buildTreeOrderedChatIds(solo, ALL_REPOSITORIES)
     expect(getNextChatIdAfterDeletion(soloOrder, ["only"])).toBeNull()
+  })
+})
+
+describe("getChatIdForRepoFilter", () => {
+  it("keeps the current chat when it is still visible under the new filter", () => {
+    const chats = [
+      makeChat({ id: "a", repo: "octocat/hello", lastActiveAt: 2 }),
+      makeChat({ id: "b", repo: "octocat/hello", lastActiveAt: 1 }),
+    ]
+    // Selecting the same repo the current chat belongs to keeps it selected.
+    expect(getChatIdForRepoFilter(chats, "octocat/hello", "b")).toBe("b")
+  })
+
+  it("selects the first visible chat when the current chat is filtered out", () => {
+    const chats = [
+      makeChat({ id: "a", repo: "octocat/hello", lastActiveAt: 2 }),
+      makeChat({ id: "b", repo: "octocat/other", lastActiveAt: 1 }),
+    ]
+    // Current chat "a" belongs to a different repo than the selected filter, so
+    // we land on the first (most recent) chat in the filtered list.
+    expect(getChatIdForRepoFilter(chats, "octocat/other", "a")).toBe("b")
+  })
+
+  it("selects the first visible chat when nothing is currently selected", () => {
+    const chats = [
+      makeChat({ id: "a", repo: "octocat/hello", lastActiveAt: 1 }),
+      makeChat({ id: "b", repo: "octocat/hello", lastActiveAt: 2 }),
+    ]
+    expect(getChatIdForRepoFilter(chats, "octocat/hello", null)).toBe("b")
+  })
+
+  it("returns null when the filter matches no chats", () => {
+    const chats = [makeChat({ id: "a", repo: "octocat/hello" })]
+    expect(getChatIdForRepoFilter(chats, "octocat/nonexistent", "a")).toBeNull()
   })
 })
