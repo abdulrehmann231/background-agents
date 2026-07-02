@@ -74,6 +74,8 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
     setInput,
     textareaRef,
     handleSend,
+    handleBranchSend,
+    canBranch,
     handleKeyDown,
     messagesEndRef,
     messagesContainerRef,
@@ -141,6 +143,8 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       input={input}
       onInputChange={setInput}
       onSend={handleSend}
+      onBranchSend={handleBranchSend}
+      canBranch={canBranch}
       onStop={onStopAgent}
       onKeyDown={handleKeyDown}
       textareaRef={textareaRef}
