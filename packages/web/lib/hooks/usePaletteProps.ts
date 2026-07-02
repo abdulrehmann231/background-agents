@@ -139,8 +139,15 @@ export function usePaletteProps({
     repos,
     currentRepo: hasRepo ? currentChat!.repo : null,
     branches,
+    // Ordered by recency (pinned first), matching the sidebar chat list so the
+    // command palettes present chats in the same order the user sees them.
     chats: displayChats
       .filter((c) => c.displayName !== null)
+      .slice()
+      .sort((a, b) => {
+        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1
+        return (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt)
+      })
       .map((c) => ({ id: c.id, displayName: c.displayName, repo: c.repo })),
     onSelectRepo: handlePaletteSelectRepo,
     onSelectBranch: handlePaletteSelectBranch,
