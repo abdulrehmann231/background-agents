@@ -70,6 +70,24 @@ export function buildTreeOrderedChatIds(chats: Chat[], repoFilter: string): stri
 }
 
 /**
+ * Compute which chat should be selected after the sidebar repo filter changes.
+ *
+ * The rule: if the currently selected chat is still visible under the new
+ * filter, keep it. Otherwise land on the first chat in the newly filtered list
+ * so the user always sees a chat that belongs to the selected filter. Returns
+ * null only when the filter matches no chats at all.
+ */
+export function getChatIdForRepoFilter(
+  chats: Chat[],
+  repoFilter: string,
+  currentChatId: string | null
+): string | null {
+  const orderedIds = buildTreeOrderedChatIds(chats, repoFilter)
+  if (currentChatId && orderedIds.includes(currentChatId)) return currentChatId
+  return orderedIds[0] ?? null
+}
+
+/**
  * Compute the chat to select after deleting `deletedIds`: the following chat in
  * tree order, or the previous one if the deleted chat was last. Returns null
  * when nothing remains.

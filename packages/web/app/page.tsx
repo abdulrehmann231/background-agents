@@ -308,6 +308,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   const {
     handleNewChat,
     handleSelectChat,
+    handleRepoFilterChange,
     handleOpenScheduledJobs,
     handleNavigateToJob,
     handleNavigateChat,
@@ -573,7 +574,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         mobileOpen={isMobile ? sidebar.mobileSidebarOpen : undefined}
         onMobileClose={isMobile ? () => sidebar.setMobileSidebarOpen(false) : undefined}
         repoFilter={sidebar.repoFilter}
-        onRepoFilterChange={sidebar.setRepoFilter}
+        onRepoFilterChange={handleRepoFilterChange}
         collapsedChatIds={sidebar.collapsedChatIds}
         onToggleChatCollapsed={sidebar.toggleChatCollapsed}
         onRequestMergeChats={handleRequestMergeChats}
