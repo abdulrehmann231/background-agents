@@ -141,9 +141,11 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   const [elizaEnabled, setElizaEnabled] = useState(settings.elizaEnabled)
   const [activeSection, setActiveSection] = useState<SectionKey>(defaultSection)
 
-  // Drag to dismiss (mobile only)
+  // Drag to dismiss (mobile only). Routed through a ref so it persists pending
+  // changes via handleClose (defined below) rather than discarding them.
+  const handleCloseRef = useRef<() => void>(() => {})
   const { handlers: dragHandlers, dragY, isDragging, dragRef } = useDragToClose({
-    onClose,
+    onClose: () => handleCloseRef.current(),
     enabled: isMobile,
   })
 
@@ -249,74 +251,15 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     setTheme(theme)
   }
 
-  // Save status — drives the inline feedback above the Save button.
-  const [saveStatus, setSaveStatus] = useState<
-    | { kind: "idle" }
-    | { kind: "saving" }
-    | { kind: "saved" }
-    | { kind: "error"; message: string }
-  >({ kind: "idle" })
-
-  const credChanged = useMemo(() => {
-    for (const { id } of CREDENTIAL_KEYS) {
-      if (credValues[id] !== initialCreds[id]) return true
-    }
-    return false
-  }, [credValues, initialCreds])
-
-  // Compare against the resolved baseline so picking the same value the auto-
-  // resolver chose doesn't get persisted as an explicit preference.
-  const settingsChanged =
-    defaultAgent !== initialDefaultAgent ||
-    defaultModel !== initialDefaultModel ||
-    selectedTheme !== settings.theme ||
-    enablePrepushHooks !== settings.enablePrepushHooks ||
-    notifyOnAgentFinished !== settings.notifyOnAgentFinished ||
-    notifyOnAgentCommitted !== settings.notifyOnAgentCommitted ||
-    notificationSound !== settings.notificationSound ||
-    elizaEnabled !== settings.elizaEnabled
-
-  // Check if auto-detected credentials should be saved (desktop only)
-  const autoDetectHasNewCredentials = isDesktopApp &&
-    licenseAutoDetectEnabled &&
-    licenseDetectResult?.found &&
-    licenseDetectResult.credentials &&
-    !credentialFlags["CLAUDE_CODE_CREDENTIALS"] // Only if not already saved
-
   const endpointsChanged = useMemo(
     () => JSON.stringify(endpoints) !== JSON.stringify(initialEndpoints),
     [endpoints, initialEndpoints]
   )
 
-  const hasChanges = credChanged || settingsChanged || endpointsChanged || autoDetectHasNewCredentials
-
-  const handleSave = async () => {
-    if (saveStatus.kind === "saving") return
-
-    // Block save on an incomplete endpoint: name + base URL always, plus a model
-    // for OpenCode (it addresses models as <provider>/<model>). The editor's own
-    // gate normally prevents this; this is the backstop the server also enforces.
-    const badEndpoint = endpoints.find(
-      (e) =>
-        !e.name.trim() ||
-        !e.baseUrl.trim() ||
-        (e.type === "opencode" && !e.model.trim())
-    )
-    if (badEndpoint) {
-      setActiveSection("custom-endpoints")
-      setSaveStatus({
-        kind: "error",
-        message: !badEndpoint.name.trim()
-          ? "Custom endpoint: Name is required."
-          : `${badEndpoint.name.trim()}: ${
-              !badEndpoint.baseUrl.trim()
-                ? "Base URL is required."
-                : "Model is required for OpenCode endpoints."
-            }`,
-      })
-      return
-    }
-
+  // Collect all pending changes into a single save payload, or null if nothing
+  // changed. There is no explicit Save button — settings persist automatically
+  // when the modal closes (see handleClose).
+  const buildSaveData = useCallback((): Parameters<typeof onSave>[0] | null => {
     const settingsPatch: Partial<Settings> = {}
     if (defaultAgent !== initialDefaultAgent) settingsPatch.defaultAgent = defaultAgent
     if (defaultModel !== initialDefaultModel) settingsPatch.defaultModel = defaultModel
@@ -349,40 +292,40 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     const data: Parameters<typeof onSave>[0] = {}
     if (Object.keys(settingsPatch).length > 0) data.settings = settingsPatch
     if (Object.keys(credentialsPatch).length > 0) data.credentials = credentialsPatch
-    if (endpointsChanged) data.customEndpoints = endpoints
+    // Persist endpoints only when they're all valid (name + base URL always,
+    // plus a model for OpenCode). A half-finished endpoint is simply not saved.
+    const badEndpoint = endpoints.find(
+      (e) => !e.name.trim() || !e.baseUrl.trim() || (e.type === "opencode" && !e.model.trim())
+    )
+    if (endpointsChanged && !badEndpoint) data.customEndpoints = endpoints
 
-    if (Object.keys(data).length === 0) {
-      onClose()
-      return
-    }
+    return Object.keys(data).length > 0 ? data : null
+  }, [
+    defaultAgent, initialDefaultAgent, defaultModel, initialDefaultModel,
+    selectedTheme, enablePrepushHooks, notifyOnAgentFinished, notifyOnAgentCommitted,
+    notificationSound, elizaEnabled, settings, credValues, initialCreds,
+    isDesktopApp, licenseAutoDetectEnabled, licenseDetectResult, endpoints, endpointsChanged,
+  ])
 
-    setSaveStatus({ kind: "saving" })
-    const result = await onSave(data)
-    if (result.ok) {
-      setSaveStatus({ kind: "saved" })
-      setTimeout(() => {
-        setSaveStatus({ kind: "idle" })
-        onClose()
-      }, 700)
-    } else {
-      setSaveStatus({
-        kind: "error",
-        message: result.error ?? "Failed to save settings",
-      })
-    }
-  }
+  // Persist any pending changes (fire-and-forget) and close. This replaces the
+  // explicit Save button — closing the modal is what commits the edits.
+  const handleClose = useCallback(() => {
+    const data = buildSaveData()
+    if (data) void onSave(data)
+    onClose()
+  }, [buildSaveData, onSave, onClose])
+  // Keep the drag-to-dismiss ref pointing at the latest handleClose.
+  handleCloseRef.current = handleClose
 
   const setCredValue = useCallback((id: CredentialId, value: string) => {
     setCredValues((prev) => ({ ...prev, [id]: value }))
   }, [])
 
-  // Handle keyboard shortcuts (Cmd/Ctrl+Enter to save)
+  // Cmd/Ctrl+Enter closes (and thereby saves) the modal.
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      if (hasChanges && saveStatus.kind !== "saving") {
-        handleSave()
-      }
+      handleClose()
     }
   }
 
@@ -471,7 +414,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   const activeTitle = sections.find((s) => s.key === activeSection)?.label ?? "Settings"
 
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={cn(
           "fixed inset-0 z-50 bg-black/15 backdrop-blur-[1px] transition-opacity duration-300",
@@ -523,30 +466,6 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
                   <div key={s.key}>{renderSection(s.key)}</div>
                 ))}
               </div>
-
-              {/* Footer */}
-              <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-border bg-popover px-4 py-4 pb-safe">
-                {saveStatus.kind === "error" && (
-                  <span className="text-sm text-destructive flex-1">{saveStatus.message}</span>
-                )}
-                {saveStatus.kind === "saved" && (
-                  <span className="text-sm text-muted-foreground flex-1">Saved</span>
-                )}
-                <button
-                  onClick={onClose}
-                  disabled={saveStatus.kind === "saving"}
-                  className="rounded-md hover:bg-accent active:bg-accent transition-colors touch-target px-6 py-3 text-base disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={!hasChanges || saveStatus.kind === "saving"}
-                  className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-target px-6 py-3 text-base"
-                >
-                  {saveStatus.kind === "saving" ? "Saving…" : "Save"}
-                </button>
-              </div>
             </>
           ) : (
             <div className="flex flex-1 min-h-0">
@@ -590,29 +509,6 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
                     {activeTitle}
                   </Dialog.Title>
                   {renderSection(activeSection)}
-                </div>
-
-                <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-3">
-                  {saveStatus.kind === "error" && (
-                    <span className="text-sm text-destructive flex-1">{saveStatus.message}</span>
-                  )}
-                  {saveStatus.kind === "saved" && (
-                    <span className="text-sm text-muted-foreground flex-1">Saved</span>
-                  )}
-                  <button
-                    onClick={onClose}
-                    disabled={saveStatus.kind === "saving"}
-                    className="rounded-md hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={!hasChanges || saveStatus.kind === "saving"}
-                    className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3 py-1.5 text-sm cursor-pointer"
-                  >
-                    {saveStatus.kind === "saving" ? "Saving…" : "Save"}
-                  </button>
                 </div>
               </div>
             </div>
