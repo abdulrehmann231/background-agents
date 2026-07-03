@@ -34,6 +34,7 @@ export {
   agentModels,
   defaultAgentModel,
   agentSupportsPlanMode,
+  agentSupportsResume,
   ENDPOINT_TYPE_TO_AGENT,
   ENDPOINT_MODEL_PREFIX,
   // Functions
@@ -115,6 +116,7 @@ export {
   ClaudeCodeIcon,
   CodexIcon,
   CopilotIcon,
+  DroidIcon,
   OpenCodeIcon,
   GeminiIcon,
   GooseIcon,

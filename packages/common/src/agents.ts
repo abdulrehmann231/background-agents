@@ -7,17 +7,17 @@
 // Agent Types
 // =============================================================================
 
-export type Agent = "claude-code" | "opencode" | "codex" | "copilot" | "eliza" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
+export type Agent = "claude-code" | "opencode" | "codex" | "copilot" | "droid" | "eliza" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
 
 /**
  * All agent ids, in display order. Agents backed by a server shared pool
  * (claude-code, opencode, gemini) lead, with Kilo (free models, no shared
  * pool) placed ahead of Gemini, then the remaining providers.
  */
-export const ALL_AGENTS: Agent[] = ["claude-code", "opencode", "kilo", "gemini", "codex", "copilot", "goose", "kimi", "pi", "eliza"]
+export const ALL_AGENTS: Agent[] = ["claude-code", "opencode", "kilo", "gemini", "codex", "copilot", "goose", "kimi", "droid", "pi", "eliza"]
 
 /** SDK provider names (must match ProviderName from SDK) */
-export type ProviderName = "claude" | "codex" | "copilot" | "eliza" | "opencode" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
+export type ProviderName = "claude" | "codex" | "copilot" | "droid" | "eliza" | "opencode" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
 
 /** Display labels for each agent */
 export const agentLabels: Record<Agent, string> = {
@@ -25,6 +25,7 @@ export const agentLabels: Record<Agent, string> = {
   "opencode": "OpenCode",
   "codex": "Codex",
   "copilot": "GitHub Copilot",
+  "droid": "Factory Droid",
   "eliza": "Eliza",
   "gemini": "Gemini",
   "goose": "Goose",
@@ -39,6 +40,7 @@ export const agentToProvider: Record<Agent, ProviderName> = {
   "opencode": "opencode",
   "codex": "codex",
   "copilot": "copilot",
+  "droid": "droid",
   "eliza": "eliza",
   "gemini": "gemini",
   "goose": "goose",
@@ -52,7 +54,7 @@ export const agentToProvider: Record<Agent, ProviderName> = {
 // =============================================================================
 
 /** Provider an API key is associated with. */
-export type ProviderId = "anthropic" | "github" | "openai" | "opencode" | "gemini" | "kilo" | "kimi"
+export type ProviderId = "anthropic" | "github" | "openai" | "opencode" | "gemini" | "kilo" | "kimi" | "factory"
 
 /**
  * Credential identifiers. The id doubles as the env var name we inject
@@ -67,6 +69,7 @@ export type CredentialId =
   | "GEMINI_API_KEY"
   | "KILO_API_KEY"
   | "KIMI_API_KEY"
+  | "FACTORY_API_KEY"
 
 export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // Server has a shared Claude credential pool (e.g. the rotating row written
@@ -152,6 +155,7 @@ const PROVIDER_ENV: Record<ProviderId, CredentialId[]> = {
   gemini: ["GEMINI_API_KEY"],
   kilo: ["KILO_API_KEY"],
   kimi: ["KIMI_API_KEY"],
+  factory: ["FACTORY_API_KEY"],
 }
 
 // =============================================================================
@@ -356,6 +360,24 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "kimi-k2.6", label: "Kimi K2.6", requiresKey: "kimi" },
     { value: "kimi-k2.5", label: "Kimi K2.5", requiresKey: "kimi" },
   ],
+  "droid": [
+    // BYOK only. droid runs entirely on the user's own Anthropic/OpenAI/Gemini
+    // key — it needs NO Factory account or login; keys stay local
+    // (https://docs.factory.ai/cli/byok/overview). At run time the droid SDK agent
+    // writes the selected model as a `custom:byok-0` entry in
+    // ~/.factory/settings.json and selects it with `droid exec -m custom:byok-0`
+    // (verified live on droid v0.164; omitting `-m` falls back to droid's built-in
+    // `claude-opus-4-8`).
+    //
+    // Each value is the exact upstream API model id (it becomes the customModels
+    // `model` field POSTed to api.anthropic.com / api.openai.com / Gemini's
+    // OpenAI-compatible endpoint), so it must be a real provider id.
+    { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
+    { value: "gpt-5", label: "GPT-5", requiresKey: "openai" },
+    // Gemini via Google's OpenAI-compatible endpoint (droid's
+    // generic-chat-completion-api provider on the user's GEMINI_API_KEY).
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
+  ],
   "pi": [
     // Anthropic models (default provider)
     { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
@@ -380,6 +402,7 @@ export const defaultAgentModel: Record<Agent, string> = {
   "opencode": "opencode-go/mimo-v2.5-pro",
   "codex": "gpt-5.5",
   "copilot": "gpt-5-mini",
+  "droid": "claude-sonnet-4-5-20250929", // BYOK default (user's ANTHROPIC_API_KEY)
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
   "gemini": "gemini-2.5-flash",
   "goose": "gpt-4o",
@@ -394,12 +417,34 @@ export const agentSupportsPlanMode: Record<Agent, boolean> = {
   "opencode": false,
   "codex": true,
   "copilot": false,
+  "droid": false,
   "eliza": false,
   "gemini": true,
   "goose": true,
   "kilo": false,
   "kimi": false,
   "pi": false,
+}
+
+/**
+ * Whether each agent supports native session resume (continuing a prior turn via
+ * its own session id / `-s` flag). When false, the web layer must replay prior
+ * conversation as injected history each turn instead of passing a stored
+ * sessionId. droid is false: `droid exec -s <id>` hard-crashes (exit 1, no
+ * output) on v0.164, so we never resume it.
+ */
+export const agentSupportsResume: Record<Agent, boolean> = {
+  "claude-code": true,
+  "opencode": true,
+  "codex": true,
+  "copilot": true,
+  "droid": false,
+  "eliza": true,
+  "gemini": true,
+  "goose": true,
+  "kilo": true,
+  "kimi": true,
+  "pi": true,
 }
 
 // =============================================================================
@@ -642,6 +687,21 @@ export function getEnvForModel(
   // Claude Code: subscription token wins over API key.
   if ((!agent || agent === "claude-code") && credentials.CLAUDE_CODE_CREDENTIALS) {
     return { CLAUDE_CODE_CREDENTIALS: credentials.CLAUDE_CODE_CREDENTIALS }
+  }
+
+  // Droid runs BYOK: each model routes to the user's own key via the customModels
+  // `${ANTHROPIC_API_KEY}` / `${OPENAI_API_KEY}` references droid resolves from the
+  // process env (see the droid SDK agent) — so inject whichever provider keys are
+  // set. No Factory login is needed for BYOK, but if the user did save a
+  // FACTORY_API_KEY we still pass it through (harmless; enables Factory-hosted
+  // routing if they ever select a built-in model id).
+  if (agent === "droid") {
+    const env: Record<string, string> = {}
+    if (credentials.FACTORY_API_KEY) env.FACTORY_API_KEY = credentials.FACTORY_API_KEY
+    if (credentials.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = credentials.ANTHROPIC_API_KEY
+    if (credentials.OPENAI_API_KEY) env.OPENAI_API_KEY = credentials.OPENAI_API_KEY
+    if (credentials.GEMINI_API_KEY) env.GEMINI_API_KEY = credentials.GEMINI_API_KEY
+    return env
   }
 
   const opt = agent ? (agentModels[agent] ?? []).find((m) => m.value === model) : undefined

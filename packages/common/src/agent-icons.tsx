@@ -264,6 +264,27 @@ export function PiIcon({ className }: AgentIconProps) {
   )
 }
 
+// Droid icon (Factory) - simple droid/robot glyph in currentColor
+export function DroidIcon({ className }: AgentIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("h-4 w-4", className)}
+    >
+      {/* antenna */}
+      <path d="M12 2v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="2" r="1.4" fill="currentColor" />
+      {/* head/body */}
+      <rect x="4" y="6" width="16" height="13" rx="3" fill="currentColor" />
+      {/* eyes (cut out) */}
+      <circle cx="9" cy="12" r="1.6" fill="var(--background, #fff)" />
+      <circle cx="15" cy="12" r="1.6" fill="var(--background, #fff)" />
+    </svg>
+  )
+}
+
 // Helper function to get the icon component for an agent
 export function AgentIcon({ agent, className }: { agent: Agent; className?: string }) {
   switch (agent) {
@@ -273,6 +294,8 @@ export function AgentIcon({ agent, className }: { agent: Agent; className?: stri
       return <CodexIcon className={className} />
     case "copilot":
       return <CopilotIcon className={className} />
+    case "droid":
+      return <DroidIcon className={className} />
     case "eliza":
       return <ElizaIcon className={className} />
     case "opencode":
