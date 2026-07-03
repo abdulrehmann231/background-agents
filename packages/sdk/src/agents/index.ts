@@ -8,6 +8,7 @@ import { registry } from "../core/registry"
 import { claudeAgent } from "./claude/index"
 import { codexAgent } from "./codex/index"
 import { copilotAgent } from "./copilot/index"
+import { droidAgent } from "./droid/index"
 import { elizaAgent } from "./eliza/index"
 import { geminiAgent } from "./gemini/index"
 import { gooseAgent } from "./goose/index"
@@ -20,6 +21,7 @@ import { piAgent } from "./pi/index"
 registry.register(claudeAgent)
 registry.register(codexAgent)
 registry.register(copilotAgent)
+registry.register(droidAgent)
 registry.register(elizaAgent)
 registry.register(geminiAgent)
 registry.register(gooseAgent)
@@ -32,6 +34,7 @@ registry.register(piAgent)
 export { claudeAgent } from "./claude/index"
 export { codexAgent } from "./codex/index"
 export { copilotAgent } from "./copilot/index"
+export { droidAgent } from "./droid/index"
 export { elizaAgent } from "./eliza/index"
 export { geminiAgent } from "./gemini/index"
 export { gooseAgent } from "./goose/index"
@@ -44,6 +47,7 @@ export { piAgent } from "./pi/index"
 export { CLAUDE_TOOL_MAPPINGS } from "./claude/tools"
 export { CODEX_TOOL_MAPPINGS } from "./codex/tools"
 export { COPILOT_TOOL_MAPPINGS } from "./copilot/tools"
+export { DROID_TOOL_MAPPINGS } from "./droid/tools"
 export { ELIZA_TOOL_MAPPINGS } from "./eliza/tools"
 export { GEMINI_TOOL_MAPPINGS } from "./gemini/tools"
 export { GOOSE_TOOL_MAPPINGS } from "./goose/tools"
@@ -56,6 +60,7 @@ export { PI_TOOL_MAPPINGS } from "./pi/tools"
 export { parseClaudeLine } from "./claude/parser"
 export { parseCodexLine } from "./codex/parser"
 export { parseCopilotLine } from "./copilot/parser"
+export { parseDroidLine } from "./droid/parser"
 export { parseElizaLine } from "./eliza/parser"
 export { parseGeminiLine } from "./gemini/parser"
 export { parseGooseLine } from "./goose/parser"

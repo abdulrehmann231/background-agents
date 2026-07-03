@@ -133,6 +133,21 @@ const providers: ProviderConfig[] = [
     apiKey: KIMI_API_KEY,
     model: "kimi-k2.7-code",
   },
+  {
+    // droid runs BYOK on the user's own Anthropic key (no Factory key needed).
+    name: "droid",
+    apiKeyEnvVar: "ANTHROPIC_API_KEY",
+    apiKey: ANTHROPIC_API_KEY,
+    model: "claude-sonnet-4-5-20250929",
+  },
+  {
+    // droid BYOK on a Gemini key, via Google's OpenAI-compatible endpoint.
+    name: "droid",
+    apiKeyEnvVar: "GEMINI_API_KEY",
+    apiKey: GEMINI_API_KEY,
+    model: "gemini-2.5-flash",
+    outputName: "droid-gemini",
+  },
 ]
 
 // Helper to poll for completion and return raw output

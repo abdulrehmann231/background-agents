@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","cwd":"/home/daytona","session_id":"a1b2c3d4-0000-0000-0000-000000000000","tools":["Read","LS","Execute"],"model":"claude-opus-4-8","reasoning_effort":"high"}
+{"type":"error","source":"cli","message":"Error: authentication failed: invalid api key for provider anthropic (401)","session_id":"a1b2c3d4-0000-0000-0000-000000000000"}

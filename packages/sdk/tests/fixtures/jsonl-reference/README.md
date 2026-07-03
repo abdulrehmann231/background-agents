@@ -10,6 +10,9 @@ Raw JSONL output captured from actual AI coding agent CLI runs. These are **not 
 | `codex.jsonl` | Codex | OpenAI Codex CLI |
 | `copilot-gpt-4.1.jsonl` | GitHub Copilot | Copilot CLI with gpt-4.1 (paid tier) — emits `assistant.message` with full content |
 | `copilot-gpt-5-mini.jsonl` | GitHub Copilot | Copilot CLI with gpt-5-mini (free tier) — emits only `assistant.message_delta` (all `ephemeral: true`), no `assistant.message` |
+| `droid.jsonl` | Factory Droid | `droid exec` BYOK on Anthropic (`-m custom:byok-0`) — droid-native stream-json (system/init, message, reasoning, tool_call, tool_result, completion) |
+| `droid-gemini.jsonl` | Factory Droid | `droid exec` BYOK on Gemini via its OpenAI-compatible endpoint (generic-chat-completion-api) — same droid-native shape |
+| `droid-error.jsonl` | Factory Droid | droid's `{type:"error"}` fatal event (e.g. invalid API key / 401 auth failure) |
 | `eliza.jsonl` | Eliza | Built-in deterministic test agent |
 | `gemini.jsonl` | Gemini | Google Gemini CLI |
 | `gemini-error.jsonl` | Gemini | Gemini CLI failing a run — a Pro model on a free key / out of quota (429 `TerminalQuotaError`). The real reason is a **plain-text** JS error dump on stdout; the trailing `result` has `status: "error"` but only a generic `{ type: "unknown", message: "[API Error: …]" }` |

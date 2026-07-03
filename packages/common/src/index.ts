@@ -115,6 +115,7 @@ export {
   ClaudeCodeIcon,
   CodexIcon,
   CopilotIcon,
+  DroidIcon,
   OpenCodeIcon,
   GeminiIcon,
   GooseIcon,
