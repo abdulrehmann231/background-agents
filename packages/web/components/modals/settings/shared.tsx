@@ -12,15 +12,30 @@ import type { CredentialFlags } from "@/lib/types"
 export const MASK = "***"
 
 /**
- * Initial input values: "***" for credentials the server has but won't echo
- * back, or "" when unset.
+ * Whether the user has their OWN stored credential for this field, as opposed to
+ * a server-provided shared/env key. OpenCode and Gemini expose a combined
+ * presence flag that is also true when only the *server's* shared key exists, so
+ * we consult the dedicated `_USER` flags for those. Only a user-owned key should
+ * show the "***" mask — otherwise clearing a personal key would appear to "come
+ * back" because the shared env key keeps the combined flag set.
+ */
+function userHasOwnCredential(flags: CredentialFlags, id: CredentialId): boolean {
+  if (id === "OPENCODE_API_KEY") return !!flags.OPENCODE_API_KEY_USER
+  if (id === "GEMINI_API_KEY") return !!flags.GEMINI_API_KEY_USER
+  return !!flags[id]
+}
+
+/**
+ * Initial input values: "***" for credentials the user has stored (but the
+ * server won't echo back), or "" when unset. Server-only shared/env keys are
+ * left blank so the field reflects the user's own credentials, not the pool.
  */
 export function initialCredValues(
   flags: CredentialFlags
 ): Record<CredentialId, string> {
   const out = {} as Record<CredentialId, string>
   for (const { id } of CREDENTIAL_KEYS) {
-    out[id] = flags[id] ? MASK : ""
+    out[id] = userHasOwnCredential(flags, id) ? MASK : ""
   }
   return out
 }

@@ -151,15 +151,28 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     enabled: isMobile,
   })
 
-  // Flags reflecting the current form state — a typed value or "***" mask
-  // both count as "credential present" for model availability checks.
+  // Flags reflecting the current form state — a typed value or "***" mask both
+  // count as "credential present" for model availability checks. We start from
+  // the server flags so shared-pool availability (Claude shared pool, OpenCode /
+  // Gemini env keys) is preserved, then overlay the user's live edits. OpenCode
+  // and Gemini keep their combined flag available via the server's shared flag
+  // even after the user's own key is cleared.
   const liveFlags = useMemo<CredentialFlags>(() => {
-    const out: CredentialFlags = {}
+    const out: CredentialFlags = { ...credentialFlags }
     for (const { id } of CREDENTIAL_KEYS) {
-      out[id] = !!credValues[id]
+      const typed = !!credValues[id]
+      if (id === "OPENCODE_API_KEY") {
+        out.OPENCODE_API_KEY_USER = typed
+        out.OPENCODE_API_KEY = typed || !!credentialFlags.OPENCODE_API_KEY_SHARED
+      } else if (id === "GEMINI_API_KEY") {
+        out.GEMINI_API_KEY_USER = typed
+        out.GEMINI_API_KEY = typed || !!credentialFlags.GEMINI_API_KEY_SHARED
+      } else {
+        out[id] = typed
+      }
     }
     return out
-  }, [credValues])
+  }, [credValues, credentialFlags])
 
   // Reset form when modal opens
   useEffect(() => {
