@@ -16,6 +16,7 @@ export { CLAUDE_CREDS_KEY, CLAUDE_COOKIES_KEY } from "./constants"
 export {
   resolveLatestCCAuthSha,
   getCCAuthImage,
+  getCCAuthSnapshotName,
   isClaudeOAuthCredentials,
   generateClaudeCredentials,
   type GenerateCredentialsOptions,

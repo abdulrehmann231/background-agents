@@ -14,6 +14,35 @@ const PATCHRIGHT_PROFILE_PATH = "/home/daytona/.ccauth/patchright-profile"
 const CCAUTH_REPO = "synacktraa/ccauth"
 const CCAUTH_BRANCH = "master"
 
+// Prefix for the named, persistent Daytona snapshot we build ccauth into. The
+// full name is suffixed with the ccauth commit SHA so a new ccauth release
+// naturally produces a new snapshot (see getCCAuthSnapshotName).
+const SNAPSHOT_NAME_PREFIX = "ccauth"
+
+// How long to wait for a concurrent snapshot build to finish before giving up
+// and rebuilding it ourselves.
+const SNAPSHOT_BUILD_TIMEOUT_MS = 10 * 60 * 1000
+const SNAPSHOT_POLL_INTERVAL_MS = 2000
+
+// Substrings Daytona surfaces when a sandbox references a snapshot whose backing
+// registry image has been garbage-collected. The control plane still has the
+// snapshot *metadata* (so it won't rebuild on its own), but the runner daemon
+// can't pull the image, so the sandbox goes straight to `error`:
+//   "failed to start with status: error, error reason: Error response from
+//    daemon: pull access denied for daytona-<hash> ... repository does not
+//    exist or may require 'docker login'"
+const STALE_IMAGE_ERROR_FRAGMENTS = [
+  "pull access denied",
+  "repository does not exist",
+  "docker login",
+]
+
+/** True when an error looks like a pruned/missing snapshot image (see above). */
+function isStaleImageError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return STALE_IMAGE_ERROR_FRAGMENTS.some((fragment) => msg.includes(fragment))
+}
+
 /**
  * Resolves the latest commit SHA on `master` so the pip install command becomes
  * `git+...@<sha>`. When the SHA changes, the Image spec hash changes, and
@@ -52,6 +81,101 @@ export function getCCAuthImage(sha: string): Image {
     .pipInstall([`git+https://github.com/${CCAUTH_REPO}.git@${sha}`])
     .runCommands("patchright install --with-deps chrome")
     .workdir("/home/daytona")
+}
+
+/**
+ * Deterministic name for the persistent ccauth snapshot. Keyed on the ccauth
+ * commit SHA so a new ccauth release rebuilds automatically, while repeated runs
+ * against the same release reuse one long-lived snapshot.
+ */
+export function getCCAuthSnapshotName(sha: string): string {
+  return `${SNAPSHOT_NAME_PREFIX}-${sha.slice(0, 12)}`
+}
+
+/**
+ * Ensures a usable (`active`) snapshot named `name` exists, building it from
+ * `image` when it is missing, mid-flight, or in a failed/pruned state.
+ *
+ * Why a *named* snapshot instead of passing the declarative `Image` straight to
+ * `daytona.create()`: an inline image is registered as an anonymous
+ * `daytona-<hash>` snapshot that Daytona garbage-collects once nothing has used
+ * it for a while. The control plane keeps the metadata but the registry blob is
+ * pruned, so a later `create()` tries to *pull* an image that no longer exists
+ * and the sandbox fails to start ("pull access denied ... repository does not
+ * exist"). A named snapshot is a first-class object we can look up and
+ * deterministically rebuild, so a prune becomes a self-healing rebuild instead
+ * of a hard failure.
+ *
+ * @param rebuild - When true, delete any existing snapshot and rebuild from
+ *   scratch. Used to recover after a prune is detected at sandbox-create time.
+ */
+export async function ensureCCAuthSnapshot(
+  daytona: Daytona,
+  name: string,
+  image: Image,
+  { rebuild = false }: { rebuild?: boolean } = {},
+): Promise<void> {
+  let existing: Awaited<ReturnType<typeof daytona.snapshot.get>> | undefined
+  try {
+    existing = await daytona.snapshot.get(name)
+  } catch {
+    // Not found (or unreadable) — treat as missing and build below.
+    existing = undefined
+  }
+
+  if (existing && !rebuild) {
+    if (existing.state === "active") return
+
+    // Reuse an in-flight build kicked off by a concurrent run rather than
+    // racing it with a second build of the same name.
+    if (
+      existing.state === "building" ||
+      existing.state === "pending" ||
+      existing.state === "pulling"
+    ) {
+      const deadline = Date.now() + SNAPSHOT_BUILD_TIMEOUT_MS
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, SNAPSHOT_POLL_INTERVAL_MS))
+        const snap = await daytona.snapshot.get(name)
+        if (snap.state === "active") return
+        if (snap.state !== "building" && snap.state !== "pending" && snap.state !== "pulling") {
+          existing = snap
+          break // Fell into a terminal/failed state — rebuild below.
+        }
+      }
+    }
+  }
+
+  // Delete a stale/failed/pruned snapshot so create() can register a fresh one;
+  // a lingering record with the same name would otherwise 409.
+  if (existing) {
+    console.error(
+      `[claude-credentials] rebuilding snapshot ${name} (was '${existing.state}')`,
+    )
+    try {
+      await daytona.snapshot.delete(existing)
+    } catch (err) {
+      console.error("[claude-credentials] snapshot.delete failed:", err)
+    }
+  } else {
+    console.error(`[claude-credentials] building snapshot ${name}`)
+  }
+
+  try {
+    await daytona.snapshot.create(
+      { name, image },
+      {
+        timeout: 0,
+        onLogs: (chunk) => console.error(`[ccauth-image] ${chunk}`),
+      },
+    )
+  } catch (err) {
+    // Lost a create race with a concurrent builder: if the winner produced an
+    // active snapshot, we're done; otherwise surface the failure.
+    const snap = await daytona.snapshot.get(name).catch(() => undefined)
+    if (snap?.state === "active") return
+    throw err
+  }
 }
 
 /**
@@ -94,6 +218,7 @@ export async function generateClaudeCredentials(
   const ccauthSha = await resolveLatestCCAuthSha()
   console.error(`[claude-credentials] using ccauth ${ccauthSha.slice(0, 12)}`)
   const ccauthImage = getCCAuthImage(ccauthSha)
+  const snapshotName = getCCAuthSnapshotName(ccauthSha)
 
   const daytona = new Daytona({ apiKey })
 
@@ -112,21 +237,41 @@ export async function generateClaudeCredentials(
     )
   }
 
+  // Build (or reuse) the persistent named snapshot before creating a sandbox
+  // from it. See ensureCCAuthSnapshot for why we don't pass the inline image.
+  await ensureCCAuthSnapshot(daytona, snapshotName, ccauthImage)
+
   let sandbox: Sandbox | undefined
   try {
-    sandbox = await daytona.create(
-      {
-        image: ccauthImage,
-        ephemeral: true,
-        volumes: [{ volumeId: volume.id, mountPath: PATCHRIGHT_PROFILE_PATH }],
-        autoStopInterval: 5,
-      },
-      {
-        timeout: 0,
-        onSnapshotCreateLogs: (chunk) =>
-          console.error(`[ccauth-image] ${chunk}`),
-      },
-    )
+    const createSandbox = () =>
+      daytona.create(
+        {
+          snapshot: snapshotName,
+          ephemeral: true,
+          volumes: [{ volumeId: volume.id, mountPath: PATCHRIGHT_PROFILE_PATH }],
+          autoStopInterval: 5,
+        },
+        // No client-side timeout: starting from a cold snapshot can occasionally
+        // exceed the SDK's 60s default; the cron route's maxDuration is the real
+        // ceiling. A genuine start failure still surfaces via the `error` state.
+        { timeout: 0 },
+      )
+
+    try {
+      sandbox = await createSandbox()
+    } catch (err) {
+      // The snapshot passed our `active` check but its backing image was pruned
+      // between then and now (or was already a dangling record). Rebuild it once
+      // and retry, turning a hard failure into a self-healing recovery.
+      if (!isStaleImageError(err)) throw err
+      console.error(
+        `[claude-credentials] sandbox start hit a pruned image; rebuilding snapshot ${snapshotName} and retrying`,
+      )
+      await ensureCCAuthSnapshot(daytona, snapshotName, ccauthImage, {
+        rebuild: true,
+      })
+      sandbox = await createSandbox()
+    }
 
     await sandbox.fs.uploadFile(
       Buffer.from(cookies, "utf8"),
