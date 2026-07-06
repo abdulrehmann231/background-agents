@@ -187,6 +187,9 @@ export const droidAgent: AgentDefinition = {
       cmd: "bash",
       args: ["-c", lines.join("\n")],
       env: { ...options.env },
+      // Gemini's API is slow to reject Pro-model requests on free keys
+      // (~100s); cap the wait so the user sees an error sooner.
+      timeoutSeconds: model.startsWith("gemini") ? 60 : undefined,
     }
   },
 

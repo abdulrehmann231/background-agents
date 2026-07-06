@@ -22,6 +22,9 @@ export interface CommandSpec {
   wrapInBash?: boolean
   /** Working directory for the command */
   cwd?: string
+  /** Hard wall-clock timeout for the command in seconds. Uses coreutils
+   *  `timeout`, so on expiry the process exits with code 124. */
+  timeoutSeconds?: number
 }
 
 /**

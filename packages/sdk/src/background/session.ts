@@ -157,6 +157,7 @@ class BackgroundSessionImpl implements BackgroundSession {
       processName: this.agent.name,
       // Nest each turn's job under the session dir (one dir per job).
       root: this.sessionDir,
+      timeoutSeconds: spec.timeoutSeconds ?? opts.timeout,
     })
 
     // Reset the accumulator for the new turn.
