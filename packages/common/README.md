@@ -35,6 +35,7 @@ import {
   type CustomEndpointType,
   // Data
   ALL_AGENTS,
+  agentSlugs,
   agentLabels,
   agentToProvider,
   agentModels,
@@ -51,6 +52,7 @@ import {
   agentSharedPoolExhausted,
   agentIsReady,
   hasCredentialsForModel,
+  modelRequiresKey,
   getDefaultModelForAgent,
   getAgentModels,
   getModelLabel,
@@ -64,6 +66,7 @@ import {
   resolveCliModel,
   resolveModelForAgent,
   resolveAgent,
+  resolveAgentSlug,
   resolveAgentAndModel,
 } from "@background-agents/common"
 ```
@@ -168,6 +171,7 @@ import {
   ClaudeCodeIcon,
   CodexIcon,
   CopilotIcon,
+  DroidIcon,
   OpenCodeIcon,
   GeminiIcon,
   GooseIcon,
