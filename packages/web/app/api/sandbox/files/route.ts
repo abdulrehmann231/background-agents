@@ -4,7 +4,7 @@ import { getSandboxOrExpired, passiveReadGate } from "@/lib/sandbox-lifecycle"
 import { escapeShell } from "@background-agents/sdk"
 import { PATHS } from "@background-agents/common"
 import { IMAGE_MIME_TYPES } from "@/lib/file-preview/types"
-import { internalError, badRequest, notFound } from "@/lib/db/api-helpers"
+import { internalError, badRequest, notFound, requireSandboxOwner } from "@/lib/db/api-helpers"
 
 export const maxDuration = 30
 
@@ -50,6 +50,9 @@ export async function POST(req: Request) {
   if (!sandboxId || !action) {
     return badRequest("Missing required fields")
   }
+
+  const owner = await requireSandboxOwner(sandboxId)
+  if (owner instanceof Response) return owner
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
   if (!daytonaApiKey) {

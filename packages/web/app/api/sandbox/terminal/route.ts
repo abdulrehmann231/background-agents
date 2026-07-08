@@ -2,7 +2,7 @@ import { Daytona } from "@daytonaio/sdk"
 import { setupTerminal, stopTerminal, getTerminalStatus } from "@background-agents/sandbox-terminal"
 import { ensureSandboxStarted } from "@/lib/sandbox"
 import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
-import { internalError, badRequest } from "@/lib/db/api-helpers"
+import { internalError, badRequest, requireSandboxOwner } from "@/lib/db/api-helpers"
 
 export const maxDuration = 60
 
@@ -24,6 +24,9 @@ export async function POST(req: Request) {
 
   const { sandboxId, action = "setup" } = body
   if (!sandboxId) return badRequest("Missing sandboxId")
+
+  const owner = await requireSandboxOwner(sandboxId)
+  if (owner instanceof Response) return owner
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
   if (!daytonaApiKey) {

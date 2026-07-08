@@ -42,6 +42,14 @@ export function notFound(message: string = "Not found") {
 }
 
 /**
+ * Returns a 403 Forbidden response. Used when the caller is authenticated but
+ * does not own the resource they're addressing.
+ */
+export function forbidden(message: string = "Forbidden") {
+  return Response.json({ error: message }, { status: 403 })
+}
+
+/**
  * Returns a 500 Server Configuration Error response
  * Use when a required environment variable is missing
  */
@@ -167,6 +175,53 @@ export async function requireChatStreamAccess(
       previewUrlPattern: chat.previewUrlPattern,
     },
   }
+}
+
+/**
+ * Verifies that `sandboxId` belongs to `userId`. A Daytona sandbox is owned by
+ * the caller when either a chat they own or a scheduled-job run they own (via
+ * its parent job) references it. Pure DB check — no session lookup — so routes
+ * that already resolved the user (e.g. via requireGitHubAuth) can reuse it.
+ */
+export async function verifySandboxOwnership(
+  userId: string,
+  sandboxId: string
+): Promise<boolean> {
+  const [chat, run] = await Promise.all([
+    prisma.chat.findFirst({
+      where: { sandboxId, userId },
+      select: { id: true },
+    }),
+    prisma.scheduledJobRun.findFirst({
+      where: { sandboxId, job: { userId } },
+      select: { id: true },
+    }),
+  ])
+  return Boolean(chat || run)
+}
+
+/**
+ * Auth + ownership gate for the /api/sandbox/* routes. Verifies the caller is
+ * signed in and owns the sandbox they're addressing, closing the IDOR where any
+ * caller with a sandboxId could read/delete/exec against another user's sandbox.
+ *
+ * Returns the userId on success, or an error Response (401 unauth / 403 not the
+ * owner) that the route should return directly. The 403 deliberately does not
+ * distinguish "not yours" from "does not exist" so sandbox ids aren't probeable.
+ *
+ * Usage:
+ *   const owner = await requireSandboxOwner(sandboxId)
+ *   if (owner instanceof Response) return owner
+ */
+export async function requireSandboxOwner(
+  sandboxId: string
+): Promise<AuthResult | Response> {
+  const auth = await requireAuth()
+  if (isAuthError(auth)) return auth
+  if (!(await verifySandboxOwnership(auth.userId, sandboxId))) {
+    return forbidden()
+  }
+  return auth
 }
 
 // =============================================================================

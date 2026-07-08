@@ -3,7 +3,7 @@ import { createSandboxGit } from "@background-agents/sandbox-git"
 import { ensureSandboxStarted } from "@/lib/sandbox"
 import { PATHS } from "@/lib/constants"
 import { clearPushFailureMessages, createGitOperationMessage } from "@/lib/db/git-messages"
-import { requireGitHubAuth, isGitHubAuthError } from "@/lib/db/api-helpers"
+import { requireGitHubAuth, isGitHubAuthError, verifySandboxOwnership, forbidden } from "@/lib/db/api-helpers"
 import {
   getConflictedFiles,
   pushViaTemporaryBranch,
@@ -74,6 +74,13 @@ export async function POST(req: Request) {
 
   if (!sandboxId || !repoPath || !action) {
     return Response.json({ error: "Missing required fields: sandboxId, repoPath, action" }, { status: 400 })
+  }
+
+  // requireGitHubAuth only proves the caller is signed in; it does not tie them
+  // to this sandbox. Verify ownership so a logged-in user can't run git actions
+  // against another user's sandbox/repo.
+  if (!(await verifySandboxOwnership(userId, sandboxId))) {
+    return forbidden()
   }
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
