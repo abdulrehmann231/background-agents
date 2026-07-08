@@ -1,5 +1,5 @@
 import { Daytona } from "@daytonaio/sdk"
-import { badRequest } from "@/lib/db/api-helpers"
+import { badRequest, requireSandboxOwner } from "@/lib/db/api-helpers"
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -8,6 +8,9 @@ export async function POST(req: Request) {
   if (!sandboxId) {
     return badRequest("Missing sandboxId")
   }
+
+  const owner = await requireSandboxOwner(sandboxId)
+  if (owner instanceof Response) return owner
 
   const daytonaApiKey = process.env.DAYTONA_API_KEY
   if (!daytonaApiKey) {
