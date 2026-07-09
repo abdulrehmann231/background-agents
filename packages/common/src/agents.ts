@@ -298,6 +298,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "openai/o4-mini", label: "o4 Mini", requiresKey: "openai" },
   ],
   "codex": [
+    { value: "gpt-5.6-sol", label: "GPT-5.6 Sol", requiresKey: "openai" },
+    { value: "gpt-5.6-terra", label: "GPT-5.6 Terra", requiresKey: "openai" },
+    { value: "gpt-5.6-luna", label: "GPT-5.6 Luna", requiresKey: "openai" },
     { value: "gpt-5.5", label: "GPT-5.5", requiresKey: "openai" },
     { value: "gpt-5.4", label: "GPT-5.4", requiresKey: "openai" },
     { value: "gpt-5.4-mini", label: "GPT-5.4 Mini", requiresKey: "openai" },
@@ -311,6 +314,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "claude-opus-4.6", label: "Claude Opus 4.6", requiresKey: "github" },
     { value: "claude-opus-4.8", label: "Claude Opus 4.8", requiresKey: "github" },
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", requiresKey: "github" },
+    { value: "gpt-5.6-sol", label: "GPT-5.6 Sol", requiresKey: "github" },
+    { value: "gpt-5.6-terra", label: "GPT-5.6 Terra", requiresKey: "github" },
+    { value: "gpt-5.6-luna", label: "GPT-5.6 Luna", requiresKey: "github" },
     { value: "gpt-5.5", label: "GPT-5.5", requiresKey: "github" },
     { value: "gpt-5.4", label: "GPT-5.4", requiresKey: "github" },
     { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "github" },
@@ -414,7 +420,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // free/no-key tier — verified: every built-in model 401s without a Factory key.
     { value: "factory/claude-opus-4-8", label: "Claude Opus 4.8 (Factory)", requiresKey: "factory" },
     { value: "factory/claude-sonnet-5", label: "Claude Sonnet 5 (Factory)", requiresKey: "factory" },
-    { value: "factory/gpt-5.5", label: "GPT-5.5 (Factory)", requiresKey: "factory" },
+    { value: "factory/gpt-5.6-sol", label: "GPT-5.6 Sol (Factory)", requiresKey: "factory" },
     { value: "factory/gemini-3.5-flash", label: "Gemini 3.5 Flash (Factory)", requiresKey: "factory" },
     { value: "factory/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (Factory)", requiresKey: "factory" },
     { value: "factory/glm-5.2", label: "GLM 5.2 (Factory)", requiresKey: "factory" },

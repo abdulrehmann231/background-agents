@@ -38,7 +38,7 @@ describe("droidAgent.buildCommand", () => {
   it("resumes via --fork (never -s), for both paths", () => {
     for (const [model, sid] of [
       ["claude-haiku-4-5", "sess-1"],
-      ["factory/gpt-5.5", "sess-2"],
+      ["factory/gpt-5.6-sol", "sess-2"],
     ] as const) {
       const s = script(model, sid)
       expect(s).toContain("--fork")
