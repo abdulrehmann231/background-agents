@@ -118,32 +118,3 @@ function parseStatusCode(code: string): FileStatusType {
       return "modified"
   }
 }
-
-/**
- * Parse commit SHA from git commit output
- *
- * Output format: "[branch hash] message"
- */
-export function parseCommitSha(output: string): string {
-  // Match [branch hash] pattern
-  const match = output.match(/\[[\w/-]+ ([a-f0-9]+)\]/)
-  if (match) {
-    return match[1]
-  }
-
-  // Try to find any SHA-like string
-  const shaMatch = output.match(/\b([a-f0-9]{7,40})\b/)
-  return shaMatch?.[1] || ""
-}
-
-/**
- * Parse branch list from git branch output
- */
-export function parseBranchList(output: string): string[] {
-  return output
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.replace(/^\*?\s+/, "").trim())
-    .filter((branch) => branch && !branch.includes("HEAD"))
-}

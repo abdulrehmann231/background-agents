@@ -49,8 +49,6 @@ export { withAuth } from "./auth"
 export {
   parseGitStatus,
   parseAheadBehind,
-  parseCommitSha,
-  parseBranchList,
 } from "./parsers"
 
 /**
