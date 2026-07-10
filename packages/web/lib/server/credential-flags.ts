@@ -16,6 +16,7 @@ import {
   type Plan,
 } from "@/lib/server/usage-budgets"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
+import { hasSharedOpencodeKey } from "@/lib/server/opencode-pool"
 import { sharedClaudePoolEligible } from "@background-agents/common"
 
 export interface EffectiveFlags {
@@ -61,7 +62,7 @@ export async function getSharedPoolFlags(): Promise<CredentialFlags> {
   // Server env keys back the shared OpenCode / Gemini pools. Mark both the
   // presence flag (so hasCredentialsForModel treats the provider as available)
   // and the `_SHARED` origin flag (so the UI knows it isn't a user-owned key).
-  if (process.env.OPENCODE_API_KEY) {
+  if (hasSharedOpencodeKey()) {
     flags.OPENCODE_API_KEY = true
     flags.OPENCODE_API_KEY_SHARED = true
   }
@@ -103,7 +104,7 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   // Special-case: mark whether OPENCODE_API_KEY comes from the user's stored
   // credentials (user-owned) or only from the server environment (shared).
   const opencodeFromDb = !!storedCreds.OPENCODE_API_KEY
-  const opencodeFromEnv = !opencodeFromDb && !!process.env.OPENCODE_API_KEY
+  const opencodeFromEnv = !opencodeFromDb && hasSharedOpencodeKey()
   flags.OPENCODE_API_KEY_USER = opencodeFromDb
   flags.OPENCODE_API_KEY_SHARED = opencodeFromEnv
   // Preserve the conventional boolean presence flag for callers that expect it
