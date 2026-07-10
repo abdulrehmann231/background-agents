@@ -172,12 +172,10 @@ export async function updateChat(
     repo: string
     baseBranch: string
     branch: string | null
-    sandboxId: string
-    sessionId: string
-    previewUrlPattern: string
-    backgroundSessionId: string | null
     needsSync: boolean
     lastActiveAt: number
+    // sandboxId / sessionId / previewUrlPattern / backgroundSessionId are
+    // server-managed and rejected by PATCH /api/chats/[chatId] — never send them.
   }>
 ): Promise<ChatResponse> {
   return fetchApi<ChatResponse>(`/api/chats/${chatId}`, {

@@ -28,10 +28,8 @@ function applyChatUpdate(chat: Chat, data: UpdateChatData): Chat {
   if (data.repo !== undefined) updated.repo = data.repo
   if (data.baseBranch !== undefined) updated.baseBranch = data.baseBranch
   if (data.branch !== undefined) updated.branch = data.branch
-  if (data.sandboxId !== undefined) updated.sandboxId = data.sandboxId
-  if (data.sessionId !== undefined) updated.sessionId = data.sessionId
-  if (data.previewUrlPattern !== undefined) updated.previewUrlPattern = data.previewUrlPattern
-  if (data.backgroundSessionId !== undefined) updated.backgroundSessionId = data.backgroundSessionId ?? undefined
+  // sandboxId / sessionId / previewUrlPattern / backgroundSessionId are
+  // server-managed (see updateChat type) and never part of `data` here.
   if (data.needsSync !== undefined) updated.needsSync = data.needsSync
   if (data.lastActiveAt !== undefined) updated.lastActiveAt = data.lastActiveAt
   return updated
