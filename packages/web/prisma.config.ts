@@ -16,6 +16,6 @@ export default defineConfig({
     // app is unaffected (it connects via DATABASE_URL through its own client).
     // Migrations run over a direct/session connection (DIRECT_URL); fall back to
     // DATABASE_URL for local/legacy setups that don't define one.
-    url: process.env.DIRECT_URL || process.env.DIRECT_URL || process.env.DATABASE_URL || "",
+    url: process.env.DIRECT_URL || process.env.DATABASE_URL || "",
   },
 })

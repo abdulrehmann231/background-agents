@@ -3,8 +3,13 @@ import { execSync } from "node:child_process";
 
 config();
 
+// Migrations must run over a direct/session connection (port 5432), never the
+// transaction pooler (6543). Prefer DIRECT_URL (Supabase/PDF convention), then
+// POSTGRES_URL_NON_POOLING (Neon/Vercel integration), then DATABASE_URL.
 const url =
-  process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL;
+  process.env.DIRECT_URL ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.DATABASE_URL;
 
 if (!url) {
   // No database URL available - skip migrations but still generate Prisma client
