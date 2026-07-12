@@ -256,6 +256,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode/claude-opus-4-6", label: "Claude Opus 4.6", requiresKey: "opencode" },
     { value: "opencode/claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "opencode" },
     { value: "opencode/claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "opencode" },
+    { value: "opencode/claude-fable-5", label: "Claude Fable 5", requiresKey: "opencode" },
     { value: "opencode/gpt-5", label: "GPT-5", requiresKey: "opencode" },
     { value: "opencode/gpt-5-codex", label: "GPT-5 Codex", requiresKey: "opencode" },
     { value: "opencode/gpt-5.1-codex", label: "GPT-5.1 Codex", requiresKey: "opencode" },
