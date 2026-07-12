@@ -9,6 +9,7 @@ import {
 } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
+import { randomUUID } from "node:crypto";
 import { createTray, updateTrayMenu } from "./tray.js";
 import { registerShortcuts, unregisterShortcuts } from "./shortcuts.js";
 import { setupDeepLinks } from "./deeplinks.js";
@@ -28,6 +29,22 @@ const BACKEND_URL = process.env.BACKGROUND_AGENTS_URL || DEFAULT_BACKEND_URL;
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+
+// One-time state minted when we open the OAuth flow, used to correlate the
+// returning `background-agents://auth` deep link with a flow this app actually
+// started. Prevents deep-link session fixation (an arbitrary page/email firing
+// the deep link to swap in an attacker-controlled JWT).
+let pendingAuthState: string | null = null;
+
+// Open the desktop OAuth flow in the system browser, minting a fresh one-time
+// state that the returning auth deep link must echo back. Both entry points
+// (the in-window `will-navigate` interception and the renderer's
+// `signInWithGitHub` → `open-external` IPC) funnel through here so a state is
+// always minted; the main process is the trust boundary, not the page.
+function openAuthFlow(origin: string) {
+  pendingAuthState = randomUUID();
+  shell.openExternal(`${origin}/auth/electron-start?state=${pendingAuthState}`);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -75,8 +92,7 @@ function createWindow() {
     // Note: This only triggers for navigation within the Electron window, not in the system browser
     if (url.includes("/api/auth/signin")) {
       event.preventDefault();
-      const baseUrl = new URL(BACKEND_URL);
-      shell.openExternal(`${baseUrl.origin}/auth/electron-start`);
+      openAuthFlow(new URL(BACKEND_URL).origin);
     }
   });
 
@@ -135,6 +151,19 @@ async function handleDeepLink(url: string) {
 
     // Handle auth with JWT token - set session cookie and reload
     if (action === "auth" && params.token) {
+      // Only accept a token whose state matches the one we minted when opening
+      // the flow. Without this, any page/email that triggers the deep link
+      // could swap the session cookie for an attacker's JWT (session fixation).
+      // On mismatch we reject but keep pendingAuthState so a stray/hostile link
+      // can't cancel a legitimate in-flight login; we only consume it on match.
+      if (!pendingAuthState || params.state !== pendingAuthState) {
+        console.error(
+          "Rejected auth deep link: missing or mismatched state parameter"
+        );
+        return;
+      }
+      pendingAuthState = null;
+
       console.log("Auth token received, setting session cookie...");
 
       try {
@@ -285,6 +314,24 @@ ipcMain.handle("set-auth-token", async (_event, _token: string) => {
 
 // Open external URL
 ipcMain.on("open-external", (_event, url: string) => {
+  // When the renderer kicks off the desktop OAuth flow (signInWithGitHub),
+  // route it through openAuthFlow so a one-time state is minted in the main
+  // process — otherwise the returning auth deep link would carry no state and
+  // be rejected. Any state the renderer put on the URL is intentionally ignored
+  // and replaced with a main-minted one.
+  try {
+    const parsed = new URL(url);
+    const backendOrigin = new URL(BACKEND_URL).origin;
+    if (
+      parsed.origin === backendOrigin &&
+      parsed.pathname === "/auth/electron-start"
+    ) {
+      openAuthFlow(parsed.origin);
+      return;
+    }
+  } catch {
+    // Not a parseable absolute URL — fall through to a plain open.
+  }
   shell.openExternal(url);
 });
 

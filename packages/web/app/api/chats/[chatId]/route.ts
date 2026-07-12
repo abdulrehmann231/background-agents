@@ -240,12 +240,17 @@ interface PatchChatBody {
   repo?: string
   baseBranch?: string
   branch?: string
-  sandboxId?: string
-  sessionId?: string
-  previewUrlPattern?: string
-  backgroundSessionId?: string | null
   needsSync?: boolean
   lastActiveAt?: number
+  // NOTE: sandboxId, sessionId, previewUrlPattern and backgroundSessionId are
+  // intentionally NOT accepted here. They are server-managed — written only by
+  // the message/stream flow (ensure-sandbox, persist-turn, persist-snapshot) —
+  // and pointer resources that access control now trusts on the chat row (e.g.
+  // /api/agent/stream derives the sandbox from the chat row rather than the URL,
+  // see e2e/idor.spec.ts). Accepting them from the client would let a user
+  // rewrite their own chat to point at another user's sandbox/session and read
+  // that victim's agent stream — a mass-assignment path back into the IDOR that
+  // fix closed. Keep these off the client-writable surface.
 }
 
 export async function PATCH(
@@ -279,10 +284,8 @@ export async function PATCH(
     if (body.repo !== undefined) updateData.repo = body.repo
     if (body.baseBranch !== undefined) updateData.baseBranch = body.baseBranch
     if (body.branch !== undefined) updateData.branch = body.branch
-    if (body.sandboxId !== undefined) updateData.sandboxId = body.sandboxId
-    if (body.sessionId !== undefined) updateData.sessionId = body.sessionId
-    if (body.previewUrlPattern !== undefined) updateData.previewUrlPattern = body.previewUrlPattern
-    if (body.backgroundSessionId !== undefined) updateData.backgroundSessionId = body.backgroundSessionId
+    // sandboxId / sessionId / previewUrlPattern / backgroundSessionId are
+    // deliberately not copied from the body — see PatchChatBody note above.
     if (body.needsSync !== undefined) updateData.needsSync = body.needsSync
     if (body.lastActiveAt !== undefined) updateData.lastActiveAt = new Date(body.lastActiveAt)
 

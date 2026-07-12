@@ -28,11 +28,14 @@ export default function ElectronStartPage() {
       // Already authenticated - generate token and redirect to Electron
       generateTokenAndRedirect()
     } else if (status === "unauthenticated") {
-      // Not authenticated - start OAuth flow
-      // callbackUrl points back to this page after OAuth completes
-      signIn("github", {
-        callbackUrl: "/auth/electron-start",
-      })
+      // Not authenticated - start OAuth flow. Preserve the desktop-supplied
+      // `state` across the round-trip by carrying it on the callbackUrl, so the
+      // final deep link can echo it back for the app to verify (anti-fixation).
+      const state = new URLSearchParams(window.location.search).get("state")
+      const callbackUrl = state
+        ? `/auth/electron-start?state=${encodeURIComponent(state)}`
+        : "/auth/electron-start"
+      signIn("github", { callbackUrl })
     }
   }, [status, session])
 
@@ -56,8 +59,12 @@ export default function ElectronStartPage() {
       // Mark as redirected to show success message
       setRedirected(true)
 
-      // Redirect to Electron via deep link
-      window.location.href = `background-agents://auth?token=${encodeURIComponent(token)}`
+      // Redirect to Electron via deep link, echoing back the one-time `state`
+      // the desktop app minted so it can confirm this token belongs to the
+      // flow it started (prevents deep-link session fixation).
+      const state = new URLSearchParams(window.location.search).get("state")
+      const stateParam = state ? `&state=${encodeURIComponent(state)}` : ""
+      window.location.href = `background-agents://auth?token=${encodeURIComponent(token)}${stateParam}`
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error")
       setRedirecting(false)
