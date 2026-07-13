@@ -1,23 +1,24 @@
 /**
  * Shared OpenCode key pool (server-only).
  *
- * The shared OpenCode pool can be backed by two API keys: the primary
- * `OPENCODE_API_KEY` and an optional `OPENCODE_API_KEY_SECONDARY`. When both are
- * set, each shared run picks one uniformly at random (~50/50), which lets an
- * operator run both keys concurrently instead of manually swapping a single key
- * on a schedule. With only the primary set, behaviour is unchanged.
+ * The shared OpenCode pool is backed by `OPENCODE_API_KEY`, which may hold a
+ * single key or several comma-separated keys. When multiple are set, each shared
+ * run picks one uniformly at random (equal chance across all N), which lets an
+ * operator run several keys concurrently instead of manually swapping a single
+ * key on a schedule. With one key, behaviour is unchanged.
  *
  * Never imported from client code — reads raw key values from process.env.
  */
 
 /**
- * The configured shared-pool keys (primary + optional secondary), in that
- * order, trimmed with blanks dropped.
+ * The configured shared-pool keys, parsed from the comma-separated
+ * `OPENCODE_API_KEY`, trimmed with blanks dropped.
  */
 export function getSharedOpencodeKeys(): string[] {
-  return [process.env.OPENCODE_API_KEY, process.env.OPENCODE_API_KEY_SECONDARY]
-    .map((k) => k?.trim())
-    .filter((k): k is string => !!k)
+  return (process.env.OPENCODE_API_KEY ?? "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k) => !!k)
 }
 
 /** Whether the server has at least one shared OpenCode key configured. */
@@ -28,7 +29,7 @@ export function hasSharedOpencodeKey(): boolean {
 /**
  * Pick one shared OpenCode key uniformly at random, or undefined when none are
  * configured. Called per shared run so usage spreads evenly across the pool —
- * with both keys set that's ~50/50.
+ * every key has an equal chance.
  */
 export function pickSharedOpencodeKey(): string | undefined {
   const keys = getSharedOpencodeKeys()

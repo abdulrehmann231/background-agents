@@ -8,42 +8,39 @@ import {
   pickSharedOpencodeKey,
 } from "./opencode-pool"
 
-const PRIMARY = "OPENCODE_API_KEY"
-const SECONDARY = "OPENCODE_API_KEY_SECONDARY"
+const KEY = "OPENCODE_API_KEY"
 
 afterEach(() => {
-  delete process.env[PRIMARY]
-  delete process.env[SECONDARY]
+  delete process.env[KEY]
   vi.restoreAllMocks()
 })
 
 describe("getSharedOpencodeKeys", () => {
-  it("returns [] when neither key is configured", () => {
+  it("returns [] when the key is not configured", () => {
     expect(getSharedOpencodeKeys()).toEqual([])
     expect(hasSharedOpencodeKey()).toBe(false)
   })
 
-  it("returns just the primary when only it is set", () => {
-    process.env[PRIMARY] = "primary"
+  it("returns a single key when one is set", () => {
+    process.env[KEY] = "primary"
     expect(getSharedOpencodeKeys()).toEqual(["primary"])
     expect(hasSharedOpencodeKey()).toBe(true)
   })
 
-  it("returns just the secondary when only it is set", () => {
-    process.env[SECONDARY] = "secondary"
-    expect(getSharedOpencodeKeys()).toEqual(["secondary"])
+  it("splits comma-separated keys, trimming whitespace", () => {
+    process.env[KEY] = " primary , secondary , third "
+    expect(getSharedOpencodeKeys()).toEqual(["primary", "secondary", "third"])
   })
 
-  it("returns both (primary first) when both are set, trimming whitespace", () => {
-    process.env[PRIMARY] = " primary "
-    process.env[SECONDARY] = " secondary "
+  it("drops blank entries between commas", () => {
+    process.env[KEY] = "primary,,   ,secondary"
     expect(getSharedOpencodeKeys()).toEqual(["primary", "secondary"])
   })
 
-  it("drops a blank secondary", () => {
-    process.env[PRIMARY] = "primary"
-    process.env[SECONDARY] = "   "
-    expect(getSharedOpencodeKeys()).toEqual(["primary"])
+  it("returns [] for an all-blank value", () => {
+    process.env[KEY] = "  , ,  "
+    expect(getSharedOpencodeKeys()).toEqual([])
+    expect(hasSharedOpencodeKey()).toBe(false)
   })
 })
 
@@ -53,27 +50,28 @@ describe("pickSharedOpencodeKey", () => {
   })
 
   it("returns the single key when only one is configured", () => {
-    process.env[PRIMARY] = "primary"
+    process.env[KEY] = "primary"
     expect(pickSharedOpencodeKey()).toBe("primary")
   })
 
-  it("selects by Math.random across both keys", () => {
-    process.env[PRIMARY] = "primary"
-    process.env[SECONDARY] = "secondary"
-    // Math.random in [0, 0.5) → index 0 (primary), [0.5, 1) → index 1 (secondary).
+  it("selects by Math.random across all keys", () => {
+    process.env[KEY] = "a,b,c"
+    // Math.random in [0, 1/3) → index 0, [1/3, 2/3) → index 1, [2/3, 1) → index 2.
     vi.spyOn(Math, "random").mockReturnValue(0)
-    expect(pickSharedOpencodeKey()).toBe("primary")
-    vi.spyOn(Math, "random").mockReturnValue(0.75)
-    expect(pickSharedOpencodeKey()).toBe("secondary")
+    expect(pickSharedOpencodeKey()).toBe("a")
+    vi.spyOn(Math, "random").mockReturnValue(0.5)
+    expect(pickSharedOpencodeKey()).toBe("b")
+    vi.spyOn(Math, "random").mockReturnValue(0.9)
+    expect(pickSharedOpencodeKey()).toBe("c")
   })
 
-  it("spreads roughly 50/50 across both keys over many draws", () => {
-    process.env[PRIMARY] = "primary"
-    process.env[SECONDARY] = "secondary"
-    const counts: Record<string, number> = { primary: 0, secondary: 0 }
-    for (let i = 0; i < 4000; i++) counts[pickSharedOpencodeKey()!]++
-    // Each should land well within a generous band around 50%.
-    expect(counts.primary).toBeGreaterThan(1600)
-    expect(counts.secondary).toBeGreaterThan(1600)
+  it("spreads roughly evenly across all keys over many draws", () => {
+    process.env[KEY] = "a,b,c"
+    const counts: Record<string, number> = { a: 0, b: 0, c: 0 }
+    for (let i = 0; i < 6000; i++) counts[pickSharedOpencodeKey()!]++
+    // Each should land well within a generous band around 1/3 (2000).
+    expect(counts.a).toBeGreaterThan(1600)
+    expect(counts.b).toBeGreaterThan(1600)
+    expect(counts.c).toBeGreaterThan(1600)
   })
 })
