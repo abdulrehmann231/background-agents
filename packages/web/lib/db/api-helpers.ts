@@ -317,8 +317,8 @@ export async function getUserCredentials(userId: string): Promise<Credentials> {
 
   // Fallback: if a credential isn't stored in the DB, check process.env.
   // This lets operators set API keys in .env / .env.local without the UI.
-  // OpenCode's shared key comes from a pool (OPENCODE_API_KEYS) — pick one at
-  // random per resolution so runs spread evenly across the configured keys.
+  // OpenCode's shared key comes from a pool (comma-separated OPENCODE_API_KEY) —
+  // pick one at random per resolution so runs spread evenly across the keys.
   for (const { id } of CREDENTIAL_KEYS) {
     if (creds[id]) continue
     const envVal =
