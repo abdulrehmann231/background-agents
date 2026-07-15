@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "../keys"
 import { updateChat as apiUpdateChat } from "@/lib/sync/api"
+import { collectDescendantIds } from "@/lib/storage"
 import type { Chat } from "@/lib/types"
 
 interface ArchiveChatParams {
@@ -33,14 +34,7 @@ export function useArchiveChatMutation() {
 
       if (previousChats) {
         // Collect the chat + all descendants so a branched subtree archives together.
-        const subtreeIds = new Set<string>()
-        const collect = (id: string) => {
-          subtreeIds.add(id)
-          for (const chat of previousChats) {
-            if (chat.parentChatId === id) collect(chat.id)
-          }
-        }
-        collect(chatId)
+        const subtreeIds = new Set(collectDescendantIds(previousChats, chatId))
 
         queryClient.setQueryData<Chat[]>(
           queryKeys.chats.list(),
