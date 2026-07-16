@@ -376,6 +376,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // Moonshot (Kimi) models, routed through the user's KIMI_API_KEY against
     // https://api.moonshot.ai/v1. Each value must match a [models."<id>"] entry
     // declared in the generated ~/.kimi-code/config.toml (see the kimi agent).
+    { value: "kimi-k3", label: "Kimi K3", requiresKey: "kimi" },
     { value: "kimi-k2.7-code", label: "Kimi K2.7 Code", requiresKey: "kimi" },
     { value: "kimi-k2.7-code-highspeed", label: "Kimi K2.7 Code Highspeed", requiresKey: "kimi" },
     { value: "kimi-k2.6", label: "Kimi K2.6", requiresKey: "kimi" },
