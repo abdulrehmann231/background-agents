@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "../keys"
 import { deleteChat as apiDeleteChat } from "@/lib/sync/api"
+import { collectDescendantIds } from "@/lib/storage"
 import type { Chat } from "@/lib/types"
 
 /**
@@ -26,15 +27,9 @@ export function useDeleteChatMutation() {
       // Collect all descendant IDs for optimistic removal
       const deletedIds = new Set<string>()
       if (previousChats) {
-        const collectDescendants = (id: string) => {
+        for (const id of collectDescendantIds(previousChats, chatId)) {
           deletedIds.add(id)
-          for (const chat of previousChats) {
-            if (chat.parentChatId === id) {
-              collectDescendants(chat.id)
-            }
-          }
         }
-        collectDescendants(chatId)
 
         // Optimistically remove from list
         queryClient.setQueryData<Chat[]>(
