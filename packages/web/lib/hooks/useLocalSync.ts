@@ -38,7 +38,7 @@ function agentBranchesForRepo(chats: Chat[], repo: string): string[] {
 /**
  * Mounted once (see <LocalSyncManager/>). Owns the global sync side-effects.
  */
-export function useLocalSyncManager(): void {
+function useLocalSyncManager(): void {
   const { isDesktopApp, api } = useElectron()
   const chat = useChatOptional()
   const setStatus = useLocalSyncStore((s) => s.setStatus)

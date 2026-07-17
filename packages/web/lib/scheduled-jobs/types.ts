@@ -93,7 +93,7 @@ export function toScheduledJobRunResponse(run: PrismaScheduledJobRun): Scheduled
 /**
  * Convert a Prisma ScheduledJobRun to lastRun format (subset of fields)
  */
-export function toLastRunResponse(run: PrismaScheduledJobRun): ScheduledJobLastRun {
+function toLastRunResponse(run: PrismaScheduledJobRun): ScheduledJobLastRun {
   return {
     id: run.id,
     status: run.status,

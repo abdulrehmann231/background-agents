@@ -77,7 +77,7 @@ export function internalError(error: unknown) {
  * Gets the authenticated user's ID from the session
  * Returns null if not authenticated
  */
-export async function getAuthUserId(): Promise<string | null> {
+async function getAuthUserId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
   return session?.user?.id ?? null
 }
