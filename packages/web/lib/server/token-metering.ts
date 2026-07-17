@@ -100,7 +100,7 @@ function parseTokscaleOutput(raw: string): TokscaleOutput | null {
  * ledger. Returns the number of rows written (0 if nothing new or on any
  * failure). Never throws.
  */
-export async function meterTurnUsage(
+async function meterTurnUsage(
   sandbox: DaytonaSandbox,
   params: MeterTurnParams
 ): Promise<number> {

@@ -61,6 +61,32 @@ export const ABORT_COMMAND: SlashCommand = {
 }
 
 /**
+ * Create-repository command - shown as the sole entry when a chat has no
+ * linked repo (git commands don't apply yet).
+ */
+export const CREATE_REPO_COMMAND: SlashCommand = {
+  name: "repo",
+  label: "Repository",
+  description: "Create repository",
+  icon: "FolderGit2",
+}
+
+/**
+ * Filter a single-command menu (e.g. the create-repo entry) by user input.
+ * Returns the command when the typed prefix matches its name, else nothing.
+ * @param input - The current input (with or without leading slash)
+ * @param cmd - The single command to match against
+ */
+export function filterSingleCommand(
+  input: string,
+  cmd: SlashCommand
+): SlashCommand[] {
+  const filter = input.startsWith("/") ? input.slice(1).toLowerCase() : input.toLowerCase()
+  if (!filter) return [cmd]
+  return cmd.name.toLowerCase().startsWith(filter) ? [cmd] : []
+}
+
+/**
  * Simple fuzzy match for filtering commands
  * Returns true if all characters in the filter appear in order in the target
  */
