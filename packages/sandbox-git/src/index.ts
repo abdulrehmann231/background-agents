@@ -78,8 +78,3 @@ export function createSandboxGit(sandbox: SandboxLike): SandboxGit {
     push: (path, token?, options?) => commands.push(process, path, token, options),
   }
 }
-
-/**
- * Direct access to git commands (for advanced usage)
- */
-export const gitCommands = commands
