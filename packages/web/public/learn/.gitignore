@@ -1,0 +1,6 @@
+# Auto-generated at dev/build from NEXT_PUBLIC_LEARN_MEDIA_BASE (see scripts/gen-learn-media-config.mjs).
+media-config.js
+
+# Internal recording scripts / storyboards — not shipped with the docs.
+recording-scripts.html
+recording-scripts.pdf
