@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
-import { Plus, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut } from "lucide-react"
+import { Plus, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
@@ -408,6 +408,20 @@ export function Sidebar({
               <Clock className={cn("h-5 w-5", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
               <span className="text-base text-foreground">Scheduled Agents</span>
             </button>
+
+            {/* Docs Link */}
+            <a
+              href="/learn/index.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                if (onMobileClose) onMobileClose()
+              }}
+              className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
+            >
+              <BookOpen className="h-5 w-5 text-muted-foreground" />
+              <span className="text-base text-foreground">Docs</span>
+            </a>
           </div>
 
           {/* Repository Filter */}
@@ -637,6 +651,21 @@ export function Sidebar({
           <Clock className={cn("h-4 w-4", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
           {!collapsed && <span className="text-sm text-foreground">Scheduled Agents</span>}
         </button>
+
+        {/* Docs Link */}
+        <a
+          href="/learn/index.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Docs"
+          className={cn(
+            "flex items-center gap-2 rounded-md transition-colors hover:bg-accent/50 cursor-pointer",
+            collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
+          )}
+        >
+          <BookOpen className="h-4 w-4 text-muted-foreground" />
+          {!collapsed && <span className="text-sm text-foreground">Docs</span>}
+        </a>
       </div>
 
       <div className="pb-2" />
