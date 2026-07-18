@@ -51,6 +51,9 @@ export {
   parseAheadBehind,
 } from "./parsers"
 
+// Shell
+export { esc } from "./shell"
+
 /**
  * Create a SandboxGit instance from a Daytona sandbox
  */
