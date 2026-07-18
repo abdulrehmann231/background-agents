@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="Video placeholder">
+  <style>
+    .bg{fill:#f4f4f5}.fg{fill:#d4d4d8}.st{stroke:#d4d4d8}.tx{fill:#8a8a93;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-weight:600}
+    @media (prefers-color-scheme: dark){.bg{fill:#1c1c1f}.fg{fill:#3a3a3f}.st{stroke:#3a3a3f}.tx{fill:#8a8a93}}
+  </style>
+  <rect class="bg" width="1280" height="720"/>
+  <rect x="1" y="1" width="1278" height="718" fill="none" class="st" stroke-width="2" stroke-dasharray="9 8" opacity="0.7"/>
+  <circle cx="640" cy="322" r="58" class="fg"/>
+  <path d="M620 294 L676 322 L620 350 Z" fill="#8a8a93"/>
+  <text class="tx" x="640" y="440" font-size="30" text-anchor="middle" letter-spacing="1">VIDEO PLACEHOLDER</text>
+  <text class="tx" x="640" y="478" font-size="18" text-anchor="middle" opacity="0.75">record narrated capture, then drop the .mp4 into /media</text>
+</svg>

@@ -1,0 +1,4 @@
+# Big media (videos + GIFs) is hosted on Cloudflare R2, not committed to git.
+# See index.html -> R2_BASE. Screenshots (PNG) and placeholder SVGs are kept.
+*.mp4
+*.gif

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="Screenshot placeholder">
+  <style>
+    .bg{fill:#f4f4f5}.fg{fill:#d4d4d8}.st{stroke:#d4d4d8}.tx{fill:#8a8a93;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-weight:600}
+    @media (prefers-color-scheme: dark){.bg{fill:#1c1c1f}.fg{fill:#3a3a3f}.st{stroke:#3a3a3f}.tx{fill:#8a8a93}}
+  </style>
+  <rect class="bg" width="1280" height="720"/>
+  <rect x="1" y="1" width="1278" height="718" fill="none" class="st" stroke-width="2" stroke-dasharray="9 8" opacity="0.7"/>
+  <g transform="translate(640 318)">
+    <rect x="-84" y="-58" width="168" height="116" rx="10" class="fg"/>
+    <circle cx="-38" cy="-20" r="14" fill="#8a8a93"/>
+    <path d="M-68 40 L-18 -6 L18 30 L48 2 L68 40 Z" fill="#8a8a93"/>
+  </g>
+  <text class="tx" x="640" y="440" font-size="30" text-anchor="middle" letter-spacing="1">SCREENSHOT PLACEHOLDER</text>
+  <text class="tx" x="640" y="478" font-size="18" text-anchor="middle" opacity="0.75">capture the panel, then drop the .png into /media</text>
+</svg>

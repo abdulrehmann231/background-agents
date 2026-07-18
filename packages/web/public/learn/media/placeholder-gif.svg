@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="GIF placeholder">
+  <style>
+    .bg{fill:#f4f4f5}.fg{fill:#d4d4d8}.st{stroke:#d4d4d8}.tx{fill:#8a8a93;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-weight:600}
+    @media (prefers-color-scheme: dark){.bg{fill:#1c1c1f}.fg{fill:#3a3a3f}.st{stroke:#3a3a3f}.tx{fill:#8a8a93}}
+  </style>
+  <rect class="bg" width="1280" height="720"/>
+  <rect x="1" y="1" width="1278" height="718" fill="none" class="st" stroke-width="2" stroke-dasharray="9 8" opacity="0.7"/>
+  <g transform="translate(640 322)" fill="none" stroke="#8a8a93" stroke-width="9" stroke-linecap="round">
+    <path d="M0 -56 A56 56 0 1 1 -40 -40"/>
+    <path d="M-50 -50 L-40 -40 L-56 -28" fill="#8a8a93" stroke="none"/>
+  </g>
+  <text class="tx" x="640" y="440" font-size="30" text-anchor="middle" letter-spacing="1">GIF PLACEHOLDER</text>
+  <text class="tx" x="640" y="478" font-size="18" text-anchor="middle" opacity="0.75">short silent loop, then drop the .gif into /media</text>
+</svg>
