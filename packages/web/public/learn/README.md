@@ -20,11 +20,21 @@ server as-is. (Open it through the server, not as a `file://` — the viewer fet
 learn/
   index.html            The whole viewer: sidebar, router, Markdown renderer, :::media directive.
   content/*.md          One Markdown file per page. Source of truth. Portable to any docs platform.
-  media/                Images, GIFs, and videos. Ships with 3 placeholder SVGs.
+  media/                Committed screenshots (PNG) + 3 placeholder SVGs. Videos/GIFs live on R2 (see below).
   README.md             This file.
 ```
 
 To add or reorder pages, edit the `NAV` array near the top of the `<script>` in `index.html`.
+
+### Where media is served from
+
+Screenshots (PNG) and the placeholder SVGs are committed under `media/` and served locally.
+Big media — videos (`.mp4`) and GIFs (`.gif`) — is **not** committed (see `media/.gitignore`);
+it's hosted on a Cloudflare R2 public bucket to keep the git repo lightweight. `index.html`
+resolves those from `window.LEARN_MEDIA_BASE` (`R2_BASE`), which is generated into
+`media-config.js` from the `NEXT_PUBLIC_LEARN_MEDIA_BASE` env var at build time. Videos load
+from `${R2_BASE}/videos/<file>` and GIFs from `${R2_BASE}/gifs/<file>`. If the base is empty or
+absent, the viewer falls back to serving everything locally from `media/`.
 
 ## The `:::media` directive
 
@@ -37,15 +47,17 @@ Caption describing what the clip shows.
 ```
 
 - `type` is `video`, `gif`, or `image`.
-- Until the real file exists in `media/`, a labeled **placeholder** renders automatically.
-- **Drop the real file into `media/` with the exact `file` name and it appears — no Markdown edits.**
+- Until the real file resolves, a labeled **placeholder** renders automatically.
+- **Add the real file with the exact `file` name and it appears — no Markdown edits.** Screenshots
+  (PNG) go into `media/`; videos (`.mp4`) and GIFs (`.gif`) go into the R2 bucket (under `videos/`
+  and `gifs/`) — see [Where media is served from](#where-media-is-served-from).
   (Images/GIFs fall back to the placeholder via `onerror`; videos use the placeholder as their poster.)
 
 ## Media status
 
-Drop a file into `media/` with the exact name below and it appears — no Markdown edits.
+Screenshots below are committed under `media/`; videos and GIFs are hosted on R2 (see above).
 
-### Captured — videos (narrated MP4)
+### Videos (narrated MP4, on R2)
 
 | File | Page | Shows |
 |------|------|-------|
@@ -55,7 +67,7 @@ Drop a file into `media/` with the exact name below and it appears — no Markdo
 | `gravity-game.mp4` | Build a mini-game | Prompt → agent builds a physics sandbox → playable in preview |
 | `multi-agent-final.mp4` | Agent Battle | One "build Snake" prompt across Claude Code, Kimi Code, OpenCode |
 
-### Captured — GIFs (silent, looping)
+### GIFs (silent, looping, on R2)
 
 | File | Page | Shows |
 |------|------|-------|
@@ -66,7 +78,7 @@ Drop a file into `media/` with the exact name below and it appears — no Markdo
 | `skill-install.gif` | Skills | Search skills.sh → install → skill available |
 | `add-custom-endpoint.gif` | Custom endpoints | Add endpoint → fill fields → appears in model dropdown |
 
-### Still placeholder — screenshots to capture (optional, PNG)
+### Screenshots (PNG, committed under `media/`)
 
 | File | Page(s) |
 |------|---------|
@@ -75,7 +87,8 @@ Drop a file into `media/` with the exact name below and it appears — no Markdo
 | `scheduled-job-form.png` | Jobs |
 | `webhook-url-panel.png` | Jobs, Issue → pull request |
 | `schedule-daily-9am.png` | Daily email digest |
-| `run-detail.png` | Jobs, Issue → pull request, Daily email digest |
+| `run-detail.png` | Jobs, Issue → pull request |
+| `run-detail-email.png` | Daily email digest |
 | `branch-agents.png` | Agent Battle |
 | `preview-running.png` | Build a mini-game |
 | `mcp-panel.png` | MCP servers |
