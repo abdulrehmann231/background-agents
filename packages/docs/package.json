@@ -1,0 +1,13 @@
+{
+  "name": "@background-agents/docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone docs site for Background Agents (docs.backgrounder.dev)",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/gen-media-config.mjs",
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/gen-media-config.mjs",
+    "clean": "rm -f public/media-config.js"
+  }
+}

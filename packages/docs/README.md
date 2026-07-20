@@ -1,40 +1,59 @@
-# Background Agents — Learn docs
+# Background Agents — Docs
 
-A self-contained docs site (Cursor `/learn` style). Plain Markdown content + a single-file
-viewer. No build step, no dependencies, nothing to compile.
+The docs site behind **docs.backgrounder.dev**. Plain Markdown content + a single-file viewer.
+No framework, no dependencies — the only build step writes one small config file.
 
 ## View it locally
 
-Run the web app (`npm run dev` from the repo root) and open:
+From the repo root:
 
 ```
-http://localhost:4000/learn/index.html
+npm run dev:docs      # -> http://localhost:4001
 ```
 
-Anything under `packages/web/public/` is served statically by Next, so this works with the dev
-server as-is. (Open it through the server, not as a `file://` — the viewer fetches the Markdown.)
+(Open it through the server, not as a `file://` — the viewer fetches the Markdown over HTTP.)
 
 ## Structure
 
 ```
-learn/
-  index.html            The whole viewer: sidebar, router, Markdown renderer, :::media directive.
-  content/*.md          One Markdown file per page. Source of truth. Portable to any docs platform.
-  media/                Committed screenshots (PNG) + 3 placeholder SVGs. Videos/GIFs live on R2 (see below).
+docs/
+  public/index.html     The whole viewer: sidebar, router, Markdown renderer, :::media directive.
+  public/content/*.md   One Markdown file per page. Source of truth. Portable to any docs platform.
+  public/media/         Committed screenshots (PNG) + 3 placeholder SVGs. Videos/GIFs live on R2 (see below).
+  scripts/              media-config generator (build step) + the local static server.
+  vercel.json           Static deploy: build writes media-config.js, `public/` is the output.
   README.md             This file.
 ```
 
-To add or reorder pages, edit the `NAV` array near the top of the `<script>` in `index.html`.
+To add or reorder pages, edit the `NAV` array near the top of the `<script>` in `public/index.html`.
+
+## Deployment
+
+Deployed to Vercel as its own project, separate from `packages/web`:
+
+- **Root Directory**: `packages/docs`
+- **Domain**: `docs.backgrounder.dev`
+- **Env**: `DOCS_MEDIA_BASE` (see below)
+
+The web app links to it from the sidebar via `NEXT_PUBLIC_DOCS_URL`, which defaults to
+`https://docs.backgrounder.dev`. Point that at `http://localhost:4001` to test against a local
+docs server.
 
 ### Where media is served from
 
-Screenshots (PNG) and the placeholder SVGs are committed under `media/` and served locally.
-Big media — videos (`.mp4`) and GIFs (`.gif`) — is **not** committed (see `media/.gitignore`);
-it's hosted on a Cloudflare R2 public bucket to keep the git repo lightweight. `index.html`
-resolves those from `window.LEARN_MEDIA_BASE` (`R2_BASE`), which is generated into
-`media-config.js` from the `NEXT_PUBLIC_LEARN_MEDIA_BASE` env var at build time. Videos load
-from `${R2_BASE}/videos/<file>` and GIFs from `${R2_BASE}/gifs/<file>`. If the base is empty or
-absent, the viewer falls back to serving everything locally from `media/`.
+Screenshots (PNG) and the placeholder SVGs are committed under `public/media/` and served
+locally. Big media — videos (`.mp4`) and GIFs (`.gif`) — is **not** committed (see
+`public/media/.gitignore`); it's hosted on a Cloudflare R2 public bucket to keep the git repo
+lightweight. `index.html` resolves those from `window.DOCS_MEDIA_BASE` (`R2_BASE`), which is
+generated into `public/media-config.js` from the `DOCS_MEDIA_BASE` env var at build time. Videos
+load from `${R2_BASE}/videos/<file>` and GIFs from `${R2_BASE}/gifs/<file>`. If the base is empty
+or absent, the viewer falls back to serving everything locally from `media/`.
+
+Locally, set it in `packages/docs/.env.local` (gitignored):
+
+```
+DOCS_MEDIA_BASE=https://pub-<hash>.r2.dev
+```
 
 ## The `:::media` directive
 
@@ -104,7 +123,7 @@ Screenshots below are committed under `media/`; videos and GIFs are hosted on R2
 - Videos: MP4 with captions (many people watch muted). Blur any API keys / header values.
 - Use a throwaway demo repo in a clean, staged state so reruns look identical and nothing personal leaks.
 
-## Moving to a standalone docs site later
+## Moving to a docs framework later
 
 The `content/*.md` files are plain Markdown and port directly to Nextra / Docusaurus / Mintlify.
 The `:::media` directive and internal `#/slug` links are the only two things to adapt for another

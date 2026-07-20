@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 4000",
-    "predev": "node scripts/gen-learn-media-config.mjs",
-    "prebuild": "node scripts/prisma-deploy.mjs && node scripts/gen-learn-media-config.mjs",
+    "prebuild": "node scripts/prisma-deploy.mjs",
     "build": "next build",
     "clean": "rm -rf .next",
     "start": "next start --port 4000",
