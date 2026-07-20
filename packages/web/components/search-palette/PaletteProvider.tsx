@@ -145,9 +145,6 @@ export function PaletteProvider({
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
-
       // Cmd/Ctrl + P for search (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === "p") {
         e.preventDefault()
