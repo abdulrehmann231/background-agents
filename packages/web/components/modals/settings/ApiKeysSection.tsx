@@ -50,6 +50,54 @@ function renderHelpLink(href: string, text = "Get key") {
   )
 }
 
+/**
+ * Multiline credential input: a monospace textarea with a "Clear value" button
+ * that appears once a value is entered.
+ */
+function CredentialTextarea({
+  value,
+  placeholder,
+  inputRef,
+  onChange,
+  onClear,
+}: {
+  value: string
+  placeholder?: string
+  inputRef: (el: HTMLTextAreaElement | null) => void
+  onChange: (value: string) => void
+  onClear: () => void
+}) {
+  return (
+    <div className="relative">
+      <Textarea
+        ref={inputRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        autoComplete="off"
+        spellCheck={false}
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-bwignore="true"
+        data-form-type="other"
+        className="font-mono text-xs pr-8"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+          aria-label="Clear value"
+          title="Clear"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 /** Hint shown below the Claude credentials textarea when manual entry is active. */
 function ClaudeCredentialsHint() {
   return (
@@ -170,33 +218,13 @@ export function ApiKeysSection({
                 {/* Manual input — shown when auto-detect is off OR credentials not found */}
                 {(!licenseAutoDetectEnabled || !licenseDetectResult?.found) && (
                   <>
-                    <div className="relative">
-                      <Textarea
-                        ref={setInputRef(field.id) as (el: HTMLTextAreaElement | null) => void}
-                        value={value}
-                        onChange={(e) => setCredValue(field.id, e.target.value)}
-                        placeholder={field.placeholder}
-                        rows={3}
-                        autoComplete="off"
-                        spellCheck={false}
-                        data-lpignore="true"
-                        data-1p-ignore="true"
-                        data-bwignore="true"
-                        data-form-type="other"
-                        className="font-mono text-xs pr-8"
-                      />
-                      {value && (
-                        <button
-                          type="button"
-                          onClick={() => setCredValue(field.id, "")}
-                          className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
-                          aria-label="Clear value"
-                          title="Clear"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    <CredentialTextarea
+                      value={value}
+                      placeholder={field.placeholder}
+                      inputRef={setInputRef(field.id) as (el: HTMLTextAreaElement | null) => void}
+                      onChange={(v) => setCredValue(field.id, v)}
+                      onClear={() => setCredValue(field.id, "")}
+                    />
                     <ClaudeCredentialsHint />
                   </>
                 )}
@@ -214,33 +242,13 @@ export function ApiKeysSection({
           // Default multiline handling (non-CLAUDE_CODE_CREDENTIALS or web app)
           return (
             <SettingsRow key={field.id} label={field.label} description={description} stacked>
-              <div className="relative">
-                <Textarea
-                  ref={setInputRef(field.id) as (el: HTMLTextAreaElement | null) => void}
-                  value={value}
-                  onChange={(e) => setCredValue(field.id, e.target.value)}
-                  placeholder={field.placeholder}
-                  rows={3}
-                  autoComplete="off"
-                  spellCheck={false}
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  data-bwignore="true"
-                  data-form-type="other"
-                  className="font-mono text-xs pr-8"
-                />
-                {value && (
-                  <button
-                    type="button"
-                    onClick={() => setCredValue(field.id, "")}
-                    className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
-                    aria-label="Clear value"
-                    title="Clear"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
+              <CredentialTextarea
+                value={value}
+                placeholder={field.placeholder}
+                inputRef={setInputRef(field.id) as (el: HTMLTextAreaElement | null) => void}
+                onChange={(v) => setCredValue(field.id, v)}
+                onClear={() => setCredValue(field.id, "")}
+              />
               {field.id === "CLAUDE_CODE_CREDENTIALS" && <ClaudeCredentialsHint />}
             </SettingsRow>
           )
