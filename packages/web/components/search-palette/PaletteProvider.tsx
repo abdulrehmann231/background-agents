@@ -5,9 +5,8 @@ import { useTheme } from "next-themes"
 import { SearchPalette } from "./SearchPalette"
 import { CommandPalette } from "./CommandPalette"
 import type { GitHubRepo, GitHubBranch } from "@/lib/github"
-import type { SectionKey } from "@/components/modals/SettingsModal"
 import type { Theme } from "@/lib/types"
-import type { PaletteChat } from "./types"
+import type { PaletteChat, PaletteCommandCallbacks } from "./types"
 
 interface PaletteContextValue {
   openSearch: () => void
@@ -24,7 +23,7 @@ export function usePalette() {
   return context
 }
 
-interface PaletteProviderProps {
+interface PaletteProviderProps extends PaletteCommandCallbacks {
   children: ReactNode
   repos: GitHubRepo[]
   currentRepo: string | null
@@ -36,32 +35,8 @@ interface PaletteProviderProps {
   onSelectBranch: (repo: GitHubRepo, branch: GitHubBranch) => void
   /** Select a repository in the sidebar (sets the repo filter) — no new chat. */
   onFilterRepo: (repo: string) => void
-  onRunCommand: (command: string) => void
-  onNewChat: () => void
-  onBranchChat?: () => void
-  onCreateRepo?: () => void
-  showGitCommands?: boolean
-  onOpenInGitHub?: () => void
-  onOpenChatUsage?: () => void
-  onOpenSettings: (section?: SectionKey) => void
-  onToggleSidebar?: () => void
-  onSignIn?: () => void
-  onSignOut?: () => void
-  onDeleteChat?: () => void
-  onArchiveChat?: () => void
-  onOpenInVSCode?: () => void
-  onOpenTerminal?: () => void
+  /** Toggle the integrated terminal (Cmd/Ctrl+J). Provider-only. */
   onToggleTerminal?: () => void
-  servers?: Array<{ port: number; url: string }>
-  onOpenServer?: (port: number, url: string) => void
-  onClosePreview?: () => void
-  onShowPreview?: () => void
-  onDownloadProject?: () => void
-  isDownloading?: boolean
-  onCopyCloneCommand?: () => void
-  onCopyCheckoutCommand?: () => void
-  onOpenEnvVars?: () => void
-  onOpenSkills?: () => void
   // For Alt+Up/Down chat navigation
   chatIds: string[]
   currentChatId: string | null
@@ -145,9 +120,6 @@ export function PaletteProvider({
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
-
       // Cmd/Ctrl + P for search (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === "p") {
         e.preventDefault()

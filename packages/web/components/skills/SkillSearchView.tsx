@@ -199,7 +199,6 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
 
   if (!open) return null
 
-  const selectableResults = searchResults.filter((r) => !isAlreadyInstalled(r.fullHandle))
   const selectedCount = selectedHandles.size
 
   return (
