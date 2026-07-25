@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { useCopyToClipboard } from "@/lib/hooks/useCopyToClipboard"
 import { notify } from "@/lib/notify"
 import { queryKeys } from "@/lib/query"
 import type { Chat } from "@/lib/types"
@@ -17,7 +18,7 @@ import type { Chat } from "@/lib/types"
 export function useShareChat(chatId: string, initialShareId?: string | null) {
   const [shareId, setShareId] = useState<string | null>(initialShareId ?? null)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard(1500)
   const queryClient = useQueryClient()
 
   // Update local state AND the React Query caches so the new share status is
@@ -74,13 +75,7 @@ export function useShareChat(chatId: string, initialShareId?: string | null) {
 
   const copyLink = async () => {
     if (!shareUrl) return
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      notify({ title: "Couldn't copy link" })
-    }
+    if (!(await copy(shareUrl))) notify({ title: "Couldn't copy link" })
   }
 
   return { shareId, busy, copied, shareUrl, enableShare, revokeShare, copyLink }

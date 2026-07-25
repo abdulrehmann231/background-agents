@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useCopyToClipboard } from "@/lib/hooks/useCopyToClipboard"
 import { type ScheduledJob } from "@/lib/scheduled-jobs/types"
 import { agentModels, getAgentModels, type Agent, NEW_REPOSITORY } from "@/lib/types"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
@@ -68,7 +69,7 @@ export function useScheduledJobForm({ open, job, onClose, onSuccess }: UseSchedu
   // Incoming-webhook URL state. The token comes from the saved job and can be
   // swapped out via the rotate-token endpoint without closing the modal.
   const [incomingToken, setIncomingToken] = useState<string | null>(job?.incomingToken ?? null)
-  const [copiedUrl, setCopiedUrl] = useState(false)
+  const { copied: copiedUrl, copy: copyUrl } = useCopyToClipboard(1500)
   const [rotating, setRotating] = useState(false)
 
   // The user's custom endpoints, merged into the model list by name.
@@ -118,7 +119,6 @@ export function useScheduledJobForm({ open, job, onClose, onSuccess }: UseSchedu
       setError(null)
       setMaterializedJobId(null)
       setIncomingToken(job?.incomingToken ?? null)
-      setCopiedUrl(false)
       setRotating(false)
     }
   }, [open, job])
@@ -341,13 +341,7 @@ export function useScheduledJobForm({ open, job, onClose, onSuccess }: UseSchedu
 
   const handleCopyUrl = async () => {
     if (!incomingWebhookUrl) return
-    try {
-      await navigator.clipboard.writeText(incomingWebhookUrl)
-      setCopiedUrl(true)
-      setTimeout(() => setCopiedUrl(false), 1500)
-    } catch (err) {
-      console.error("[ScheduledJobForm] copy failed:", err)
-    }
+    await copyUrl(incomingWebhookUrl)
   }
 
   const handleRotateToken = async () => {
