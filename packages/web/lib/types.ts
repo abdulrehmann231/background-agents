@@ -18,7 +18,6 @@ export {
   agentModels,
   agentLabels,
   agentSupportsPlanMode,
-  getDefaultAgent,
   getDefaultModelForAgent,
   resolveModelForAgent,
   resolveAgent,
@@ -27,13 +26,9 @@ export {
   getModelLabel,
   hasCredentialsForModel,
   sharedClaudePoolEligible,
-  agentUsesSharedPool,
   agentHasFreeUsage,
   agentSharedPoolExhausted,
   agentIsReady,
-  ENDPOINT_TYPE_TO_AGENT,
-  ENDPOINT_MODEL_PREFIX,
-  findEndpoint,
 } from "@background-agents/common"
 
 // =============================================================================
