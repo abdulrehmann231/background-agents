@@ -257,6 +257,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode/claude-opus-4-6", label: "Claude Opus 4.6", requiresKey: "opencode" },
     { value: "opencode/claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "opencode" },
     { value: "opencode/claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "opencode" },
+    { value: "opencode/claude-opus-5", label: "Claude Opus 5", requiresKey: "opencode" },
     { value: "opencode/claude-fable-5", label: "Claude Fable 5", requiresKey: "opencode" },
     { value: "opencode/gpt-5", label: "GPT-5", requiresKey: "opencode" },
     { value: "opencode/gpt-5-codex", label: "GPT-5 Codex", requiresKey: "opencode" },
@@ -279,6 +280,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "anthropic/claude-opus-4-6", label: "Claude Opus 4.6", requiresKey: "anthropic" },
     { value: "anthropic/claude-opus-4-7", label: "Claude Opus 4.7", requiresKey: "anthropic" },
     { value: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "anthropic" },
+    { value: "anthropic/claude-opus-5", label: "Claude Opus 5", requiresKey: "anthropic" },
     { value: "anthropic/claude-fable-5", label: "Claude Fable 5", requiresKey: "anthropic" },
     // OpenAI direct models — route to OpenAI on the user's own OpenAI key
     { value: "openai/gpt-3.5-turbo", label: "GPT-3.5 Turbo", requiresKey: "openai" },
@@ -318,6 +320,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", requiresKey: "github" },
     { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6", requiresKey: "github" },
     { value: "claude-sonnet-5", label: "Claude Sonnet 5", requiresKey: "github" },
+    { value: "claude-opus-5", label: "Claude Opus 5", requiresKey: "github" },
     { value: "claude-opus-4.6", label: "Claude Opus 4.6", requiresKey: "github" },
     { value: "claude-opus-4.8", label: "Claude Opus 4.8", requiresKey: "github" },
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", requiresKey: "github" },
@@ -402,6 +405,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     //    These are droid's built-in catalog ids — Factory bills the inference.
     //
     // ── BYOK: Anthropic (ids per the claude-api reference) ──
+    { value: "claude-opus-5", label: "Claude Opus 5", requiresKey: "anthropic" },
     { value: "claude-opus-4-8", label: "Claude Opus 4.8", requiresKey: "anthropic" },
     { value: "claude-sonnet-5", label: "Claude Sonnet 5", requiresKey: "anthropic" },
     { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
