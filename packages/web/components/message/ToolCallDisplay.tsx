@@ -10,7 +10,7 @@ import type { ContentBlock, ToolCall } from "@/lib/types"
 // =============================================================================
 
 /** Get the appropriate icon for a tool */
-export function getToolIcon(toolName: string): LucideIcon {
+function getToolIcon(toolName: string): LucideIcon {
   switch (toolName) {
     case "Bash":
       return Terminal
@@ -55,7 +55,7 @@ export function mergeConsecutiveToolCalls(blocks: ContentBlock[]): ContentBlock[
 
 /** Split a tool summary like "Write: hello.html" into a prefix + clickable
  *  detail. Falls back to linking the whole summary when there's no colon. */
-export function splitToolSummary(summary: string): { prefix: string; linkText: string } {
+function splitToolSummary(summary: string): { prefix: string; linkText: string } {
   const idx = summary.indexOf(": ")
   if (idx < 0) return { prefix: "", linkText: summary }
   return { prefix: summary.slice(0, idx + 2), linkText: summary.slice(idx + 2) }
@@ -65,7 +65,7 @@ export function splitToolSummary(summary: string): { prefix: string; linkText: s
 // Tool Call Group (shows all tool calls together in unified block)
 // =============================================================================
 
-export interface ToolCallGroupProps {
+interface ToolCallGroupProps {
   toolCalls: ToolCall[]
   onOpenFile?: (filePath: string) => void
   isMobile?: boolean
@@ -92,13 +92,13 @@ export function ToolCallGroup({ toolCalls, isMobile = false, onOpenFile }: ToolC
 // Individual tool call row within the group
 // =============================================================================
 
-export interface ToolCallRowProps {
+interface ToolCallRowProps {
   tool: ToolCall
   isMobile?: boolean
   onOpenFile?: (filePath: string) => void
 }
 
-export function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
+function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
   const [expanded, setExpanded] = useState(false)
   const Icon = getToolIcon(tool.tool)
   const hasOutput = !!tool.output
