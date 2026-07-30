@@ -20,9 +20,11 @@ export function parseGitStatus(
 ): GitStatus {
   const lines = porcelainOutput.trim().split("\n").filter(Boolean)
 
-  // Parse branch line: ## branch...origin/branch or ## branch
+  // Parse branch line: ## branch[...origin/branch] or ## No commits yet on branch
   const branchLine = lines[0] || "## main"
-  const branchMatch = branchLine.match(/^## ([^.\s]+)/)
+  const branchMatch = branchLine.match(
+    /^## (?:No commits yet on )?(\S+?)(?=\.\.\.|\s|$)/
+  )
   const currentBranch = branchMatch?.[1] || "main"
 
   // Check if branch is published (has tracking info)
