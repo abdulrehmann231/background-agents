@@ -86,6 +86,88 @@ interface ChatInputProps {
   isMobile: boolean
 }
 
+interface ChatActionSlotProps {
+  isRunning: boolean
+  canQueue: boolean
+  canSend: boolean
+  isMobile: boolean
+  showBranchAffordance: boolean
+  onSend: (e?: React.MouseEvent) => void
+  onStop: () => void
+}
+
+/**
+ * Keeps the far-right composer action in a stable, fixed-size slot.
+ *
+ * The wrapper intentionally remains mounted while idle. Otherwise, when a run
+ * finishes, the adjacent microphone control shifts into the Stop button's old
+ * hit target and can receive a click that was intended to stop the agent.
+ */
+export function ChatActionSlot({
+  isRunning,
+  canQueue,
+  canSend,
+  isMobile,
+  showBranchAffordance,
+  onSend,
+  onStop,
+}: ChatActionSlotProps) {
+  return (
+    <div
+      data-testid="chat-action-slot"
+      className={cn(
+        "shrink-0 flex items-center justify-center",
+        isMobile ? "h-9 w-9" : "h-7 w-7"
+      )}
+    >
+      {isRunning && canQueue ? (
+        <button
+          type="button"
+          onClick={onSend}
+          title="Queue message (sent after current response)"
+          aria-label="Queue message"
+          className={cn(
+            "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors cursor-pointer",
+            isMobile ? "h-9 w-9" : "h-7 w-7"
+          )}
+        >
+          <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+        </button>
+      ) : isRunning ? (
+        <button
+          type="button"
+          onClick={onStop}
+          title="Stop agent"
+          aria-label="Stop agent"
+          className={cn(
+            "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors cursor-pointer",
+            isMobile ? "h-9 w-9" : "h-7 w-7"
+          )}
+        >
+          <Square className={cn(isMobile ? "h-3.5 w-3.5" : "h-3 w-3", "fill-current")} />
+        </button>
+      ) : canSend ? (
+        <button
+          type="button"
+          onClick={onSend}
+          title={showBranchAffordance ? "Send to a new branch" : undefined}
+          aria-label={showBranchAffordance ? "Send to a new branch" : "Send message"}
+          className={cn(
+            "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors cursor-pointer",
+            isMobile ? "h-9 w-9" : "h-7 w-7"
+          )}
+        >
+          {showBranchAffordance ? (
+            <GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+          ) : (
+            <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+          )}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 export function ChatInput({
   chat,
   input,
@@ -349,11 +431,10 @@ export function ChatInput({
             />
           </div>
 
-          {/* Voice dictation (speech-to-text) — sits on the left of the send
-              button. When the input is empty (no send button) it's the only
-              control on the right; once the send button appears it moves to
-              its left. Bottom-aligned with the send button as the textarea
-              grows. Only shown when supported. */}
+          {/* Voice dictation (speech-to-text) — stays on the left of the fixed
+              action slot so run-state changes cannot move it under a pending
+              click. Bottom-aligned as the textarea grows. Only shown when
+              supported. */}
           {speech.isSupported && (
             <button
               type="button"
@@ -388,54 +469,17 @@ export function ChatInput({
             </button>
           )}
 
-          {/* Send / stop / queue button — only occupies space when there's an
-              action to show, so the mic stays flush-right when the input is
-              empty. Rendered on the far right. */}
-          {(isRunning || canSend) && (
-            <div className={cn(
-              "shrink-0 flex items-center justify-center",
-              isMobile ? "h-9 w-9" : "h-7 w-7"
-            )}>
-              {isRunning && canQueue ? (
-                <button
-                  onClick={handleSendWithSpeechStop}
-                  title="Queue message (sent after current response)"
-                  className={cn(
-                    "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors cursor-pointer",
-                    isMobile ? "h-9 w-9" : "h-7 w-7"
-                  )}
-                >
-                  <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                </button>
-              ) : isRunning ? (
-                <button
-                  onClick={onStop}
-                  className={cn(
-                    "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors cursor-pointer",
-                    isMobile ? "h-9 w-9" : "h-7 w-7"
-                  )}
-                >
-                  <Square className={cn(isMobile ? "h-3.5 w-3.5" : "h-3 w-3", "fill-current")} />
-                </button>
-              ) : canSend ? (
-                <button
-                  onClick={handleSendWithSpeechStop}
-                  title={showBranchAffordance ? "Send to a new branch" : undefined}
-                  aria-label={showBranchAffordance ? "Send to a new branch" : "Send message"}
-                  className={cn(
-                    "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors cursor-pointer",
-                    isMobile ? "h-9 w-9" : "h-7 w-7"
-                  )}
-                >
-                  {showBranchAffordance ? (
-                    <GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                  ) : (
-                    <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                  )}
-                </button>
-              ) : null}
-            </div>
-          )}
+          {/* Send / stop / queue button — the slot remains mounted while idle
+              so the adjacent microphone never replaces its hit target. */}
+          <ChatActionSlot
+            isRunning={isRunning}
+            canQueue={canQueue}
+            canSend={canSend}
+            isMobile={isMobile}
+            showBranchAffordance={showBranchAffordance}
+            onSend={handleSendWithSpeechStop}
+            onStop={onStop}
+          />
         </div>
 
         {/* File upload error message */}
