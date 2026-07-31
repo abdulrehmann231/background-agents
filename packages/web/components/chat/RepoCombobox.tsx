@@ -1,9 +1,25 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { Github, Lock, Globe, ChevronDown, Loader2, Plus } from "lucide-react"
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react"
+import { useSession } from "next-auth/react"
+import {
+  Github,
+  Lock,
+  Globe,
+  ChevronDown,
+  Loader2,
+  Plus,
+  RefreshCw,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetchAllRepos } from "@/lib/github"
+import { signInWithGitHub } from "@/lib/auth-utils"
 import type { GitHubRepo } from "@/lib/types"
 import {
   Popover,
@@ -46,22 +62,26 @@ export function RepoCombobox({
   showLabel = false,
   createOnly = false,
 }: RepoComboboxProps) {
+  const { status } = useSession()
   const [open, setOpen] = useState(false)
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const loadingRef = useRef(false)
 
-  // Fetch repos when popover opens - with progressive loading
-  useEffect(() => {
-    if (open && repos.length === 0 && !loading) {
-      setLoading(true)
-      setLoadingMore(false)
-      setError(null)
+  const loadRepos = useCallback(async () => {
+    if (status !== "authenticated" || loadingRef.current) return
 
-      let isFirstPage = true
-      fetchAllRepos((repos, isComplete) => {
+    loadingRef.current = true
+    setLoading(true)
+    setLoadingMore(false)
+    setError(null)
+
+    let isFirstPage = true
+    try {
+      await fetchAllRepos((repos, isComplete) => {
         setRepos(repos)
         if (isFirstPage) {
           setLoading(false)
@@ -73,18 +93,32 @@ export function RepoCombobox({
         if (isComplete) {
           setLoadingMore(false)
         }
-      }).catch((err) => {
-        setError(err.message)
-        setLoading(false)
-        setLoadingMore(false)
       })
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load repositories"
+      )
+    } finally {
+      loadingRef.current = false
+      setLoading(false)
+      setLoadingMore(false)
     }
-  }, [open, repos.length, loading])
+  }, [status])
+
+  // Fetch once when an authenticated user opens an empty picker. Keep errors
+  // visible until the user retries instead of immediately starting the same
+  // failing request again.
+  useEffect(() => {
+    if (open && status === "authenticated" && repos.length === 0 && !error) {
+      void loadRepos()
+    }
+  }, [open, status, repos.length, error, loadRepos])
 
   // Reset search when popover closes
   useEffect(() => {
     if (!open) {
       setSearch("")
+      setError(null)
     }
   }, [open])
 
@@ -163,23 +197,53 @@ export function RepoCombobox({
         sideOffset={8}
       >
         <Command shouldFilter={false} value={search ? undefined : (value || undefined)}>
-          <CommandInput
-            placeholder="Search repositories..."
-            value={search}
-            onValueChange={setSearch}
-          />
+          {status === "authenticated" && (
+            <CommandInput
+              placeholder="Search repositories..."
+              value={search}
+              onValueChange={setSearch}
+            />
+          )}
           <CommandList>
-            {loading && (
+            {status === "loading" && (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             )}
-            {error && (
-              <div className="py-6 text-center text-sm text-destructive">
-                {error}
+            {status === "unauthenticated" && (
+              <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Sign in with GitHub to load your repositories.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => signInWithGitHub()}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  <Github className="h-4 w-4" />
+                  Sign in with GitHub
+                </button>
               </div>
             )}
-            {!loading && !error && (
+            {status === "authenticated" && loading && (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {status === "authenticated" && error && (
+              <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
+                <p className="text-sm text-destructive">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadRepos()}
+                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-accent transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Retry
+                </button>
+              </div>
+            )}
+            {status === "authenticated" && !loading && !error && (
               <>
                 {onRequestCreate && !search && (
                   <>
