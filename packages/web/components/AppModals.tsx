@@ -23,6 +23,7 @@ import { SkillSearchView } from "@/components/skills/SkillSearchView"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { useModals, useGit, useChat } from "@/lib/contexts"
 import { isRealRepo } from "@/lib/types"
+import type { LimitReachedState } from "@/lib/stores/chat-sync-store"
 
 // =============================================================================
 // AppModals — renders the application's modal/dialog "farm".
@@ -66,7 +67,7 @@ interface AppModalsProps {
   onDeleteChat: (chatId: string) => void
 
   // Daily limit reached dialog
-  limitReachedState: { show: boolean; resetAt?: Date; provider?: string; unit?: "tokens" | "cost" | "messages"; used?: number | null; limit?: number | null }
+  limitReachedState: LimitReachedState
   onDismissLimitReached: () => void
   onContinueWithOpenCode: () => void
 }
@@ -253,6 +254,7 @@ export function AppModals({
         unit={limitReachedState.unit}
         used={limitReachedState.used}
         limit={limitReachedState.limit}
+        plan={limitReachedState.plan}
         onContinueWithOpenCode={onContinueWithOpenCode}
         onAddApiKey={() => {
           onDismissLimitReached()
@@ -264,9 +266,13 @@ export function AppModals({
                 : "anthropic"
           modals.openSettings(key)
         }}
-        onUpgradeToPro={() => {
+        onUpgradePlan={(targetPlan) => {
           onDismissLimitReached()
-          window.open("mailto:james@jamesmurdza.com?subject=Upgrade%20to%20Pro", "_blank")
+          const planLabel = targetPlan === "pro" ? "Pro" : "Unlimited"
+          window.open(
+            `mailto:james@jamesmurdza.com?subject=${encodeURIComponent(`Upgrade to ${planLabel}`)}`,
+            "_blank"
+          )
         }}
         resetAt={limitReachedState.resetAt}
         isMobile={isMobile}

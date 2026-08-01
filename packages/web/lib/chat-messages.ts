@@ -9,6 +9,8 @@
 import type { Chat, Message, CredentialFlags } from "@/lib/types"
 import { sharedClaudePoolEligible } from "@/lib/types"
 import type { SettingsData } from "@/lib/query"
+import type { Plan } from "@/lib/server/usage-budgets"
+import { isPlan } from "@/lib/usage-limit-copy"
 import { generateBranchName } from "@/lib/utils"
 
 // =============================================================================
@@ -40,6 +42,8 @@ export type SendMessageResult =
       error: string
       isDailyLimit: boolean
       resetAt?: string
+      /** Subscription plan used to select the correct limit upsell. */
+      plan?: Plan
       /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
       provider?: string
       /** Unit the budget is measured in (tokens | cost | messages). */
@@ -113,6 +117,7 @@ export async function sendMessageToApi(
       error: err.error || `Failed to send message (HTTP ${response.status})`,
       isDailyLimit: err.error === "DAILY_LIMIT_EXCEEDED",
       resetAt: err.resetAt,
+      plan: isPlan(err.plan) ? err.plan : undefined,
       provider: err.provider,
       unit: err.unit,
       used: err.used,
