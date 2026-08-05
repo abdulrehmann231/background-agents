@@ -17,6 +17,7 @@
 import { create } from "zustand"
 import { nanoid } from "nanoid"
 import type { Chat } from "@/lib/types"
+import type { Plan } from "@/lib/server/usage-budgets"
 import {
   loadLocalState,
   setCurrentChatId as persistCurrentChatId,
@@ -46,6 +47,8 @@ export interface LimitReachedState {
   }
   /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
   provider?: string
+  /** Subscription tier used to select a non-redundant upgrade path. */
+  plan?: Plan
   /** Unit the budget is measured in (tokens | cost | messages). */
   unit?: "tokens" | "cost" | "messages"
   /** Amount used / daily budget for that provider, in `unit`. */

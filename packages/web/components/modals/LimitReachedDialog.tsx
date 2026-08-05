@@ -7,13 +7,18 @@ import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { Crown, Key, Zap } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { fmtBudgetAmount } from "@/lib/format"
+import {
+  getLimitUpgradeCopy,
+  type LimitUpgradeTarget,
+} from "@/lib/usage-limit-copy"
+import type { Plan } from "@/lib/server/usage-budgets"
 
 interface LimitReachedDialogProps {
   open: boolean
   onClose: () => void
   onContinueWithOpenCode: () => void
   onAddApiKey: () => void
-  onUpgradeToPro: () => void
+  onUpgradePlan: (targetPlan: LimitUpgradeTarget) => void
   /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
   provider?: string
   /** Unit the budget is measured in; falls back to the provider's default. */
@@ -21,6 +26,8 @@ interface LimitReachedDialogProps {
   /** Amount used / daily budget for that provider, in `unit`. */
   used?: number | null
   limit?: number | null
+  /** Current subscription tier; defaults to Free for older responses. */
+  plan?: Plan
   resetAt?: Date
   isMobile?: boolean
 }
@@ -45,11 +52,12 @@ export function LimitReachedDialog({
   onClose,
   onContinueWithOpenCode,
   onAddApiKey,
-  onUpgradeToPro,
+  onUpgradePlan,
   provider,
   unit: unitProp,
   used,
   limit,
+  plan,
   resetAt,
   isMobile = false,
 }: LimitReachedDialogProps) {
@@ -59,6 +67,7 @@ export function LimitReachedDialog({
   const primaryButtonRef = useRef<HTMLButtonElement>(null)
   // Prefer the server-provided unit; fall back to the provider's default.
   const unit = unitProp ?? unitForProvider(provider)
+  const upgradeCopy = getLimitUpgradeCopy(plan)
 
   // Focus the primary button when modal opens
   useEffect(() => {
@@ -80,10 +89,11 @@ export function LimitReachedDialog({
     onClose()
   }, [onAddApiKey, onClose])
 
-  const handleUpgradeToPro = useCallback(() => {
-    onUpgradeToPro()
+  const handleUpgradePlan = useCallback(() => {
+    if (!upgradeCopy) return
+    onUpgradePlan(upgradeCopy.targetPlan)
     onClose()
-  }, [onUpgradeToPro, onClose])
+  }, [upgradeCopy, onUpgradePlan, onClose])
 
   // Format reset time
   const resetTimeString = resetAt
@@ -183,29 +193,31 @@ export function LimitReachedDialog({
                 </div>
               </button>
 
-              {/* Option 3: Upgrade to Pro */}
-              <button
-                onClick={handleUpgradeToPro}
-                className={cn(
-                  "w-full flex items-center gap-3 rounded-lg border border-amber-500/30 hover:bg-amber-500/5 transition-colors p-3 text-left cursor-pointer",
-                  "focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                )}
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                  <Crown className="h-5 w-5 text-amber-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground">
-                    Upgrade to Pro
+              {/* Option 3: plan-aware upgrade (hidden for Unlimited). */}
+              {upgradeCopy && (
+                <button
+                  onClick={handleUpgradePlan}
+                  className={cn(
+                    "w-full flex items-center gap-3 rounded-lg border border-amber-500/30 hover:bg-amber-500/5 transition-colors p-3 text-left cursor-pointer",
+                    "focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  )}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+                    <Crown className="h-5 w-5 text-amber-500" />
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Higher daily limits on all shared pools and priority support
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground">
+                      {upgradeCopy.title}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {upgradeCopy.description}
+                    </div>
                   </div>
-                </div>
-                <div className="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded bg-amber-500/10">
-                  Pro
-                </div>
-              </button>
+                  <div className="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded bg-amber-500/10">
+                    {upgradeCopy.targetPlan === "pro" ? "Pro" : "Unlimited"}
+                  </div>
+                </button>
+              )}
             </div>
 
             {/* Dismiss */}

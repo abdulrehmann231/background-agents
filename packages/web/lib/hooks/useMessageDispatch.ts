@@ -221,6 +221,7 @@ export function useMessageDispatch({
             setLimitReachedState({
               show: true,
               pendingMessage: { chatId, content, files, planMode },
+              plan: result.plan,
               provider: result.provider,
               unit: result.unit,
               used: result.used,

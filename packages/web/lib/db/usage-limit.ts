@@ -17,6 +17,7 @@ import { prisma } from "./prisma"
 import { sumSharedUsage, countSharedMessages } from "./token-usage"
 import { providerForRun, resolvePool } from "@/lib/server/shared-pool"
 import { decryptUserCredentials } from "./api-helpers"
+import { formatUsageLimitMessage } from "@/lib/usage-limit-copy"
 import {
   getProviderBudget,
   getNextUtcDayReset,
@@ -35,7 +36,7 @@ export interface UsageLimitResult {
   unit: BudgetUnit
   /** Amount used in the current period, in `unit` (tokens / USD / messages). */
   used: number
-  /** Daily budget in `unit` (free users), or null when unlimited (pro/own key). */
+  /** Daily budget in `unit` (Free/Pro), or null for Unlimited/own-key runs. */
   limit: number | null
   remaining: number | null
   resetAt: Date
@@ -106,7 +107,9 @@ export async function checkSharedPoolUsage(
     used,
     limit: budget.limit,
     remaining,
-    error: allowed ? undefined : limitMessage(provider, budget.unit, budget.limit),
+    error: allowed
+      ? undefined
+      : formatUsageLimitMessage({ plan, provider, unit: budget.unit, limit: budget.limit }),
   }
 }
 
@@ -122,18 +125,4 @@ async function getSharedUsage(
   }
   const { limitedTokens, costUsd } = await sumSharedUsage({ userId, provider, since })
   return unit === "cost" ? costUsd : limitedTokens
-}
-
-/** Human-readable limit message, phrased per unit. */
-function limitMessage(provider: ProviderName, unit: BudgetUnit, limit: number): string {
-  const allowance =
-    unit === "tokens"
-      ? `${limit.toLocaleString()} tokens`
-      : unit === "cost"
-        ? `$${limit.toFixed(2)}`
-        : `${limit.toLocaleString()} messages`
-  return (
-    `Daily ${provider} limit reached (${allowance}). ` +
-    `Upgrade to Pro for unlimited usage, or add your own ${provider} key.`
-  )
 }
