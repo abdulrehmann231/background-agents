@@ -12,6 +12,18 @@ import type { Chat, ChatStatus, QueuedMessage } from "@/lib/types"
 import type { PreviewState } from "@/lib/storage"
 
 /**
+ * Prefix for the client-only id a chat carries before it is written to the
+ * database. A draft chat exists in the browser only, so no server route can
+ * resolve its id — callers must check `isDraftChatId` before hitting the API.
+ */
+export const DRAFT_CHAT_ID_PREFIX = "draft-"
+
+/** True for a chat that lives only in the browser (no database row yet). */
+export function isDraftChatId(chatId: string | null | undefined): boolean {
+  return chatId?.startsWith(DRAFT_CHAT_ID_PREFIX) ?? false
+}
+
+/**
  * Client-only chat fields that are layered on top of the server's chat records.
  * Keyed by chat id.
  */

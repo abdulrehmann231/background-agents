@@ -32,6 +32,7 @@ import { useMessageDispatch } from "./useMessageDispatch"
 import {
   mergeLocalState,
   computeUnseenTransitions,
+  isDraftChatId as isDraftChatIdPure,
 } from "@/lib/chat-state"
 
 // =============================================================================
@@ -137,7 +138,7 @@ export function useChatWithSync() {
 
   // Helper to check if a chat ID is a draft
   const isDraftChatId = useCallback((chatId: string | null): boolean => {
-    return chatId?.startsWith("draft-") ?? false
+    return isDraftChatIdPure(chatId)
   }, [])
 
   // Materialize a draft chat into a real database chat

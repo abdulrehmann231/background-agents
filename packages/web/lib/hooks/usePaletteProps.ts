@@ -11,6 +11,7 @@ import type { useModals, useSidebar } from "@/lib/contexts"
 import type { usePreview } from "@/lib/hooks/usePreview"
 import { useGitHubUserQuery } from "@/lib/query"
 import { getChatRepos } from "@/components/sidebar"
+import { isDraftChatId } from "@/lib/chat-state"
 
 /** All props the PaletteProvider takes, minus `children` (supplied by JSX). */
 export type PaletteProps = Omit<React.ComponentProps<typeof PaletteProvider>, "children">
@@ -110,6 +111,11 @@ export function usePaletteProps({
   const sandboxId = currentChat?.sandboxId ?? null
   const hasRepo = isRealRepo(currentChat?.repo)
 
+  // Commands that address a chat row on the server (usage, delete, archive) are
+  // only offered once the chat has been written to the database. A draft chat
+  // lives in the browser only, so those requests would 404.
+  const savedChatId = isDraftChatId(displayCurrentChatId) ? null : displayCurrentChatId
+
   // Find or create a uniquely-numbered terminal id for this sandbox. We scan
   // existing terminal preview items, pull the trailing `-<n>` suffix from each,
   // and pick the next integer above the highest one we've seen.
@@ -165,8 +171,8 @@ export function usePaletteProps({
     onCreateRepo: currentChat?.repo === NEW_REPOSITORY ? handleCreateRepo : undefined,
     showGitCommands: hasRepo,
     onOpenInGitHub: githubBranchUrl ? handleOpenInGitHub : undefined,
-    onOpenChatUsage: displayCurrentChatId
-      ? () => modals.openChatUsage(displayCurrentChatId)
+    onOpenChatUsage: savedChatId
+      ? () => modals.openChatUsage(savedChatId)
       : undefined,
     onOpenSettings: modals.openSettingsSection,
     onToggleSidebar: !isMobile ? () => sidebar.toggleCollapse() : undefined,
@@ -177,12 +183,12 @@ export function usePaletteProps({
           signOut()
         }
       : undefined,
-    onDeleteChat: displayCurrentChatId
-      ? () => modals.setDeleteConfirmChatId(displayCurrentChatId)
+    onDeleteChat: savedChatId
+      ? () => modals.setDeleteConfirmChatId(savedChatId)
       : undefined,
     onArchiveChat:
-      displayCurrentChatId && !currentChat?.archived
-        ? () => handleArchiveChat(displayCurrentChatId)
+      savedChatId && !currentChat?.archived
+        ? () => handleArchiveChat(savedChatId)
         : undefined,
     onOpenInVSCode: sandboxId ? handleOpenInVSCode : undefined,
     onOpenTerminal: sandboxId ? openNewTerminal : undefined,
