@@ -34,6 +34,7 @@ import {
   migrateLocalChatState,
   upsertDraft,
   computeNextPreviewState,
+  DRAFT_CHAT_ID_PREFIX,
   type LocalChatState,
 } from "@/lib/chat-state"
 
@@ -163,7 +164,7 @@ export const useChatSyncStore = create<ChatSyncStore>((set, get) => ({
   },
 
   enterDraftMode: (repo, baseBranch, agent, model) => {
-    const draftId = `draft-${nanoid()}`
+    const draftId = `${DRAFT_CHAT_ID_PREFIX}${nanoid()}`
     const config: DraftChatConfig = { id: draftId, repo, baseBranch, agent, model }
     set({ draftChatConfig: config, currentChatId: draftId })
     setDraftChatConfig(config)
