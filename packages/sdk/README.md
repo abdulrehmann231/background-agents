@@ -16,12 +16,13 @@ const session = await createSession("claude", {
 
 await session.start("Refactor the auth module")
 
-// Poll for events
-while (await session.isRunning()) {
-  const { events } = await session.getEvents()
+// Poll for events (read first, then check `running` so the final events aren't missed)
+while (true) {
+  const { events, running } = await session.getEvents()
   for (const event of events) {
     if (event.type === "token") process.stdout.write(event.text)
   }
+  if (!running) break
   await new Promise(r => setTimeout(r, 1000))
 }
 
@@ -113,14 +114,15 @@ const session = await createSession("claude", {
 // 3. Start a task
 await session.start("Create a hello world script")
 
-// 4. Poll for events
-while (await session.isRunning()) {
-  const { events } = await session.getEvents()
+// 4. Poll for events (read first, then check `running` so the terminal `end` event isn't missed)
+while (true) {
+  const { events, running } = await session.getEvents()
   for (const event of events) {
     if (event.type === "token") process.stdout.write(event.text)
     if (event.type === "tool_start") console.log(`\n[Tool: ${event.name}]`)
     if (event.type === "end") console.log("\nDone.")
   }
+  if (!running) break
   await new Promise(r => setTimeout(r, 1000))
 }
 

@@ -34,7 +34,7 @@ npx background-agents [options]
 | `-v`, `--version` | Print the launcher version |
 | `-h`, `--help` | Show help |
 
-Environment variable `BACKGROUND_AGENTS_URL` does the same as `--url` (the flag wins).
+Environment variable `BACKGROUND_AGENTS_URL` does the same as `--url` (the `--url` and `--dev` flags both take precedence over it).
 
 > Tip: plain `npx background-agents` may reuse an npx-cached copy. Use `npx background-agents@latest` to force the newest version.
 
