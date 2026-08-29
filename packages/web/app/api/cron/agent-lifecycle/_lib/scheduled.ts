@@ -286,7 +286,8 @@ export async function startJobExecution(
   const usageMeta = buildUsageMeta(
     job.agent as Agent,
     decryptUserCredentials(storedUser?.credentials as Record<string, unknown> | null),
-    job.model ?? undefined
+    job.model ?? undefined,
+    credentials.OPENCODE_API_KEY
   )
 
   await prisma.message.createMany({

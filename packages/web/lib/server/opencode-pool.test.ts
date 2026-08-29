@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, afterEach, vi } from "vitest"
 import {
+  fingerprintKey,
   getSharedOpencodeKeys,
   hasSharedOpencodeKey,
   pickSharedOpencodeKey,
@@ -73,5 +74,40 @@ describe("pickSharedOpencodeKey", () => {
     expect(counts.a).toBeGreaterThan(1600)
     expect(counts.b).toBeGreaterThan(1600)
     expect(counts.c).toBeGreaterThan(1600)
+  })
+})
+
+describe("fingerprintKey", () => {
+  it("returns the last 5 characters", () => {
+    expect(fingerprintKey("sk-FfNFvxqVaeomabGUvXpW4GCSdZK05tlBCBFDFhXd5p1TMXmz6YJOAoHIrEWCa2RK")).toBe(
+      "Ca2RK"
+    )
+  })
+
+  it("distinguishes keys sharing a long common prefix", () => {
+    const a = fingerprintKey(`sk-${"x".repeat(60)}AAAAA`)
+    const b = fingerprintKey(`sk-${"x".repeat(60)}BBBBB`)
+    expect(a).toBe("AAAAA")
+    expect(b).toBe("BBBBB")
+    expect(a).not.toBe(b)
+  })
+
+  it("never returns enough to reconstruct the key", () => {
+    const key = "sk-supersecretcredentialvaluethatmustnotleak12345"
+    const fp = fingerprintKey(key)!
+    expect(fp).toHaveLength(5)
+    expect(key).not.toBe(fp)
+    expect(key.startsWith(fp)).toBe(false)
+  })
+
+  it("ignores surrounding whitespace so it matches the parsed pool value", () => {
+    expect(fingerprintKey("  sk-abcdefghij  ")).toBe("fghij")
+  })
+
+  it("returns undefined for missing or too-short input", () => {
+    expect(fingerprintKey(undefined)).toBeUndefined()
+    expect(fingerprintKey(null)).toBeUndefined()
+    expect(fingerprintKey("")).toBeUndefined()
+    expect(fingerprintKey("abcd")).toBeUndefined()
   })
 })

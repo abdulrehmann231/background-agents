@@ -36,3 +36,26 @@ export function pickSharedOpencodeKey(): string | undefined {
   if (keys.length === 0) return undefined
   return keys[Math.floor(Math.random() * keys.length)]
 }
+
+/** Number of trailing characters kept as a key's public fingerprint. */
+const KEY_FINGERPRINT_LENGTH = 5
+
+/**
+ * Public fingerprint for a pool key: its last {@link KEY_FINGERPRINT_LENGTH}
+ * characters. Stored on TokenUsage rows so spend can be attributed per key, and
+ * rendered in the admin dashboard as e.g. "…Ca2RK".
+ *
+ * Deliberately lossy — five characters is enough to tell a handful of pool keys
+ * apart (~916M combinations over the alphanumeric alphabet OpenCode uses) while
+ * being useless for reconstructing the credential. Never log or persist the
+ * full key.
+ *
+ * Returns undefined for a missing or too-short key so callers can simply omit
+ * the field rather than storing a meaningless value.
+ */
+export function fingerprintKey(key: string | undefined | null): string | undefined {
+  if (!key) return undefined
+  const trimmed = key.trim()
+  if (trimmed.length < KEY_FINGERPRINT_LENGTH) return undefined
+  return trimmed.slice(-KEY_FINGERPRINT_LENGTH)
+}

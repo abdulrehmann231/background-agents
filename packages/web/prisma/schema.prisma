@@ -343,6 +343,13 @@ model TokenUsage {
   model    String? // model id reported by tokscale
   pool     String // "shared" | "user"
 
+  // Which shared-pool credential served this turn: the LAST 5 CHARACTERS of the
+  // key, never the key itself (see fingerprintKey in lib/server/opencode-pool).
+  // Only set for shared OpenCode runs — the one pool with several rotating keys.
+  // Null for own-key runs, for pools with a single credential, and for rows
+  // written before per-key attribution existed.
+  keyId String?
+
   // Free models (e.g. OpenCode's free tier) are recorded for overall totals but
   // excluded from shared-pool budgets/limits. Set at write time via isFreeModel.
   freeModel Boolean @default(false)
@@ -372,6 +379,7 @@ model TokenUsage {
   @@index([userId, provider, pool, createdAt]) // limiter aggregation
   @@index([userId, createdAt])
   @@index([provider, createdAt]) // admin per-provider rollups
+  @@index([provider, keyId, createdAt]) // admin per-key rollups
   @@index([sessionId, model, createdAt]) // diff-cursor lookup
 }
 

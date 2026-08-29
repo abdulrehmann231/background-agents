@@ -24,6 +24,12 @@ export interface TokenUsageInsert {
   provider: string
   model?: string | null
   pool: UsagePool
+  /**
+   * Fingerprint (last 5 chars) of the shared-pool key that served the turn.
+   * Set only for shared OpenCode runs; null everywhere else and on rows written
+   * before per-key attribution existed.
+   */
+  keyId?: string | null
   /** Free model — recorded in totals but excluded from shared-pool budgets. */
   freeModel: boolean
   inputTokens: number
@@ -125,6 +131,7 @@ export async function insertTokenUsageRows(
       provider: r.provider,
       model: r.model ?? null,
       pool: r.pool,
+      keyId: r.keyId ?? null,
       freeModel: r.freeModel,
       inputTokens: r.inputTokens,
       outputTokens: r.outputTokens,

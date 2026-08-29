@@ -23,6 +23,7 @@ import {
   type ProviderName,
 } from "@background-agents/common"
 import type { UsagePool } from "@/lib/db/token-usage"
+import { fingerprintKey } from "@/lib/server/opencode-pool"
 
 /** Agents backed by a shared (server-provided) credential pool. */
 export const SHARED_POOL_AGENTS = ["claude-code", "gemini", "opencode"] as const
@@ -88,15 +89,36 @@ export function resolvePool(
 export interface UsageMeta {
   pool: UsagePool
   provider: ProviderName
+  /**
+   * Fingerprint (last 5 chars) of the shared-pool key that served this run.
+   * Only present for shared OpenCode runs — the one pool with several rotating
+   * keys. Absent for own-key runs and single-credential pools.
+   */
+  keyId?: string
 }
 
-/** Build the metadata blob to stamp on the assistant message. */
+/**
+ * Build the metadata blob to stamp on the assistant message.
+ *
+ * `resolvedKey` is the credential actually handed to the agent for this run
+ * (i.e. `credentials.OPENCODE_API_KEY` after {@link getUserCredentials} has
+ * picked one from the pool). It is fingerprinted — never stored whole — and only
+ * when this run genuinely draws on the shared OpenCode pool, so a user's own key
+ * never leaves a trace in the ledger.
+ */
 export function buildUsageMeta(
   agent: Agent,
   storedCreds: Credentials,
-  model?: string
+  model?: string,
+  resolvedKey?: string
 ): UsageMeta {
-  return { pool: resolvePool(agent, storedCreds, model), provider: providerForRun(agent, model) }
+  const pool = resolvePool(agent, storedCreds, model)
+  const provider = providerForRun(agent, model)
+  const keyId =
+    pool === "shared" && provider === "opencode"
+      ? fingerprintKey(resolvedKey)
+      : undefined
+  return { pool, provider, ...(keyId ? { keyId } : {}) }
 }
 
 /**
@@ -107,9 +129,17 @@ export function readUsageMeta(metadata: unknown): UsageMeta | null {
   if (!metadata || typeof metadata !== "object") return null
   const usage = (metadata as { usage?: unknown }).usage
   if (!usage || typeof usage !== "object") return null
-  const { pool, provider } = usage as { pool?: unknown; provider?: unknown }
+  const { pool, provider, keyId } = usage as {
+    pool?: unknown
+    provider?: unknown
+    keyId?: unknown
+  }
   if ((pool === "shared" || pool === "user") && typeof provider === "string") {
-    return { pool, provider: provider as ProviderName }
+    return {
+      pool,
+      provider: provider as ProviderName,
+      ...(typeof keyId === "string" && keyId ? { keyId } : {}),
+    }
   }
   return null
 }
