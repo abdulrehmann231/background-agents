@@ -11,35 +11,33 @@ import {
   YAxis,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
-import { formatAxisDate, formatTooltipDate } from "./chartFormatters"
-import { formatUnitValue, percentOf } from "@/lib/admin/usage-distribution"
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
+import { formatAxisDate, formatMetricValue, formatTooltipDate } from "./chartFormatters"
+import type { PoolSplitPoint, UsageMetric } from "@/lib/query/hooks"
 
-// Shared = our spend, so it gets the "attention" colour; own-key is muted since
-// it costs the platform nothing.
+// Shared is our spend, so it takes the primary colour; own-key is muted since it
+// costs the platform nothing.
 const SHARED_COLOR = "hsl(262, 83%, 58%)"
 const USER_COLOR = "hsl(152, 60%, 50%)"
 
 interface PoolSplitChartProps {
-  data: Array<{ time: string; shared: number; user: number }>
-  unit: BudgetUnit
+  data: PoolSplitPoint[]
+  metric: UsageMetric
 }
 
 /**
  * Shared-pool vs own-key usage over time.
  *
  * Deliberately ignores the dashboard's global pool filter — this chart *is* the
- * pool breakdown, and its whole job is showing how much of total demand lands on
- * credentials the platform pays for.
+ * pool breakdown, and its job is showing how much of total demand lands on
+ * credentials we pay for.
  */
-export function PoolSplitChart({ data, unit }: PoolSplitChartProps) {
-  const fmt = (v: number) => formatUnitValue(unit, v)
+export function PoolSplitChart({ data, metric }: PoolSplitChartProps) {
+  const fmt = (v: number) => formatMetricValue(metric, v)
   const sharedTotal = data.reduce((acc, d) => acc + d.shared, 0)
   const userTotal = data.reduce((acc, d) => acc + d.user, 0)
   const total = sharedTotal + userTotal
-  const hasData = total > 0
 
-  if (!hasData) {
+  if (total <= 0) {
     return (
       <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
         No usage recorded in this range
@@ -56,7 +54,7 @@ export function PoolSplitChart({ data, unit }: PoolSplitChartProps) {
             <XAxis
               dataKey="time"
               tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              tickFormatter={formatAxisDate}
+              tickFormatter={(value) => formatAxisDate(value)}
               axisLine={{ stroke: "hsl(var(--border))" }}
               tickLine={{ stroke: "hsl(var(--border))" }}
               interval="preserveStartEnd"
@@ -66,7 +64,7 @@ export function PoolSplitChart({ data, unit }: PoolSplitChartProps) {
               axisLine={{ stroke: "hsl(var(--border))" }}
               tickLine={{ stroke: "hsl(var(--border))" }}
               width={50}
-              tickFormatter={(v) => fmt(Number(v))}
+              tickFormatter={(value) => fmt(Number(value))}
             />
             <Tooltip
               {...chartTooltipProps}
@@ -79,7 +77,7 @@ export function PoolSplitChart({ data, unit }: PoolSplitChartProps) {
             <Area
               type="monotone"
               dataKey="shared"
-              name="Shared pool (our spend)"
+              name="Our pool"
               stackId="1"
               stroke={SHARED_COLOR}
               fill={SHARED_COLOR}
@@ -89,7 +87,7 @@ export function PoolSplitChart({ data, unit }: PoolSplitChartProps) {
             <Area
               type="monotone"
               dataKey="user"
-              name="Own key (their spend)"
+              name="Own key"
               stackId="1"
               stroke={USER_COLOR}
               fill={USER_COLOR}
@@ -100,8 +98,8 @@ export function PoolSplitChart({ data, unit }: PoolSplitChartProps) {
         </ResponsiveContainer>
       </div>
       <p className="text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">{fmt(sharedTotal)}</span> on our
-        pool ({percentOf(sharedTotal, total).toFixed(0)}% of total),{" "}
+        <span className="font-medium text-foreground">{fmt(sharedTotal)}</span> on our pool
+        ({((sharedTotal / total) * 100).toFixed(0)}%),{" "}
         <span className="font-medium text-foreground">{fmt(userTotal)}</span> on users&apos;
         own keys.
       </p>

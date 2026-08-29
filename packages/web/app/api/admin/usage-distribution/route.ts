@@ -3,49 +3,31 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db/prisma"
 import { requireAdmin, isAuthError } from "@/lib/db/api-helpers"
 import { getRangeInterval, parseFiniteTimeRange } from "@/lib/db/time-range"
-import {
-  getProviderBudget,
-  PRO_BUDGET_MULTIPLIER,
-  type BudgetUnit,
-} from "@/lib/server/usage-budgets"
 
-// Providers with a configured shared pool + budget. Fixed whitelist — the value
-// reaches SQL as a bound parameter, never as interpolated text.
+// Providers backed by a shared credential pool. Fixed whitelist — the value is
+// bound as a query parameter, never interpolated.
 const VALID_PROVIDERS = ["claude", "opencode", "gemini"] as const
 type Provider = (typeof VALID_PROVIDERS)[number]
 
 /**
- * The ledger column a provider's budget is denominated in. Mirrors
- * FREE_DAILY_BUDGETS in usage-budgets.ts — tokens are cache-excluded (the same
- * `limitedTokens` measure the limiter enforces), cost is USD, and messages are
- * distinct assistant turns.
- */
-function valueExpr(unit: BudgetUnit): Prisma.Sql {
-  switch (unit) {
-    case "cost":
-      return Prisma.sql`SUM("costUsd")::float`
-    case "messages":
-      return Prisma.sql`COUNT(DISTINCT "messageId")::float`
-    default:
-      return Prisma.sql`SUM("inputTokens" + "outputTokens" + "reasoningTokens")::float`
-  }
-}
-
-/**
  * GET /api/admin/usage-distribution
  *
- * Feeds the tier-limit tooling on the admin Overview. Returns one dataset that
- * the client derives the histogram, percentiles and limit simulation from, so
- * dragging the simulated limit costs no round-trips.
+ * Powers the "Shared pool & usage" block on the admin Overview: where our
+ * credential spend goes, split by pool, by pool key, and by user/model.
+ *
+ * Every response carries BOTH tokens and cost for each series, so the dashboard
+ * can toggle between them without a refetch. (Notably this decouples the view
+ * from a provider's *budget* unit — OpenCode is budgeted in USD because it spans
+ * models with very different per-token prices, but you still want to see its
+ * token volume.)
  *
  * Query params:
  *   - range:    "24h" | "7d" | "30d" (default "30d")
  *   - provider: "claude" | "opencode" | "gemini" (default "opencode")
  *   - excludeAdmins: "false" to include admin accounts (default: exclude)
  *
- * `perUser` is SHARED-POOL ONLY — a limit exists to protect the platform's own
- * credentials, so simulating one against BYOK usage would be meaningless. The
- * `poolSplit` series reports both pools precisely so that contrast is visible.
+ * Token counts use `totalTokens` to match the "Tokens" metric on the rest of the
+ * dashboard, so figures are comparable across sections.
  */
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin()
@@ -60,46 +42,19 @@ export async function GET(request: NextRequest) {
   const excludeAdmins = searchParams.get("excludeAdmins") !== "false"
   const interval = getRangeInterval(range)
 
-  const budget = getProviderBudget(provider, "free")
-  const unit: BudgetUnit = budget?.unit ?? "tokens"
-  const value = valueExpr(unit)
-
-  // Free models are excluded from shared-pool budgets by the limiter
-  // (sumSharedUsage), so they must be excluded here too — otherwise the
-  // simulation would charge users for usage a real limit never counts.
-  const sharedOnly = Prisma.sql`AND "pool" = 'shared' AND "freeModel" = false`
   const notAdmin = Prisma.sql`
     AND (${excludeAdmins} = false OR "userId" NOT IN (SELECT id FROM "User" WHERE "isAdmin" = true))
   `
 
-  // --- Per-user × per-day matrix (shared pool) -----------------------------
-  const perUserRawPromise = prisma.$queryRaw<
-    Array<{ userId: string; name: string | null; image: string | null; day: Date; value: number }>
-  >`
-    SELECT
-      tu."userId"        as "userId",
-      u.name             as name,
-      u.image            as image,
-      date_trunc('day', tu."createdAt")::date as day,
-      ${value}           as value
-    FROM "TokenUsage" tu
-    JOIN "User" u ON u.id = tu."userId"
-    WHERE tu."createdAt" >= NOW() - ${interval}::interval
-      AND tu.provider = ${provider}
-      AND tu."pool" = 'shared'
-      AND tu."freeModel" = false
-      AND (${excludeAdmins} = false OR u."isAdmin" = false)
-    GROUP BY tu."userId", u.name, u.image, 3
-  `
-
-  // --- Shared vs own-key over time ------------------------------------------
+  // --- Shared vs own-key, per day -------------------------------------------
   const poolSplitPromise = prisma.$queryRaw<
-    Array<{ day: Date; pool: string; value: number }>
+    Array<{ day: Date; pool: string; tokens: number; cost: number }>
   >`
     SELECT
       date_trunc('day', "createdAt")::date as day,
       "pool" as pool,
-      ${value} as value
+      SUM("totalTokens")::float as tokens,
+      SUM("costUsd")::float as cost
     FROM "TokenUsage"
     WHERE "createdAt" >= NOW() - ${interval}::interval
       AND provider = ${provider}
@@ -108,114 +63,181 @@ export async function GET(request: NextRequest) {
     ORDER BY 1 ASC
   `
 
-  // --- Per-key over time (OpenCode only) ------------------------------------
-  // Rows written before per-key attribution have a null keyId; they surface as
-  // "unattributed" rather than being dropped, so totals still reconcile.
-  const byKeyPromise: Promise<Array<{ day: Date; keyId: string | null; value: number }>> =
+  // --- Per pool key, per day (OpenCode is the only multi-key pool) -----------
+  // Shared pool only: a key id exists only for runs on our credentials.
+  const byKeyPromise: Promise<
+    Array<{ day: Date; keyId: string | null; tokens: number; cost: number }>
+  > =
     provider === "opencode"
-      ? prisma.$queryRaw<Array<{ day: Date; keyId: string | null; value: number }>>`
+      ? prisma.$queryRaw`
           SELECT
             date_trunc('day', "createdAt")::date as day,
             "keyId" as "keyId",
-            ${value} as value
+            SUM("totalTokens")::float as tokens,
+            SUM("costUsd")::float as cost
           FROM "TokenUsage"
           WHERE "createdAt" >= NOW() - ${interval}::interval
             AND provider = ${provider}
-            ${sharedOnly}
+            AND "pool" = 'shared'
             ${notAdmin}
           GROUP BY 1, 2
           ORDER BY 1 ASC
         `
       : Promise.resolve([])
 
-  const [perUserRaw, poolSplitRaw, byKeyRaw] = await Promise.all([
-    perUserRawPromise,
+  // --- Per user × model × pool ----------------------------------------------
+  // The finest grain the table needs; user- and pool-level totals are rolled up
+  // from these rows in JS rather than in three separate round trips.
+  const perUserPromise = prisma.$queryRaw<
+    Array<{
+      userId: string
+      name: string | null
+      image: string | null
+      model: string | null
+      pool: string
+      tokens: number
+      cost: number
+    }>
+  >`
+    SELECT
+      tu."userId" as "userId",
+      u.name as name,
+      u.image as image,
+      tu.model as model,
+      tu."pool" as pool,
+      SUM(tu."totalTokens")::float as tokens,
+      SUM(tu."costUsd")::float as cost
+    FROM "TokenUsage" tu
+    JOIN "User" u ON u.id = tu."userId"
+    WHERE tu."createdAt" >= NOW() - ${interval}::interval
+      AND tu.provider = ${provider}
+      AND (${excludeAdmins} = false OR u."isAdmin" = false)
+    GROUP BY tu."userId", u.name, u.image, tu.model, tu."pool"
+  `
+
+  const [poolSplitRaw, byKeyRaw, perUserRaw] = await Promise.all([
     poolSplitPromise,
     byKeyPromise,
+    perUserPromise,
   ])
 
-  // --- Build the aligned day axis -------------------------------------------
-  // Generated in JS rather than SQL so all three series share one axis and the
-  // client can index `daily[]` positionally against `days[]`.
+  // --- Day axis -------------------------------------------------------------
+  // Built in JS so both time series share one gap-free axis.
   const days: string[] = []
-  const today = new Date()
   const dayCount = range === "24h" ? 1 : range === "7d" ? 7 : 30
+  const today = new Date()
   for (let i = dayCount - 1; i >= 0; i--) {
     const d = new Date(today)
     d.setUTCDate(d.getUTCDate() - i)
     days.push(d.toISOString().split("T")[0])
   }
-  const dayIndex = new Map(days.map((d, i) => [d, i]))
+  const isoDay = (d: Date) => d.toISOString().split("T")[0]
 
-  // --- perUser: dense daily arrays ------------------------------------------
-  const byUser = new Map<
-    string,
-    { userId: string; name: string; image: string | null; daily: number[] }
-  >()
-  for (const row of perUserRaw) {
-    const key = row.userId
-    let entry = byUser.get(key)
-    if (!entry) {
-      entry = {
-        userId: row.userId,
-        name: row.name || "Unknown",
-        image: row.image,
-        daily: new Array(days.length).fill(0),
-      }
-      byUser.set(key, entry)
+  // --- poolSplit: one row per day per metric --------------------------------
+  const makeSplit = (metric: "tokens" | "cost") => {
+    const map = new Map(days.map((d) => [d, { time: d, shared: 0, user: 0 }]))
+    for (const row of poolSplitRaw) {
+      const entry = map.get(isoDay(row.day))
+      if (!entry) continue
+      const v = Number(row[metric]) || 0
+      if (row.pool === "shared") entry.shared += v
+      else entry.user += v
     }
-    const idx = dayIndex.get(row.day.toISOString().split("T")[0])
-    if (idx !== undefined) entry.daily[idx] += Number(row.value)
-  }
-
-  // --- poolSplit: one row per day with both pools ---------------------------
-  const splitMap = new Map<string, { time: string; shared: number; user: number }>(
-    days.map((d) => [d, { time: d, shared: 0, user: 0 }])
-  )
-  for (const row of poolSplitRaw) {
-    const key = row.day.toISOString().split("T")[0]
-    const entry = splitMap.get(key)
-    if (!entry) continue
-    if (row.pool === "shared") entry.shared += Number(row.value)
-    else entry.user += Number(row.value)
+    return [...map.values()]
   }
 
   // --- byKey: one row per day, one column per key ---------------------------
   const UNATTRIBUTED = "unattributed"
   const keyIds = new Set<string>()
-  const keyMap = new Map<string, Record<string, number | string>>(
-    days.map((d) => [d, { time: d }])
-  )
-  for (const row of byKeyRaw) {
-    const key = row.day.toISOString().split("T")[0]
-    const entry = keyMap.get(key)
-    if (!entry) continue
-    const id = row.keyId || UNATTRIBUTED
-    keyIds.add(id)
-    entry[id] = ((entry[id] as number) || 0) + Number(row.value)
-  }
-  // Fill gaps so recharts stacks render continuously rather than breaking.
-  for (const entry of keyMap.values()) {
-    for (const id of keyIds) {
-      if (entry[id] === undefined) entry[id] = 0
+  for (const row of byKeyRaw) keyIds.add(row.keyId || UNATTRIBUTED)
+
+  const makeByKey = (metric: "tokens" | "cost") => {
+    const map = new Map<string, Record<string, number | string>>(
+      days.map((d) => [d, { time: d }])
+    )
+    for (const row of byKeyRaw) {
+      const entry = map.get(isoDay(row.day))
+      if (!entry) continue
+      const id = row.keyId || UNATTRIBUTED
+      entry[id] = ((entry[id] as number) || 0) + (Number(row[metric]) || 0)
     }
+    // Fill gaps so stacked areas render continuously.
+    for (const entry of map.values()) {
+      for (const id of keyIds) if (entry[id] === undefined) entry[id] = 0
+    }
+    return [...map.values()]
   }
+
+  // --- users: roll the per-model rows up per user ---------------------------
+  interface ModelRow {
+    model: string
+    pool: string
+    tokens: number
+    cost: number
+  }
+  const userMap = new Map<
+    string,
+    {
+      userId: string
+      name: string
+      image: string | null
+      tokens: number
+      cost: number
+      sharedTokens: number
+      sharedCost: number
+      ownTokens: number
+      ownCost: number
+      models: ModelRow[]
+    }
+  >()
+
+  for (const row of perUserRaw) {
+    let u = userMap.get(row.userId)
+    if (!u) {
+      u = {
+        userId: row.userId,
+        name: row.name || "Unknown",
+        image: row.image,
+        tokens: 0,
+        cost: 0,
+        sharedTokens: 0,
+        sharedCost: 0,
+        ownTokens: 0,
+        ownCost: 0,
+        models: [],
+      }
+      userMap.set(row.userId, u)
+    }
+    const tokens = Number(row.tokens) || 0
+    const cost = Number(row.cost) || 0
+    u.tokens += tokens
+    u.cost += cost
+    if (row.pool === "shared") {
+      u.sharedTokens += tokens
+      u.sharedCost += cost
+    } else {
+      u.ownTokens += tokens
+      u.ownCost += cost
+    }
+    u.models.push({ model: row.model || "unknown", pool: row.pool, tokens, cost })
+  }
+
+  const users = [...userMap.values()]
+    .map((u) => ({
+      ...u,
+      // Heaviest model first so the expanded row leads with what matters.
+      models: u.models.sort((a, b) => b.tokens - a.tokens),
+    }))
+    .filter((u) => u.tokens > 0 || u.cost > 0)
+    .sort((a, b) => b.cost - a.cost || b.tokens - a.tokens)
 
   return NextResponse.json({
     range,
     provider,
-    unit,
-    currentLimits: {
-      free: budget?.limit ?? null,
-      pro: budget ? budget.limit * PRO_BUDGET_MULTIPLIER : null,
-    },
-    // Sent rather than imported client-side: usage-budgets lives under lib/server
-    // and shouldn't be pulled into a client bundle just for one constant.
-    proMultiplier: PRO_BUDGET_MULTIPLIER,
     days,
-    perUser: [...byUser.values()],
-    poolSplit: [...splitMap.values()],
-    byKey: [...keyMap.values()],
     keyIds: [...keyIds].sort(),
+    poolSplit: { tokens: makeSplit("tokens"), cost: makeSplit("cost") },
+    byKey: { tokens: makeByKey("tokens"), cost: makeByKey("cost") },
+    users,
   })
 }

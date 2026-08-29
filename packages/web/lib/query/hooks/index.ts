@@ -26,6 +26,10 @@ export type {
   UsageDistribution,
   UsageProvider,
   UsageRange,
+  UsageMetric,
+  UserUsage,
+  UserModelUsage,
+  PoolSplitPoint,
 } from "./useUsageDistributionQuery"
 export { useAdminActivityQuery } from "./useAdminActivityQuery"
 export { useAdminUsersQuery, useUpdateUserMutation } from "./useAdminUsersQuery"

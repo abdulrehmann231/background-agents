@@ -4,34 +4,60 @@ import { useQuery } from "@tanstack/react-query"
 import { useSession } from "next-auth/react"
 import { queryKeys } from "../keys"
 import { adminRetry, fetchAdminJson } from "./adminQuery"
-import type { UserDailyUsage } from "@/lib/admin/usage-distribution"
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
 
-/** Providers that have a shared pool and a configured budget. */
+/** Providers backed by a shared credential pool. */
 export type UsageProvider = "claude" | "opencode" | "gemini"
 
-/** The distribution view is day-bucketed, so it excludes the "all" range. */
+/** The usage view is day-bucketed, so it excludes the unbounded "all" range. */
 export type UsageRange = "24h" | "7d" | "30d"
+
+/**
+ * Which measure the usage charts show. Independent of a provider's *budget*
+ * unit — OpenCode is budgeted in USD but you still want to see token volume.
+ */
+export type UsageMetric = "tokens" | "cost"
+
+/** One time-series point for the shared-vs-own split. */
+export interface PoolSplitPoint {
+  time: string
+  shared: number
+  user: number
+}
+
+/** One model's usage within a user's row. */
+export interface UserModelUsage {
+  model: string
+  pool: string
+  tokens: number
+  cost: number
+}
+
+/** A single user's usage for the selected provider and range. */
+export interface UserUsage {
+  userId: string
+  name: string
+  image: string | null
+  tokens: number
+  cost: number
+  sharedTokens: number
+  sharedCost: number
+  ownTokens: number
+  ownCost: number
+  models: UserModelUsage[]
+}
 
 export interface UsageDistribution {
   range: UsageRange
   provider: UsageProvider
-  /** Unit the provider's budget is denominated in (tokens | cost | messages). */
-  unit: BudgetUnit
-  /** Currently configured daily budgets, for reference lines on the charts. */
-  currentLimits: { free: number | null; pro: number | null }
-  /** Multiplier applied to the free budget for pro users (currently 2). */
-  proMultiplier: number
-  /** Day axis (ISO dates) that `perUser.daily` indexes into positionally. */
   days: string[]
-  /** Shared-pool usage per user per day — the sample a limit would apply to. */
-  perUser: UserDailyUsage[]
-  /** Shared vs own-key usage over time. */
-  poolSplit: Array<{ time: string; shared: number; user: number }>
-  /** Per-key usage over time (OpenCode only; empty otherwise). */
-  byKey: Array<Record<string, number | string>>
   /** Key fingerprints present in `byKey`, including "unattributed". */
   keyIds: string[]
+  /** Shared vs own-key over time, one series per metric. */
+  poolSplit: Record<UsageMetric, PoolSplitPoint[]>
+  /** Per-pool-key over time (OpenCode only), one series per metric. */
+  byKey: Record<UsageMetric, Array<Record<string, number | string>>>
+  /** Per-user totals with a per-model breakdown, heaviest spender first. */
+  users: UserUsage[]
 }
 
 async function fetchUsageDistribution(
@@ -41,7 +67,7 @@ async function fetchUsageDistribution(
 ): Promise<UsageDistribution> {
   return fetchAdminJson<UsageDistribution>(
     `/api/admin/usage-distribution?range=${range}&provider=${provider}&excludeAdmins=${excludeAdmins}`,
-    "usage distribution"
+    "usage"
   )
 }
 

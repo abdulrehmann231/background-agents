@@ -11,9 +11,8 @@ import {
   YAxis,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
-import { formatAxisDate, formatTooltipDate } from "./chartFormatters"
-import { formatUnitValue, percentOf } from "@/lib/admin/usage-distribution"
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
+import { formatAxisDate, formatMetricValue, formatTooltipDate } from "./chartFormatters"
+import type { UsageMetric } from "@/lib/query/hooks"
 
 const COLORS = [
   "hsl(262, 83%, 58%)",
@@ -31,7 +30,7 @@ const UNATTRIBUTED_COLOR = "hsl(var(--muted-foreground))"
 interface UsageByKeyChartProps {
   data: Array<Record<string, number | string>>
   keyIds: string[]
-  unit: BudgetUnit
+  metric: UsageMetric
 }
 
 /**
@@ -41,8 +40,8 @@ interface UsageByKeyChartProps {
  * even split. A single dominant band means selection is not spreading — either
  * only one key is configured, or the rotation is not reaching production.
  */
-export function UsageByKeyChart({ data, keyIds, unit }: UsageByKeyChartProps) {
-  const fmt = (v: number) => formatUnitValue(unit, v)
+export function UsageByKeyChart({ data, keyIds, metric }: UsageByKeyChartProps) {
+  const fmt = (v: number) => formatMetricValue(metric, v)
 
   // Totals per key, used both for legend ordering and the balance summary.
   const totals: Record<string, number> = {}
@@ -73,7 +72,7 @@ export function UsageByKeyChart({ data, keyIds, unit }: UsageByKeyChartProps) {
   const attributedTotal = attributed.reduce((acc, id) => acc + (totals[id] || 0), 0)
   const topShare =
     attributed.length > 0 && attributedTotal > 0
-      ? percentOf(Math.max(...attributed.map((id) => totals[id] || 0)), attributedTotal)
+      ? (Math.max(...attributed.map((id) => totals[id] || 0)) / attributedTotal) * 100
       : 0
   // With N keys an even split is 100/N each; flag when one key is taking well
   // over its share (>1.5×), which is the signature of rotation not working.

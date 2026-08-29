@@ -14,9 +14,7 @@ import {
   Menu,
   X,
   ArrowLeft,
-  BarChart3,
   Wallet,
-  SlidersHorizontal,
 } from "lucide-react"
 import { ActivityFeed } from "@/components/admin/ActivityFeed"
 import { ClaudeCredentials } from "@/components/admin/ClaudeCredentials"
@@ -26,11 +24,9 @@ import { MessagesByModelChart } from "@/components/admin/charts/MessagesByModelC
 import { TopUsersTable } from "@/components/admin/TopUsersTable"
 import { HourlyActivityChart } from "@/components/admin/charts/HourlyActivityChart"
 import { DailyMessagesChatsChart } from "@/components/admin/charts/DailyMessagesChatsChart"
-import { UsageDistributionChart } from "@/components/admin/charts/UsageDistributionChart"
 import { PoolSplitChart } from "@/components/admin/charts/PoolSplitChart"
 import { UsageByKeyChart } from "@/components/admin/charts/UsageByKeyChart"
-import { LimitSimulator } from "@/components/admin/charts/LimitSimulator"
-import { activeUserDays, percentiles } from "@/lib/admin/usage-distribution"
+import { UsageByUserTable } from "@/components/admin/UsageByUserTable"
 import {
   useAdminStatsQuery,
   useAdminActivityQuery,
@@ -41,6 +37,7 @@ import {
   type StatsPool,
   type UsageProvider,
   type UsageRange,
+  type UsageMetric,
 } from "@/lib/query/hooks"
 import { metricLabel, type StatsMetric } from "@/components/admin/charts/chartFormatters"
 import { cn } from "@/lib/utils"
@@ -63,14 +60,29 @@ const POOL_OPTIONS: { key: StatsPool; label: string; hint: string }[] = [
 const POOL_DISABLED_HINT =
   "Message counts come from the activity log, which has no credential-pool dimension. Switch to Tokens or Cost to filter by pool."
 
-// Providers with a shared pool and a configured budget. Each is metered in its
-// own unit (tokens / USD / messages), so the distribution charts are scoped to
-// one provider at a time rather than sharing an axis.
+// Providers backed by a shared credential pool. Scoped one at a time so token
+// counts and costs stay comparable within a view.
 const USAGE_PROVIDERS: { key: UsageProvider; label: string }[] = [
   { key: "opencode", label: "OpenCode" },
   { key: "claude", label: "Claude" },
   { key: "gemini", label: "Gemini" },
 ]
+
+// Tokens vs cost for the usage section. Independent of a provider's budget unit
+// — OpenCode is budgeted in USD, but its token volume is still worth seeing.
+//
+// Cost is offered for OpenCode only. It's the one provider billed per token, so
+// its dollar figure is money we actually spend. Claude runs on a flat
+// subscription through the rotating credential and Gemini on a shared key, so a
+// per-token cost there is a notional API-equivalent price rather than spend —
+// showing it would invite adding up numbers that don't correspond to a bill.
+const USAGE_METRICS: { key: UsageMetric; label: string }[] = [
+  { key: "tokens", label: "Tokens" },
+  { key: "cost", label: "Cost" },
+]
+
+/** Providers billed per token, where a cost figure reflects real spend. */
+const METERED_PROVIDERS: ReadonlySet<UsageProvider> = new Set<UsageProvider>(["opencode"])
 
 type SectionKey = "overview" | "users" | "activity" | "credentials"
 
@@ -120,9 +132,17 @@ export default function AdminDashboard() {
   // actually offering — keeps the response consistent with what's on screen.
   const effectivePool: StatsPool = poolFilterDisabled ? "all" : pool
 
-  // Provider for the usage-distribution block (its own selector — the metric
-  // toggle above doesn't apply, since each provider has its own budget unit).
+  // Provider + measure for the usage block. Its own controls: the section is
+  // always shared-pool-aware and always day-bucketed, so it doesn't inherit the
+  // Overview's pool filter or its "all" range.
   const [usageProvider, setUsageProvider] = useState<UsageProvider>("opencode")
+  const [usageMetric, setUsageMetric] = useState<UsageMetric>("tokens")
+  // Cost only means something for a metered provider. Rather than resetting the
+  // stored preference when switching to Claude/Gemini, derive the effective
+  // metric — so returning to OpenCode lands you back on Cost if that's where you
+  // were, and the view can never be left showing a figure with no toggle to escape.
+  const costSupported = METERED_PROVIDERS.has(usageProvider)
+  const effectiveUsageMetric: UsageMetric = costSupported ? usageMetric : "tokens"
   // The distribution view is day-bucketed, so it has no "all" range. Follow the
   // global range where it can and fall back to 30d for "all".
   const usageRange: UsageRange = globalTimeRange === "all" ? "30d" : globalTimeRange
@@ -230,13 +250,7 @@ export default function AdminDashboard() {
   const isHourly = globalTimeRange === "24h"
   const metricName = metricLabel(metric)
 
-  // Usage-distribution derivations. `activeUserDays` flattens the per-user matrix
-  // into the sample a daily cap would actually apply to (idle days excluded).
   const usage = usageQuery.data
-  const usageUnit = usage?.unit ?? "cost"
-  const perUser = usage?.perUser ?? []
-  const usageSample = activeUserDays(perUser)
-  const usageStats = percentiles(usageSample)
 
   // Handle section change with mobile menu close
   const handleSectionChange = (section: SectionKey) => {
@@ -491,71 +505,76 @@ export default function AdminDashboard() {
                 </div>
               </section>
 
-              {/* ── Shared-pool usage & tier limits ─────────────────────────
-                  Scoped to one provider at a time: budgets are denominated in
-                  different units per provider (tokens / USD / messages), so they
-                  can't share an axis. Always shared-pool — a tier limit exists to
-                  protect our own credentials, so simulating one against BYOK
-                  usage would be meaningless. */}
+              {/* ── Shared pool & usage ─────────────────────────────────────
+                  Scoped to one provider at a time so token counts and costs stay
+                  comparable. Has its own Tokens/Cost toggle: a provider's budget
+                  unit (USD for OpenCode) shouldn't dictate what you can look at. */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <div>
-                  <h2 className="text-lg font-semibold md:text-xl">Shared pool &amp; limits</h2>
+                  <h2 className="text-lg font-semibold md:text-xl">Shared pool &amp; usage</h2>
                   <p className="text-xs text-muted-foreground">
-                    Usage on our credentials only
-                    {globalTimeRange === "all" && ", last 30 days"}
+                    Where our credential spend goes
+                    {globalTimeRange === "all" && " · last 30 days"}
                   </p>
                 </div>
-                <div className="flex gap-1 rounded-lg bg-muted p-1">
-                  {USAGE_PROVIDERS.map((option) => (
-                    <button
-                      key={option.key}
-                      onClick={() => setUsageProvider(option.key)}
-                      className={cn(
-                        "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
-                        usageProvider === option.key
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  {/* Hidden entirely for subscription-backed providers — see
+                      METERED_PROVIDERS. With one option left there's nothing to
+                      toggle, so the control disappears rather than showing a
+                      single dead button. */}
+                  {costSupported && (
+                    <div className="flex gap-1 rounded-lg bg-muted p-1">
+                      {USAGE_METRICS.map((option) => (
+                        <button
+                          key={option.key}
+                          onClick={() => setUsageMetric(option.key)}
+                          className={cn(
+                            "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                            effectiveUsageMetric === option.key
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-1 rounded-lg bg-muted p-1">
+                    {USAGE_PROVIDERS.map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setUsageProvider(option.key)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                          usageProvider === option.key
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               <section className="grid gap-4 md:gap-6 lg:grid-cols-2">
-                {/* Per-user distribution */}
-                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
-                      <BarChart3 className="h-4 w-4 text-indigo-500" />
-                    </div>
-                    <h3 className="font-medium">Usage distribution per user-day</h3>
-                  </div>
-                  {usageQuery.isLoading ? (
-                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
-                  ) : (
-                    <UsageDistributionChart
-                      values={usageSample}
-                      unit={usageUnit}
-                      stats={usageStats}
-                      freeLimit={usage?.currentLimits.free ?? null}
-                    />
-                  )}
-                </div>
-
                 {/* Shared vs own key */}
                 <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10">
                       <Wallet className="h-4 w-4 text-teal-500" />
                     </div>
-                    <h3 className="font-medium">Shared pool vs own key</h3>
+                    <h3 className="font-medium">Our pool vs own key</h3>
                   </div>
                   {usageQuery.isLoading ? (
                     <div className="h-[250px] animate-pulse rounded bg-muted/50" />
                   ) : (
-                    <PoolSplitChart data={usage?.poolSplit ?? []} unit={usageUnit} />
+                    <PoolSplitChart
+                      data={usage?.poolSplit[effectiveUsageMetric] ?? []}
+                      metric={effectiveUsageMetric}
+                    />
                   )}
                 </div>
 
@@ -572,33 +591,33 @@ export default function AdminDashboard() {
                       <div className="h-[250px] animate-pulse rounded bg-muted/50" />
                     ) : (
                       <UsageByKeyChart
-                        data={usage?.byKey ?? []}
+                        data={usage?.byKey[effectiveUsageMetric] ?? []}
                         keyIds={usage?.keyIds ?? []}
-                        unit={usageUnit}
+                        metric={effectiveUsageMetric}
                       />
                     )}
                   </div>
                 )}
 
-                {/* Limit simulator */}
-                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10">
-                      <SlidersHorizontal className="h-4 w-4 text-rose-500" />
-                    </div>
-                    <h3 className="font-medium">Tier limit simulator</h3>
-                  </div>
-                  {usageQuery.isLoading ? (
-                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
-                  ) : (
-                    <LimitSimulator
-                      key={`${usageProvider}-${usage?.currentLimits.free ?? "none"}`}
-                      perUser={perUser}
-                      unit={usageUnit}
-                      freeLimit={usage?.currentLimits.free ?? null}
-                      proMultiplier={usage?.proMultiplier ?? 2}
-                    />
+                {/* Per-user breakdown, expandable to models */}
+                <div
+                  className={cn(
+                    "rounded-xl border bg-card p-4 md:p-6 shadow-sm",
+                    usageProvider !== "opencode" && "lg:col-span-2"
                   )}
+                >
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
+                      <Users className="h-4 w-4 text-indigo-500" />
+                    </div>
+                    <h3 className="font-medium">Usage by user</h3>
+                  </div>
+                  <UsageByUserTable
+                    users={usage?.users ?? []}
+                    metric={effectiveUsageMetric}
+                    showCost={costSupported}
+                    isLoading={usageQuery.isLoading}
+                  />
                 </div>
               </section>
             </>
