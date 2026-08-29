@@ -61,6 +61,8 @@ export interface MeterTurnParams {
   provider: string
   /** which credential pool the turn ran against */
   pool: UsagePool
+  /** fingerprint of the shared-pool key that served the turn, when applicable */
+  keyId?: string | null
   /** the agent session id (matches tokscale's groupBy=session value) */
   sessionId: string
 }
@@ -104,7 +106,7 @@ async function meterTurnUsage(
   sandbox: DaytonaSandbox,
   params: MeterTurnParams
 ): Promise<number> {
-  const { userId, chatId, messageId, provider, pool, sessionId } = params
+  const { userId, chatId, messageId, provider, pool, keyId, sessionId } = params
 
   if (!sessionId) return 0
 
@@ -199,6 +201,7 @@ async function meterTurnUsage(
       provider,
       model: e.model ?? null,
       pool,
+      keyId: keyId ?? null,
       freeModel: free,
       inputTokens,
       outputTokens,
@@ -254,6 +257,7 @@ export async function meterAssistantTurn(
     messageId: params.messageId,
     provider: meta?.provider ?? agentToProvider[params.agent as Agent],
     pool: meta?.pool ?? "user",
+    keyId: meta?.keyId ?? null,
     sessionId: params.sessionId,
   })
 }

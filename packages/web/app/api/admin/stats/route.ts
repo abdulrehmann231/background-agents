@@ -9,6 +9,13 @@ import { getRangeDays, getRangeInterval, parseTimeRange } from "@/lib/db/time-ra
 const VALID_METRICS = ["tokens", "cost", "messages"] as const
 type Metric = (typeof VALID_METRICS)[number]
 
+// Which credential pool the numbers describe. "shared" is the platform's own
+// spend (server-provided keys / the rotating Claude credential); "user" is spend
+// on credentials the user supplied themselves, which costs us nothing. Defaults
+// to "shared" so the dashboard answers "what do we pay" without being asked.
+const VALID_POOLS = ["shared", "user", "all"] as const
+type PoolFilter = (typeof VALID_POOLS)[number]
+
 // Bucket granularity used for time-series charts. Long ranges (i.e. "all")
 // are down-sampled so the charts stay readable instead of rendering thousands
 // of daily points.
@@ -55,6 +62,13 @@ async function getAllTimeWindow(): Promise<{ interval: string; days: number }> {
  * Query params:
  *   - range: "24h" | "7d" | "30d" | "all" (default: "7d")
  *   - metric: "tokens" | "cost" | "messages" (default: "tokens")
+ *   - pool: "shared" | "user" | "all" (default: "shared")
+ *
+ * `pool` scopes the TokenUsage-backed numbers to a credential pool: "shared" is
+ * the platform's own spend, "user" is spend on users' own keys, "all" is both.
+ * It defaults to "shared" so cost figures reflect what we actually pay rather
+ * than a total inflated by BYOK runs. It has no effect on the "messages" metric,
+ * which counts ActivityLog rows and has no pool dimension.
  *
  * The metric-bearing charts (over-time series, by agent/model, top users, by
  * hour) are weighted by the selected metric. "messages" counts ActivityLog
@@ -82,6 +96,16 @@ export async function GET(request: NextRequest) {
   const tokenValue = Prisma.raw(
     metric === "cost" ? `SUM("costUsd")::float` : `SUM("totalTokens")::float`
   )
+  // Credential-pool filter. Parameterised (not Prisma.raw) so the value is bound
+  // rather than interpolated; `all` contributes no clause at all.
+  const poolParam = searchParams.get("pool")
+  const pool: PoolFilter = VALID_POOLS.includes(poolParam as PoolFilter)
+    ? (poolParam as PoolFilter)
+    : "shared"
+  // Appended inside the WHERE of every TokenUsage query below. ActivityLog has
+  // no pool column, so the "messages" metric ignores this (the UI disables the
+  // selector in that mode rather than showing a silently unfiltered number).
+  const poolWhere = pool === "all" ? Prisma.empty : Prisma.sql`AND "pool" = ${pool}`
   // Exclude admin users' activity from the overview stats by default; callers
   // opt back in with ?excludeAdmins=false.
   const excludeAdmins = searchParams.get("excludeAdmins") !== "false"
@@ -154,6 +178,7 @@ export async function GET(request: NextRequest) {
         JOIN "User" u ON u.id = tu."userId"
         WHERE tu."createdAt" >= NOW() - ${interval}::interval
           AND (${excludeAdmins} = false OR u."isAdmin" = false)
+          ${pool === "all" ? Prisma.empty : Prisma.sql`AND tu."pool" = ${pool}`}
         GROUP BY u.id, u.name, u.image
         HAVING ${tokenValue} > 0
         ORDER BY value DESC
@@ -187,6 +212,7 @@ export async function GET(request: NextRequest) {
         FROM "TokenUsage"
         WHERE "createdAt" >= NOW() - ${interval}::interval
           AND (${excludeAdmins} = false OR "userId" NOT IN (SELECT id FROM "User" WHERE "isAdmin" = true))
+          ${poolWhere}
         GROUP BY hour
         ORDER BY hour ASC
       `.then((rows) => rows.map((r) => ({ hour: r.hour, value: Number(r.value) })))
@@ -263,6 +289,7 @@ export async function GET(request: NextRequest) {
               FROM "TokenUsage"
               WHERE "createdAt" >= NOW() - '24 hours'::interval
                 AND (${excludeAdmins} = false OR "userId" NOT IN (SELECT id FROM "User" WHERE "isAdmin" = true))
+                ${poolWhere}
               GROUP BY 1
             ) t ON t.hour = h.hour
             ORDER BY h.hour ASC
@@ -281,6 +308,7 @@ export async function GET(request: NextRequest) {
               FROM "TokenUsage"
               WHERE "createdAt" >= NOW() - ${interval}::interval
                 AND (${excludeAdmins} = false OR "userId" NOT IN (SELECT id FROM "User" WHERE "isAdmin" = true))
+                ${poolWhere}
               GROUP BY 1
             ) t ON t.date = d.date
             ORDER BY d.date ASC
@@ -331,6 +359,7 @@ export async function GET(request: NextRequest) {
             FROM "TokenUsage"
             WHERE "createdAt" >= NOW() - '24 hours'::interval
               AND (${excludeAdmins} = false OR "userId" NOT IN (SELECT id FROM "User" WHERE "isAdmin" = true))
+              ${poolWhere}
             GROUP BY hour, provider, model
             ORDER BY hour ASC
           `.then((rows) => rows.map((r) => ({ hour: r.hour, agent: r.agent, model: r.model, count: Number(r.count) })))
@@ -343,6 +372,7 @@ export async function GET(request: NextRequest) {
             FROM "TokenUsage"
             WHERE "createdAt" >= NOW() - ${interval}::interval
               AND (${excludeAdmins} = false OR "userId" NOT IN (SELECT id FROM "User" WHERE "isAdmin" = true))
+              ${poolWhere}
             GROUP BY 1, provider, model
             ORDER BY 1 ASC
           `.then((rows) => rows.map((r) => ({ date: r.date, agent: r.agent, model: r.model, count: Number(r.count) }))))
@@ -451,6 +481,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     range,
     metric,
+    pool,
     weeklyActiveUsers,
     topUsers: topUsersFormatted,
     hourly,

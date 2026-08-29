@@ -9,9 +9,17 @@ import type { StatsMetric } from "@/components/admin/charts/chartFormatters"
 export type StatsTimeRange = "24h" | "7d" | "30d" | "all"
 export type { StatsMetric }
 
+/**
+ * Which credential pool the figures describe. "shared" is the platform's own
+ * spend, "user" is spend on users' own keys, "all" is both. Ignored by the
+ * server for the "messages" metric (ActivityLog has no pool dimension).
+ */
+export type StatsPool = "shared" | "user" | "all"
+
 interface AdminStats {
   range: StatsTimeRange
   metric: StatsMetric
+  pool: StatsPool
   weeklyActiveUsers: Array<{
     date: string
     count: number
@@ -43,10 +51,11 @@ interface AdminStats {
 async function fetchAdminStats(
   range: StatsTimeRange,
   excludeAdmins: boolean,
-  metric: StatsMetric
+  metric: StatsMetric,
+  pool: StatsPool
 ): Promise<AdminStats> {
   return fetchAdminJson<AdminStats>(
-    `/api/admin/stats?range=${range}&excludeAdmins=${excludeAdmins}&metric=${metric}`,
+    `/api/admin/stats?range=${range}&excludeAdmins=${excludeAdmins}&metric=${metric}&pool=${pool}`,
     "stats"
   )
 }
@@ -54,14 +63,15 @@ async function fetchAdminStats(
 export function useAdminStatsQuery(
   range: StatsTimeRange = "7d",
   excludeAdmins = true,
-  metric: StatsMetric = "tokens"
+  metric: StatsMetric = "tokens",
+  pool: StatsPool = "shared"
 ) {
   const { status } = useSession()
   const isAuthenticated = status === "authenticated"
 
   return useQuery({
-    queryKey: queryKeys.admin.stats(range, excludeAdmins, metric),
-    queryFn: () => fetchAdminStats(range, excludeAdmins, metric),
+    queryKey: queryKeys.admin.stats(range, excludeAdmins, metric, pool),
+    queryFn: () => fetchAdminStats(range, excludeAdmins, metric, pool),
     enabled: isAuthenticated,
     staleTime: 30 * 1000, // 30 seconds
     retry: adminRetry,

@@ -14,6 +14,9 @@ import {
   Menu,
   X,
   ArrowLeft,
+  BarChart3,
+  Wallet,
+  SlidersHorizontal,
 } from "lucide-react"
 import { ActivityFeed } from "@/components/admin/ActivityFeed"
 import { ClaudeCredentials } from "@/components/admin/ClaudeCredentials"
@@ -23,12 +26,21 @@ import { MessagesByModelChart } from "@/components/admin/charts/MessagesByModelC
 import { TopUsersTable } from "@/components/admin/TopUsersTable"
 import { HourlyActivityChart } from "@/components/admin/charts/HourlyActivityChart"
 import { DailyMessagesChatsChart } from "@/components/admin/charts/DailyMessagesChatsChart"
+import { UsageDistributionChart } from "@/components/admin/charts/UsageDistributionChart"
+import { PoolSplitChart } from "@/components/admin/charts/PoolSplitChart"
+import { UsageByKeyChart } from "@/components/admin/charts/UsageByKeyChart"
+import { LimitSimulator } from "@/components/admin/charts/LimitSimulator"
+import { activeUserDays, percentiles } from "@/lib/admin/usage-distribution"
 import {
   useAdminStatsQuery,
   useAdminActivityQuery,
   useAdminUsersQuery,
   useUpdateUserMutation,
+  useUsageDistributionQuery,
   type StatsTimeRange,
+  type StatsPool,
+  type UsageProvider,
+  type UsageRange,
 } from "@/lib/query/hooks"
 import { metricLabel, type StatsMetric } from "@/components/admin/charts/chartFormatters"
 import { cn } from "@/lib/utils"
@@ -37,6 +49,27 @@ const METRIC_OPTIONS: { key: StatsMetric; label: string }[] = [
   { key: "tokens", label: "Tokens" },
   { key: "cost", label: "Cost" },
   { key: "messages", label: "Messages" },
+]
+
+// Credential-pool scope. "Shared" (the default) is what the platform actually
+// pays for; "Own key" is usage on credentials the user supplied, which costs us
+// nothing. Only meaningful for the ledger-backed metrics — see POOL_DISABLED_HINT.
+const POOL_OPTIONS: { key: StatsPool; label: string; hint: string }[] = [
+  { key: "shared", label: "Shared", hint: "Usage on our credential pools — what the platform pays for" },
+  { key: "user", label: "Own key", hint: "Usage on credentials users supplied themselves — costs us nothing" },
+  { key: "all", label: "All", hint: "Both pools combined" },
+]
+
+const POOL_DISABLED_HINT =
+  "Message counts come from the activity log, which has no credential-pool dimension. Switch to Tokens or Cost to filter by pool."
+
+// Providers with a shared pool and a configured budget. Each is metered in its
+// own unit (tokens / USD / messages), so the distribution charts are scoped to
+// one provider at a time rather than sharing an axis.
+const USAGE_PROVIDERS: { key: UsageProvider; label: string }[] = [
+  { key: "opencode", label: "OpenCode" },
+  { key: "claude", label: "Claude" },
+  { key: "gemini", label: "Gemini" },
 ]
 
 type SectionKey = "overview" | "users" | "activity" | "credentials"
@@ -78,9 +111,25 @@ export default function AdminDashboard() {
   const [includeAdmins, setIncludeAdmins] = useState(false)
   // Primary metric the overview charts are weighted by (default tokens)
   const [metric, setMetric] = useState<StatsMetric>("tokens")
+  // Credential pool the ledger-backed charts are scoped to (default shared, so
+  // the dashboard reports platform spend rather than a BYOK-inflated total).
+  const [pool, setPool] = useState<StatsPool>("shared")
+  // ActivityLog has no pool column, so the filter can't apply to message counts.
+  const poolFilterDisabled = metric === "messages"
+  // Send "all" while disabled so the server isn't handed a filter the UI is not
+  // actually offering — keeps the response consistent with what's on screen.
+  const effectivePool: StatsPool = poolFilterDisabled ? "all" : pool
+
+  // Provider for the usage-distribution block (its own selector — the metric
+  // toggle above doesn't apply, since each provider has its own budget unit).
+  const [usageProvider, setUsageProvider] = useState<UsageProvider>("opencode")
+  // The distribution view is day-bucketed, so it has no "all" range. Follow the
+  // global range where it can and fall back to 30d for "all".
+  const usageRange: UsageRange = globalTimeRange === "all" ? "30d" : globalTimeRange
 
   // Queries - pass globalTimeRange to stats query
-  const statsQuery = useAdminStatsQuery(globalTimeRange, !includeAdmins, metric)
+  const statsQuery = useAdminStatsQuery(globalTimeRange, !includeAdmins, metric, effectivePool)
+  const usageQuery = useUsageDistributionQuery(usageRange, usageProvider, !includeAdmins)
   const activityQuery = useAdminActivityQuery({
     page: activityPage,
     limit: 20,
@@ -180,6 +229,14 @@ export default function AdminDashboard() {
   const byModel = statsQuery.data?.byModel ?? []
   const isHourly = globalTimeRange === "24h"
   const metricName = metricLabel(metric)
+
+  // Usage-distribution derivations. `activeUserDays` flattens the per-user matrix
+  // into the sample a daily cap would actually apply to (idle days excluded).
+  const usage = usageQuery.data
+  const usageUnit = usage?.unit ?? "cost"
+  const perUser = usage?.perUser ?? []
+  const usageSample = activeUserDays(perUser)
+  const usageStats = percentiles(usageSample)
 
   // Handle section change with mobile menu close
   const handleSectionChange = (section: SectionKey) => {
@@ -318,6 +375,34 @@ export default function AdminDashboard() {
                       </button>
                     ))}
                   </div>
+                  {/* Credential pool selector. Disabled under the Messages
+                      metric, which is sourced from ActivityLog and carries no
+                      pool dimension — see POOL_DISABLED_HINT. */}
+                  <div
+                    className={cn(
+                      "flex gap-1 rounded-lg bg-muted p-1",
+                      poolFilterDisabled && "opacity-50"
+                    )}
+                    title={poolFilterDisabled ? POOL_DISABLED_HINT : undefined}
+                  >
+                    {POOL_OPTIONS.map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setPool(option.key)}
+                        disabled={poolFilterDisabled}
+                        title={poolFilterDisabled ? POOL_DISABLED_HINT : option.hint}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                          poolFilterDisabled && "cursor-not-allowed",
+                          !poolFilterDisabled && pool === option.key
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                   {/* Time range buttons */}
                   <div className="flex gap-1 rounded-lg bg-muted p-1">
                     {(["24h", "7d", "30d", "all"] as const).map((range) => (
@@ -403,6 +488,117 @@ export default function AdminDashboard() {
                     </h3>
                   </div>
                   <HourlyActivityChart data={hourly} metric={metric} />
+                </div>
+              </section>
+
+              {/* ── Shared-pool usage & tier limits ─────────────────────────
+                  Scoped to one provider at a time: budgets are denominated in
+                  different units per provider (tokens / USD / messages), so they
+                  can't share an axis. Always shared-pool — a tier limit exists to
+                  protect our own credentials, so simulating one against BYOK
+                  usage would be meaningless. */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div>
+                  <h2 className="text-lg font-semibold md:text-xl">Shared pool &amp; limits</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Usage on our credentials only
+                    {globalTimeRange === "all" && ", last 30 days"}
+                  </p>
+                </div>
+                <div className="flex gap-1 rounded-lg bg-muted p-1">
+                  {USAGE_PROVIDERS.map((option) => (
+                    <button
+                      key={option.key}
+                      onClick={() => setUsageProvider(option.key)}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                        usageProvider === option.key
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <section className="grid gap-4 md:gap-6 lg:grid-cols-2">
+                {/* Per-user distribution */}
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
+                      <BarChart3 className="h-4 w-4 text-indigo-500" />
+                    </div>
+                    <h3 className="font-medium">Usage distribution per user-day</h3>
+                  </div>
+                  {usageQuery.isLoading ? (
+                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                  ) : (
+                    <UsageDistributionChart
+                      values={usageSample}
+                      unit={usageUnit}
+                      stats={usageStats}
+                      freeLimit={usage?.currentLimits.free ?? null}
+                    />
+                  )}
+                </div>
+
+                {/* Shared vs own key */}
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10">
+                      <Wallet className="h-4 w-4 text-teal-500" />
+                    </div>
+                    <h3 className="font-medium">Shared pool vs own key</h3>
+                  </div>
+                  {usageQuery.isLoading ? (
+                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                  ) : (
+                    <PoolSplitChart data={usage?.poolSplit ?? []} unit={usageUnit} />
+                  )}
+                </div>
+
+                {/* Per-key breakdown — OpenCode is the only multi-key pool */}
+                {usageProvider === "opencode" && (
+                  <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
+                    <div className="mb-4 flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10">
+                        <KeyRound className="h-4 w-4 text-orange-500" />
+                      </div>
+                      <h3 className="font-medium">OpenCode usage by key</h3>
+                    </div>
+                    {usageQuery.isLoading ? (
+                      <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                    ) : (
+                      <UsageByKeyChart
+                        data={usage?.byKey ?? []}
+                        keyIds={usage?.keyIds ?? []}
+                        unit={usageUnit}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Limit simulator */}
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10">
+                      <SlidersHorizontal className="h-4 w-4 text-rose-500" />
+                    </div>
+                    <h3 className="font-medium">Tier limit simulator</h3>
+                  </div>
+                  {usageQuery.isLoading ? (
+                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                  ) : (
+                    <LimitSimulator
+                      key={`${usageProvider}-${usage?.currentLimits.free ?? "none"}`}
+                      perUser={perUser}
+                      unit={usageUnit}
+                      freeLimit={usage?.currentLimits.free ?? null}
+                      proMultiplier={usage?.proMultiplier ?? 2}
+                    />
+                  )}
                 </div>
               </section>
             </>

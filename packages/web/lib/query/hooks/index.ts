@@ -20,7 +20,13 @@ export { useSandboxDeleteMutation } from "./useSandboxDeleteMutation"
 
 // Admin
 export { useAdminStatsQuery } from "./useAdminStatsQuery"
-export type { StatsTimeRange } from "./useAdminStatsQuery"
+export type { StatsTimeRange, StatsPool } from "./useAdminStatsQuery"
+export { useUsageDistributionQuery } from "./useUsageDistributionQuery"
+export type {
+  UsageDistribution,
+  UsageProvider,
+  UsageRange,
+} from "./useUsageDistributionQuery"
 export { useAdminActivityQuery } from "./useAdminActivityQuery"
 export { useAdminUsersQuery, useUpdateUserMutation } from "./useAdminUsersQuery"
 export { useRefreshClaudeCredsMutation } from "./useRefreshClaudeCredsMutation"
