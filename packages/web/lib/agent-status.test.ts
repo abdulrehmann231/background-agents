@@ -92,9 +92,8 @@ describe("shared Gemini pool unlocks Flash but not Pro", () => {
     GEMINI_API_KEY_USER: true,
   }
   const flash = { value: "gemini-2.5-flash", label: "Flash", requiresKey: "gemini" as const }
-  const pro = { value: "gemini-2.5-pro", label: "Pro", requiresKey: "gemini" as const }
-  const pro3 = { value: "gemini-3-pro-preview", label: "Pro 3", requiresKey: "gemini" as const }
-  const piPro = { value: "google/gemini-2.5-pro", label: "Pro", requiresKey: "gemini" as const }
+  const pro = { value: "gemini-3.1-pro-preview", label: "Pro", requiresKey: "gemini" as const }
+  const piPro = { value: "google/gemini-3.1-pro-preview", label: "Pro", requiresKey: "gemini" as const }
 
   it("allows Flash models on the shared pool", () => {
     expect(hasCredentialsForModel(flash, geminiShared, "gemini")).toBe(true)
@@ -102,14 +101,12 @@ describe("shared Gemini pool unlocks Flash but not Pro", () => {
 
   it("blocks Pro models on the shared pool across agents", () => {
     expect(hasCredentialsForModel(pro, geminiShared, "gemini")).toBe(false)
-    expect(hasCredentialsForModel(pro3, geminiShared, "gemini")).toBe(false)
     expect(hasCredentialsForModel(pro, geminiShared, "droid")).toBe(false)
     expect(hasCredentialsForModel(piPro, geminiShared, "pi")).toBe(false)
   })
 
   it("unlocks Pro once the user brings their own Gemini key", () => {
     expect(hasCredentialsForModel(pro, geminiOwnKey, "gemini")).toBe(true)
-    expect(hasCredentialsForModel(pro3, geminiOwnKey, "gemini")).toBe(true)
     expect(hasCredentialsForModel(piPro, geminiOwnKey, "pi")).toBe(true)
   })
 })

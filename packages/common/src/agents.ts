@@ -206,9 +206,8 @@ const SHARED_OPENCODE_ALLOWED = new Set<string>([
  * stay available by default — only the ids listed here are gated.
  */
 const SHARED_GEMINI_POOL_PRO_MODELS = new Set<string>([
-  "gemini-2.5-pro",
-  "gemini-3-pro-preview",
-  "google/gemini-2.5-pro",
+  "gemini-3.1-pro-preview",
+  "google/gemini-3.1-pro-preview",
 ])
 
 export const agentModels: Record<Agent, ModelOption[]> = {
@@ -338,9 +337,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   ],
   "gemini": [
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", requiresKey: "gemini" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3 Pro", requiresKey: "gemini" },
     { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini" },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini" },
+    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
   ],
   "goose": [
     { value: "gpt-4o", label: "GPT-4o", requiresKey: "openai" },
@@ -419,12 +418,10 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "o3", label: "o3", requiresKey: "openai" },
     { value: "o4-mini", label: "o4 Mini", requiresKey: "openai" },
     // ── BYOK: Gemini (Google's OpenAI-compatible endpoint) ──
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", requiresKey: "gemini" },
+    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", requiresKey: "gemini" },
-    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", requiresKey: "gemini" },
-    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", requiresKey: "gemini" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3 Pro", requiresKey: "gemini" },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "gemini" },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini" },
     { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini" },
     // ── Factory-hosted (FACTORY_API_KEY; droid's built-in catalog). There is NO
     // free/no-key tier — verified: every built-in model 401s without a Factory key.
@@ -450,7 +447,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "openai/o3-mini", label: "o3 Mini", requiresKey: "openai" },
     { value: "openai/gpt-5", label: "GPT-5", requiresKey: "openai" },
     // Google models
-    { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", requiresKey: "gemini" },
+    { value: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
     { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
   ],
 }

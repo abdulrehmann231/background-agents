@@ -18,15 +18,15 @@ import {
 
 describe("resolveModelForAgent", () => {
   it("honors a saved preference that belongs to the agent and is usable", () => {
-    const model = resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, "gemini-2.5-pro")
-    expect(model).toBe("gemini-2.5-pro")
+    const model = resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, "gemini-3.1-pro-preview")
+    expect(model).toBe("gemini-3.1-pro-preview")
   })
 
   it("ignores a saved preference the user can't use (locked), falling back to the agent default", () => {
     // No Gemini credentials → the preferred (locked) model is dropped in favor
     // of the standard default rather than landing the user on a dead end.
-    const model = resolveModelForAgent("gemini", {}, "gemini-2.5-pro")
-    expect(model).not.toBe("gemini-2.5-pro")
+    const model = resolveModelForAgent("gemini", {}, "gemini-3.1-pro-preview")
+    expect(model).not.toBe("gemini-3.1-pro-preview")
     expect(model).toBe("gemini-2.5-flash") // hardcoded default for the agent
   })
 
@@ -74,21 +74,21 @@ describe("resolveAgentAndModel", () => {
   it("resolves both, honoring preferred values first", () => {
     const result = resolveAgentAndModel(
       "gemini",
-      "gemini-2.5-pro",
+      "gemini-3.1-pro-preview",
       { defaultAgent: "claude-code", defaultModel: "opus" },
       { GEMINI_API_KEY: true }
     )
-    expect(result).toEqual({ agent: "gemini", model: "gemini-2.5-pro" })
+    expect(result).toEqual({ agent: "gemini", model: "gemini-3.1-pro-preview" })
   })
 
   it("falls back through settings to defaults when no preferred values", () => {
     const result = resolveAgentAndModel(
       null,
       null,
-      { defaultAgent: "gemini", defaultModel: "gemini-2.5-pro" },
+      { defaultAgent: "gemini", defaultModel: "gemini-3.1-pro-preview" },
       { GEMINI_API_KEY: true }
     )
-    expect(result).toEqual({ agent: "gemini", model: "gemini-2.5-pro" })
+    expect(result).toEqual({ agent: "gemini", model: "gemini-3.1-pro-preview" })
   })
 
   it("does not let a settings model from another agent leak in", () => {
