@@ -15,11 +15,16 @@
  *   npm run backfill:claude-cost -- --apply --include-nonzero
  *
  * `--apply` alone touches only rows currently at $0 with real tokens, which is
- * the safe, obviously-wrong set. `--include-nonzero` additionally corrects rows
- * whose stored cost disagrees with our own by more than a cent — review the dry
- * run before reaching for it. tokscale's known defect — dropping cache pricing
- * for models it can't fully resolve, e.g. Opus and Fable — produces wrong
- * non-zero costs, not zeros, so --include-nonzero is the flag that fixes it.
+ * the safe, obviously-wrong set. `--include-nonzero` additionally raises rows
+ * tokscale under-priced — in practice ones where it dropped cache entirely and
+ * billed input+output only, its observed failure mode, which produces wrong
+ * non-zero costs rather than zeros.
+ *
+ * Repricing only ever moves a cost UP. Rows where tokscale priced *higher* than
+ * we do are reported but never rewritten: those are most likely 1-hour cache
+ * writes (2x input) that we bill at the 5-minute 1.25x rate because tokscale
+ * reports no TTL — so tokscale is probably the more accurate of the two, and
+ * rewriting them down would trade a likely-right number for a likely-wrong one.
  *
  * Before writing, the original costUsd of every affected row is dumped to a
  * timestamped JSON file beside this script, so a run can be undone.
@@ -87,6 +92,8 @@ async function main() {
   const byModel = new Map<string, Bucket>()
 
   const toReprice: { id: string; from: number; to: number; zero: boolean }[] = []
+  /** Rows where tokscale priced HIGHER than us — reported, never rewritten. */
+  const overpriced: number[] = []
 
   for (const r of rows) {
     const key = r.model ?? "(null)"
@@ -125,8 +132,17 @@ async function main() {
     if (ours === null || ours === r.costUsd) continue
     if (isZero) {
       toReprice.push({ id: r.id, from: r.costUsd, to: ours, zero: true })
-    } else if (Math.abs(ours - r.costUsd) > NONZERO_TOLERANCE_USD) {
+    } else if (ours - r.costUsd > NONZERO_TOLERANCE_USD) {
+      // Only ever correct UPWARD. A row where we price higher than tokscale is
+      // one where tokscale dropped a component we can account for (in practice:
+      // cache, priced as input+output only). A row where we price *lower* is
+      // more likely a gap on our side — most plausibly a 1-hour cache write,
+      // which bills at 2x input while we assume the 5-minute 1.25x rate because
+      // tokscale reports no TTL. Rewriting those down would replace a probably-
+      // right number with a probably-wrong one, so leave them alone.
       toReprice.push({ id: r.id, from: r.costUsd, to: ours, zero: false })
+    } else if (r.costUsd - ours > NONZERO_TOLERANCE_USD) {
+      overpriced.push(r.costUsd - ours)
     }
   }
 
@@ -162,10 +178,13 @@ async function main() {
   const nonZeros = toReprice.filter((t) => !t.zero)
   const sum = (xs: typeof toReprice) => xs.reduce((a, t) => a + (t.to - t.from), 0)
 
+  const overpricedTotal = overpriced.reduce((a, b) => a + b, 0)
   console.log(
-    `\nZero-cost rows to fill: ${zeros.length} (adds ${usd(sum(zeros))})` +
-      `\nNon-zero rows disagreeing by >${usd(NONZERO_TOLERANCE_USD)}: ${nonZeros.length}` +
-      ` (would shift ${usd(sum(nonZeros))})`
+    `\nZero-cost rows to fill:      ${zeros.length} (adds ${usd(sum(zeros))})` +
+      `\nUnder-priced rows to raise:  ${nonZeros.length} (adds ${usd(sum(nonZeros))})` +
+      `\nOver-priced rows LEFT ALONE: ${overpriced.length} (would have removed ` +
+      `${usd(overpricedTotal)}; likely 1h cache writes we under-price, so ` +
+      `tokscale is probably the more accurate of the two there)`
   )
 
   const targets = INCLUDE_NONZERO ? toReprice : zeros
@@ -205,13 +224,16 @@ async function main() {
   )
   console.log(`\nOriginals saved to ${backupPath}`)
 
-  // Chunked so a large backfill doesn't hold one enormous transaction open on
-  // the pooled connection.
-  const CHUNK = 100
+  // Small concurrent batches rather than one interactive transaction: over a
+  // pgbouncer pooler a 100-update transaction blows Prisma's 5s limit (P2028)
+  // and rolls the whole thing back. Each row is independent and the reprice is
+  // idempotent — it recomputes from the token components every run — so a
+  // partial pass is harmless and re-running simply finishes the job.
+  const CHUNK = 20
   let written = 0
   for (let i = 0; i < targets.length; i += CHUNK) {
     const chunk = targets.slice(i, i + CHUNK)
-    await prisma.$transaction(
+    await Promise.all(
       chunk.map((t) =>
         prisma.tokenUsage.update({
           where: { id: t.id },
