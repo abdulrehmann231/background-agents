@@ -1,7 +1,7 @@
 /**
  * Per-provider daily budgets for the shared credential pools.
  *
- * Budgets scale by plan: `free` gets the base daily budget, `pro` gets 3× that
+ * Budgets scale by plan: `free` gets the base daily budget, `pro` gets 2× that
  * budget (still daily), and `unlimited` is uncapped. The budget *unit* differs
  * by provider — each pool is metered in whatever measure best reflects its cost:
  *   - claude   → "tokens": cache-excluded limited tokens (input + output +
@@ -29,7 +29,7 @@ export interface ProviderBudget {
 }
 
 /** Multiplier applied to the free daily budget for `pro` users. */
-export const PRO_BUDGET_MULTIPLIER = 3
+export const PRO_BUDGET_MULTIPLIER = 2
 
 /** Free-tier daily budget per shared-pool provider, with its unit. */
 const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
