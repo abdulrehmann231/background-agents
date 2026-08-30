@@ -17,8 +17,16 @@
  * `--apply` alone touches only rows currently at $0 with real tokens, which is
  * the safe, obviously-wrong set. `--include-nonzero` additionally corrects rows
  * whose stored cost disagrees with our own by more than a cent — review the dry
- * run before reaching for it.
+ * run before reaching for it. tokscale's known defect — dropping cache pricing
+ * for models it can't fully resolve, e.g. Opus and Fable — produces wrong
+ * non-zero costs, not zeros, so --include-nonzero is the flag that fixes it.
+ *
+ * Before writing, the original costUsd of every affected row is dumped to a
+ * timestamped JSON file beside this script, so a run can be undone.
  */
+
+import { writeFileSync } from "node:fs"
+import path from "node:path"
 
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
@@ -177,6 +185,25 @@ async function main() {
     console.log("\nNothing to write.")
     return
   }
+
+  // Snapshot the originals before overwriting them. Repricing is the one step
+  // here that loses information: the ledger's per-row costUsd is what tokscale
+  // believed at the time, and nothing else records it (cumulativeCost is a
+  // running session total, not a per-row original). Dump it next to the script
+  // so a bad run can be reversed.
+  const backupPath = path.join(
+    __dirname,
+    `backfill-claude-cost.backup.${new Date().toISOString().replace(/[:.]/g, "-")}.json`
+  )
+  writeFileSync(
+    backupPath,
+    JSON.stringify(
+      targets.map((t) => ({ id: t.id, costUsd: t.from, repricedTo: t.to })),
+      null,
+      2
+    )
+  )
+  console.log(`\nOriginals saved to ${backupPath}`)
 
   // Chunked so a large backfill doesn't hold one enormous transaction open on
   // the pooled connection.
