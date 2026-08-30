@@ -40,24 +40,31 @@ export const PRO_BUDGET_MULTIPLIER = 2
 /**
  * Free-tier daily budget per shared-pool provider, with its unit.
  *
- * Sizing the Claude budget, for a pool of ~200 users behind one shared
- * subscription. A typical Claude Code turn (~1k uncached input, ~1.5k output,
- * ~60k cache read, ~8k cache write) costs roughly:
+ * The Claude figure is sized from the ledger, not modelled. Over 77 active days
+ * (Jun–Aug 2026): 106 users, 6,463 shared turns, $14,846 of API-equivalent
+ * value — ~$193/day at ~11.9 users active per day, averaging $2.30 a turn. Note
+ * a "turn" here is a whole agentic run (many API round-trips, each re-reading
+ * cache), not a single call, which is why it costs orders of magnitude more than
+ * a chat message.
  *
- *   Haiku 4.5   ~$0.024      Sonnet 5   ~$0.049
- *   Opus 5      ~$0.12       Fable 5    ~$0.25
+ * Cost per user-day was distributed:  p50 $8.37 · p75 $17.26 · p90 $42.55 ·
+ * max $237.39. The tail is the problem this cap exists to solve — 8 of those 106
+ * users accounted for 75% of all spend, and left alone they crowd everyone else
+ * out as the pool grows.
  *
- * At $0.50/day a free user gets ~20 Haiku, ~10 Sonnet, ~4 Opus or ~2 Fable
- * turns; Pro doubles that. Worst case (all 200 users maxing out daily) is
- * $100/day, far past what one subscription covers — but that shape never
- * happens: at a realistic ~10% daily-active rate spending ~60% of the cap,
- * it lands near $6/day, comfortably inside a Max-tier subscription with room
- * for the tail. Revisit once the ledger has enough history to replace those two
- * assumptions with measurements, and consider a pool-wide daily ceiling before
- * the user count grows much past 200.
+ * $10/day leaves ~56% of historical user-days completely untouched while cutting
+ * the top decile hard. Replayed over that history it would have allowed ~$76/day
+ * against 11.9 active users; at 200 users on the same ~11% daily-active rate
+ * (~22 active) that projects to ~$140/day — below the ~$193/day the pool already
+ * sustains without complaint (2 rate-limit errors on claude-code in 77 days).
+ *
+ * What this does NOT do is bound the pool as a whole: it caps any single user,
+ * but 200 users active at once is still 200 × the cap. If daily-active rate
+ * spikes, total draw scales with it. A pool-wide daily ceiling is the only thing
+ * that hard-bounds that, and it does not exist yet.
  */
 const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
-  claude: { unit: "cost", limit: 0.5 },
+  claude: { unit: "cost", limit: 10 },
   // TODO(token-budgets): tune these two against the ledger, as above.
   opencode: { unit: "cost", limit: 0.5 },
   gemini: { unit: "messages", limit: 100 },
