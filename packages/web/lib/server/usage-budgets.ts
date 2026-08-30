@@ -52,19 +52,27 @@ export const PRO_BUDGET_MULTIPLIER = 2
  * users accounted for 75% of all spend, and left alone they crowd everyone else
  * out as the pool grows.
  *
- * $10/day leaves ~56% of historical user-days completely untouched while cutting
- * the top decile hard. Replayed over that history it would have allowed ~$76/day
- * against 11.9 active users; at 200 users on the same ~11% daily-active rate
- * (~22 active) that projects to ~$140/day — below the ~$193/day the pool already
- * sustains without complaint (2 rate-limit errors on claude-code in 77 days).
+ * The old 100k-token cap it replaces was worth a median of $8.10 of real value
+ * per user-day — but anywhere from $4.80 (p25) to $26.78 (p90), because the same
+ * token allowance buys wildly different amounts depending on the model. That
+ * spread is why a token cap never controlled the pool: we were hitting the
+ * subscription's weekly limit (77 times in this window, plus 57 Fable-specific
+ * and 26 session limits) while the cap looked like it was holding.
  *
- * What this does NOT do is bound the pool as a whole: it caps any single user,
- * but 200 users active at once is still 200 × the cap. If daily-active rate
- * spikes, total draw scales with it. A pool-wide daily ceiling is the only thing
- * that hard-bounds that, and it does not exist yet.
+ * $5/day sits below that $8.10 median, so it is a genuine tightening rather than
+ * a sideways move. Replayed over the same history with plan multipliers applied,
+ * it would have allowed ~$88/day against ~$193/day actual — a 54% reduction,
+ * most of it taken off the tail the token rule let run unchecked.
+ *
+ * Two things this does NOT bound:
+ *   - The `unlimited` plan, which is uncapped by definition. It accounted for
+ *     $44/day of the historical draw, and no value here touches it.
+ *   - The pool as a whole. This caps a single user; 200 users active at once is
+ *     still 200 × the cap. A pool-wide daily ceiling is the only hard bound, and
+ *     it does not exist yet.
  */
 const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
-  claude: { unit: "cost", limit: 10 },
+  claude: { unit: "cost", limit: 5 },
   // TODO(token-budgets): tune these two against the ledger, as above.
   opencode: { unit: "cost", limit: 0.5 },
   gemini: { unit: "messages", limit: 100 },
