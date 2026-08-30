@@ -150,7 +150,7 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
       limitResetAt = getNextUtcWeekReset()
       // limitTotal / limitRemaining stay null (unlimited)
     } else {
-      // Free and Pro users: daily token budget (Pro = 2× free).
+      // Free and Pro users: daily token budget (Pro = 3× free).
       const { limitedTokens } = await sumSharedUsage({
         userId,
         provider: "claude",

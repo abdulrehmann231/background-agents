@@ -67,7 +67,7 @@ interface UsageSectionProps {
 
 /**
  * Daily token usage for each shared credential pool. Free and Pro users see
- * their usage against the per-provider daily budget (Pro's is 2× the free one);
+ * their usage against the per-provider daily budget (Pro's is 3× the free one);
  * unlimited-plan users and own-key providers show as unlimited. The "tokens"
  * shown are the cache-excluded limited measure that the rate limiter counts.
  */
@@ -126,7 +126,7 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
             </p>
           ) : data.plan === "pro" ? (
             <p className="text-[11px] text-primary mt-2">
-              Pro plan — 2× the free daily budget on each shared pool.
+              Pro plan — 3× the free daily budget on each shared pool.
             </p>
           ) : null}
         </div>
