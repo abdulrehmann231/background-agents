@@ -27,18 +27,18 @@ describe("resolveModelForAgent", () => {
     // of the standard default rather than landing the user on a dead end.
     const model = resolveModelForAgent("gemini", {}, "gemini-3.1-pro-preview")
     expect(model).not.toBe("gemini-3.1-pro-preview")
-    expect(model).toBe("gemini-2.5-flash") // hardcoded default for the agent
+    expect(model).toBe("gemini-3.6-flash") // hardcoded default for the agent
   })
 
   it("ignores a saved preference that belongs to a different agent", () => {
     // "opus" is a claude-code model; it must not leak into the gemini agent.
     const model = resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, "opus")
-    expect(model).toBe("gemini-2.5-flash")
+    expect(model).toBe("gemini-3.6-flash")
   })
 
   it("falls back to the agent default when no preference is set", () => {
-    expect(resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, null)).toBe("gemini-2.5-flash")
-    expect(resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, undefined)).toBe("gemini-2.5-flash")
+    expect(resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, null)).toBe("gemini-3.6-flash")
+    expect(resolveModelForAgent("gemini", { GEMINI_API_KEY: true }, undefined)).toBe("gemini-3.6-flash")
   })
 
   it("honors a saved preference pointing at a custom endpoint when endpoints are supplied", () => {
@@ -100,7 +100,7 @@ describe("resolveAgentAndModel", () => {
       { defaultAgent: "claude-code", defaultModel: "opus" },
       { GEMINI_API_KEY: true }
     )
-    expect(result).toEqual({ agent: "gemini", model: "gemini-2.5-flash" })
+    expect(result).toEqual({ agent: "gemini", model: "gemini-3.6-flash" })
   })
 })
 
