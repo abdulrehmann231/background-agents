@@ -10,10 +10,13 @@ interface UsageByUserTableProps {
   users: UserUsage[]
   metric: UsageMetric
   /**
-   * Whether a dollar figure means real spend for this provider. False for
-   * subscription-backed pools (Claude, Gemini), where tokscale's cost is a
-   * notional API-equivalent price — the Cost column is dropped from the
-   * per-model detail rather than shown as if it were a bill.
+   * Whether a dollar figure says anything useful for this provider. True for
+   * OpenCode (billed per token) and Claude (shared pool budgeted in dollars, so
+   * per-model cost is what explains a user hitting their cap). False for Gemini,
+   * capped by message count — the Cost column is dropped from the per-model
+   * detail rather than shown as a number nobody can act on. Whether those
+   * dollars are an actual invoice line is a separate question, labelled at the
+   * section header.
    */
   showCost?: boolean
   isLoading?: boolean
