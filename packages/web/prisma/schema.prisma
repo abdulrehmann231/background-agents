@@ -32,7 +32,7 @@ model User {
 
   // Subscription tier governing shared-pool budgets:
   //   free      → per-provider daily budget
-  //   pro        → 2× the free daily budget
+  //   pro        → 3× the free daily budget
   //   unlimited  → no shared-pool cap
   plan Plan @default(free)
 
