@@ -336,10 +336,11 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gemini-3-flash", label: "Gemini 3 Flash", requiresKey: "github" },
   ],
   "gemini": [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini" },
-    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini" },
+    // Default first, then Flash tier (newest → oldest), then Pro.
     { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "gemini" },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini" },
+    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini" },
     { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
   ],
   "goose": [
@@ -461,7 +462,7 @@ export const defaultAgentModel: Record<Agent, string> = {
   "copilot": "gpt-5-mini",
   "droid": "claude-sonnet-4-5-20250929", // BYOK default (user's ANTHROPIC_API_KEY)
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
-  "gemini": "gemini-3.6-flash", // newest stable Flash; free-tier available & reliable
+  "gemini": "gemini-3.5-flash-lite", // fast/cheap Flash Lite; free-tier available & reliable
   "goose": "gpt-4o",
   "kilo": "kilo/kilo-auto/free", // Free auto-router, no API key needed
   "kimi": "kimi-k2.7-code",
