@@ -111,6 +111,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     settings,
     credentialFlags,
     claudeLimitResetAt,
+    claudeLimitUnit,
     claudeLimitUsed,
     claudeLimitTotal,
     isHydrated,
@@ -641,6 +642,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                     setLimitReachedState({
                       show: true,
                       provider: "claude",
+                      unit: claudeLimitUnit,
                       used: claudeLimitUsed,
                       limit: claudeLimitTotal,
                       resetAt: claudeLimitResetAt ? new Date(claudeLimitResetAt) : undefined,

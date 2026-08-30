@@ -5,14 +5,15 @@
 
 import { prisma } from "@/lib/db/prisma"
 import { isSharedPoolAvailable } from "@/lib/claude-credentials"
-import { sumSharedUsage } from "@/lib/db/token-usage"
+import { sumSharedUsageInUnit } from "@/lib/db/token-usage"
 import { decryptUserCredentials } from "@/lib/db/api-helpers"
 import {
-  getDailyTokenBudget,
+  getProviderBudget,
   getStartOfUtcDay,
   getNextUtcDayReset,
   getStartOfUtcWeek,
   getNextUtcWeekReset,
+  type BudgetUnit,
   type Plan,
 } from "@/lib/server/usage-budgets"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
@@ -22,11 +23,13 @@ import { sharedClaudePoolEligible } from "@background-agents/common"
 export interface EffectiveFlags {
   flags: CredentialFlags
   limitResetAt: Date | null
-  /** Remaining limited tokens (cache-excluded) for free users; null = unlimited. */
+  /** Unit the three amounts below are measured in (USD cost for Claude). */
+  limitUnit: BudgetUnit
+  /** Remaining allowance for capped plans; null = unlimited. */
   limitRemaining: number | null
-  /** Limited tokens used by the shared Claude pool this period (daily capped / weekly unlimited). */
+  /** Amount used from the shared Claude pool this period (daily capped / weekly unlimited). */
   limitUsed: number | null
-  /** Daily token budget for capped plans (free/pro); null when unlimited. */
+  /** Daily budget for capped plans (free/pro); null when unlimited. */
   limitTotal: number | null
   /** Whether usage is tracked weekly (unlimited plan) vs daily (free/pro) */
   isWeekly: boolean
@@ -136,37 +139,52 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   let limitTotal: number | null = null
   let isWeekly = false
 
+  // The unit the Claude pool is budgeted in (USD cost). Read from the free-tier
+  // descriptor so it's still defined on the `unlimited` plan, which has no
+  // budget of its own but still displays usage.
+  const budget = getProviderBudget("claude", plan)
+  const limitUnit: BudgetUnit = budget?.unit ?? getProviderBudget("claude")?.unit ?? "cost"
+
   if (usesSharedPool) {
-    // Limited tokens (cache-excluded) consumed from the shared Claude pool.
     if (plan === "unlimited") {
       // Unlimited plan: weekly usage for display only — no cap.
       isWeekly = true
-      const { limitedTokens } = await sumSharedUsage({
+      limitUsed = await sumSharedUsageInUnit({
         userId,
         provider: "claude",
+        unit: limitUnit,
         since: getStartOfUtcWeek(),
       })
-      limitUsed = limitedTokens
       limitResetAt = getNextUtcWeekReset()
       // limitTotal / limitRemaining stay null (unlimited)
     } else {
-      // Free and Pro users: daily token budget (Pro = 3× free).
-      const { limitedTokens } = await sumSharedUsage({
+      // Free and Pro users: daily budget (Pro = PRO_BUDGET_MULTIPLIER× free).
+      const used = await sumSharedUsageInUnit({
         userId,
         provider: "claude",
+        unit: limitUnit,
         since: getStartOfUtcDay(),
       })
-      limitUsed = limitedTokens
+      limitUsed = used
       limitResetAt = getNextUtcDayReset()
 
-      const budget = getDailyTokenBudget("claude", plan)
       if (budget != null) {
-        limitTotal = budget
-        limitRemaining = Math.max(0, budget - limitedTokens)
-        flags.CLAUDE_DAILY_LIMIT_EXCEEDED = limitedTokens >= budget
+        limitTotal = budget.limit
+        limitRemaining = Math.max(0, budget.limit - used)
+        flags.CLAUDE_DAILY_LIMIT_EXCEEDED = used >= budget.limit
       }
     }
   }
 
-  return { flags, limitResetAt, limitRemaining, limitUsed, limitTotal, isPro, isWeekly, plan }
+  return {
+    flags,
+    limitResetAt,
+    limitUnit,
+    limitRemaining,
+    limitUsed,
+    limitTotal,
+    isPro,
+    isWeekly,
+    plan,
+  }
 }

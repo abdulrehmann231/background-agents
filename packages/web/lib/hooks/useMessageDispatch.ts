@@ -26,13 +26,11 @@ import { queryKeys, type SettingsData } from "@/lib/query"
 import { resolveAgentAndModel } from "@/lib/types"
 import {
   sendMessageToApi,
-  usesSharedClaudePool,
   newBranchForSend,
   applyOptimisticSend,
   removeOptimisticMessages,
   applySendSuccess,
   applySendError,
-  decrementClaudeUsage,
   type SendMessagePayload,
 } from "@/lib/chat-messages"
 
@@ -240,11 +238,6 @@ export function useMessageDispatch({
         ))
 
         startStreaming(chatId, data.sandboxId, "project", data.backgroundSessionId, assistantMessage.id, data.previewUrlPattern ?? undefined, data.branch, undefined, planMode)
-
-        // Optimistically update Claude usage count if using shared pool with Claude Code
-        if (usesSharedClaudePool(selectedAgent, credentialFlags)) {
-          queryClient.setQueryData<SettingsData>(queryKeys.settings.all, decrementClaudeUsage)
-        }
 
         if (isFirstMessage) {
           suggestNameMutation.mutate({ chatId, prompt: content })

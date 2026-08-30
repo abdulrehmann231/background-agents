@@ -1,20 +1,21 @@
 /**
- * Token-based usage limits for the shared credential pools.
+ * Usage limits for the shared credential pools.
  *
- * Free users get a daily, per-provider, cache-excluded token budget when using
- * a shared pool (Claude OAuth / Gemini / OpenCode server keys). Pro users get
- * the same daily budget scaled by PRO_BUDGET_MULTIPLIER; only `unlimited`-plan
- * users (and anyone running on their own key) are uncapped. Usage is summed from
- * the TokenUsage ledger (populated post-turn by tokscale metering).
+ * Free users get a daily, per-provider budget when using a shared pool (Claude
+ * OAuth / Gemini / OpenCode server keys), denominated in whatever unit that pool
+ * is metered in — see lib/server/usage-budgets. Pro users get the same budget
+ * scaled by PRO_BUDGET_MULTIPLIER; only `unlimited`-plan users (and anyone
+ * running on their own key) are uncapped. Usage is summed from the TokenUsage
+ * ledger (populated post-turn by tokscale metering).
  *
- * Because a turn's token cost is only known after it runs, enforcement is
- * post-hoc: we block the NEXT turn once the period's usage has met the budget.
+ * Because a turn's cost is only known after it runs, enforcement is post-hoc:
+ * we block the NEXT turn once the period's usage has met the budget.
  */
 
 import type { Agent, ProviderName } from "@background-agents/common"
 
 import { prisma } from "./prisma"
-import { sumSharedUsage, countSharedMessages } from "./token-usage"
+import { sumSharedUsageInUnit } from "./token-usage"
 import { providerForRun, resolvePool } from "@/lib/server/shared-pool"
 import { decryptUserCredentials } from "./api-helpers"
 import { formatUsageLimitMessage } from "@/lib/usage-limit-copy"
@@ -94,8 +95,12 @@ export async function checkSharedPoolUsage(
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
-  const since = getStartOfUtcDay()
-  const used = await getSharedUsage(userId, provider, budget.unit, since)
+  const used = await sumSharedUsageInUnit({
+    userId,
+    provider,
+    unit: budget.unit,
+    since: getStartOfUtcDay(),
+  })
 
   const remaining = Math.max(0, budget.limit - used)
   const allowed = used < budget.limit
@@ -111,18 +116,4 @@ export async function checkSharedPoolUsage(
       ? undefined
       : formatUsageLimitMessage({ plan, provider, unit: budget.unit, limit: budget.limit }),
   }
-}
-
-/** Usage in the period, measured in the provider's budget unit. */
-async function getSharedUsage(
-  userId: string,
-  provider: ProviderName,
-  unit: BudgetUnit,
-  since: Date
-): Promise<number> {
-  if (unit === "messages") {
-    return countSharedMessages({ userId, provider, since })
-  }
-  const { limitedTokens, costUsd } = await sumSharedUsage({ userId, provider, since })
-  return unit === "cost" ? costUsd : limitedTokens
 }

@@ -2,13 +2,11 @@
 //
 // Extracted from useChatWithSync. The cache-update transforms here are the
 // fiddly "given a chat, produce the next chat" steps of an optimistic send
-// (apply, roll back, succeed, error) plus the agent/model resolution and the
-// shared-pool predicate. They're pure and deterministic, so they're unit-tested
+// (apply, roll back, succeed, error) plus the agent/model resolution. They're
+// pure and deterministic, so they're unit-tested
 // in chat-messages.test.ts instead of being buried inline in the hook.
 
-import type { Chat, Message, CredentialFlags } from "@/lib/types"
-import { sharedClaudePoolEligible } from "@/lib/types"
-import type { SettingsData } from "@/lib/query"
+import type { Chat, Message } from "@/lib/types"
 import type { Plan } from "@/lib/server/usage-budgets"
 import { isPlan } from "@/lib/usage-limit-copy"
 import { generateBranchName } from "@/lib/utils"
@@ -133,15 +131,6 @@ export async function sendMessageToApi(
 // Pure resolution helpers
 // =============================================================================
 
-/**
- * Whether this send draws from the shared Claude pool (Claude Code, no personal
- * Anthropic credentials, shared pool available) — used to optimistically
- * decrement the usage counter.
- */
-export function usesSharedClaudePool(agent: string, flags: CredentialFlags): boolean {
-  return agent === "claude-code" && sharedClaudePoolEligible(flags)
-}
-
 /** Branch arg for the send payload: a new agent branch unless the sandbox exists. */
 export function newBranchForSend(chat: Pick<Chat, "sandboxId">): string | undefined {
   return chat.sandboxId ? undefined : `agent/${generateBranchName()}`
@@ -215,15 +204,3 @@ export function applySendError(chat: Chat, assistantMessageId: string, errorMess
   }
 }
 
-/** Optimistically decrement the shared-pool Claude usage counter. No-op if unknown. */
-export function decrementClaudeUsage(old: SettingsData | undefined): SettingsData | undefined {
-  if (!old || old.claudeLimitUsed === null || old.claudeLimitUsed === undefined) return old
-  return {
-    ...old,
-    claudeLimitUsed: old.claudeLimitUsed + 1,
-    claudeLimitRemaining:
-      old.claudeLimitRemaining !== null && old.claudeLimitRemaining !== undefined
-        ? Math.max(0, old.claudeLimitRemaining - 1)
-        : null,
-  }
-}

@@ -4,14 +4,20 @@
  * Budgets scale by plan: `free` gets the base daily budget, `pro` gets 2× that
  * budget (still daily), and `unlimited` is uncapped. The budget *unit* differs
  * by provider — each pool is metered in whatever measure best reflects its cost:
- *   - claude   → "tokens": cache-excluded limited tokens (input + output +
- *                reasoning; see UsageTotals.limitedTokens).
+ *   - claude   → "cost": USD spend, priced from Anthropic's published rates in
+ *                lib/server/claude-pricing. The pool spans Haiku through Fable,
+ *                a 10× spread in price per token, so a token cap would hand a
+ *                Fable user ten times the value of a Haiku user for the same
+ *                allowance.
  *   - opencode → "cost": USD spend (tokscale's per-turn cost), since OpenCode
  *                spans many models with wildly different per-token prices.
  *   - gemini   → "messages": number of assistant turns, a simple message cap.
  *
- * NOTE: numbers below are PLACEHOLDERS. Tune them once real usage has been
- * logged to the TokenUsage ledger. Omit a provider to leave it unlimited.
+ * Unlike the token unit, "cost" counts cache reads and writes: they're priced
+ * at 0.1× and 1.25× base input, so they no longer swamp the measure the way raw
+ * cache token *counts* do.
+ *
+ * Omit a provider to leave it unlimited.
  */
 
 import type { ProviderName } from "@background-agents/common"
@@ -31,10 +37,28 @@ export interface ProviderBudget {
 /** Multiplier applied to the free daily budget for `pro` users. */
 export const PRO_BUDGET_MULTIPLIER = 2
 
-/** Free-tier daily budget per shared-pool provider, with its unit. */
+/**
+ * Free-tier daily budget per shared-pool provider, with its unit.
+ *
+ * Sizing the Claude budget, for a pool of ~200 users behind one shared
+ * subscription. A typical Claude Code turn (~1k uncached input, ~1.5k output,
+ * ~60k cache read, ~8k cache write) costs roughly:
+ *
+ *   Haiku 4.5   ~$0.024      Sonnet 5   ~$0.049
+ *   Opus 5      ~$0.12       Fable 5    ~$0.25
+ *
+ * At $0.50/day a free user gets ~20 Haiku, ~10 Sonnet, ~4 Opus or ~2 Fable
+ * turns; Pro doubles that. Worst case (all 200 users maxing out daily) is
+ * $100/day, far past what one subscription covers — but that shape never
+ * happens: at a realistic ~10% daily-active rate spending ~60% of the cap,
+ * it lands near $6/day, comfortably inside a Max-tier subscription with room
+ * for the tail. Revisit once the ledger has enough history to replace those two
+ * assumptions with measurements, and consider a pool-wide daily ceiling before
+ * the user count grows much past 200.
+ */
 const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
-  // TODO(token-budgets): replace placeholders with tuned values.
-  claude: { unit: "tokens", limit: 100_000 },
+  claude: { unit: "cost", limit: 0.5 },
+  // TODO(token-budgets): tune these two against the ledger, as above.
   opencode: { unit: "cost", limit: 0.5 },
   gemini: { unit: "messages", limit: 100 },
 }
@@ -55,19 +79,6 @@ export function getProviderBudget(
     return { unit: base.unit, limit: base.limit * PRO_BUDGET_MULTIPLIER }
   }
   return base
-}
-
-/**
- * Daily token budget for a provider on a given plan, or null when the provider
- * isn't metered in tokens (cost/message-based) or is unlimited. Used by the
- * Claude-specific limit display in credential-flags.
- */
-export function getDailyTokenBudget(
-  provider: ProviderName,
-  plan: Plan = "free"
-): number | null {
-  const b = getProviderBudget(provider, plan)
-  return b && b.unit === "tokens" ? b.limit : null
 }
 
 /**

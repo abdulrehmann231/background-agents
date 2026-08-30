@@ -99,6 +99,7 @@ export function useChatWithSync() {
   const settings = settingsQuery.data?.settings ?? DEFAULT_SETTINGS
   const credentialFlags = settingsQuery.data?.credentialFlags ?? {}
   const claudeLimitResetAt = settingsQuery.data?.claudeLimitResetAt ?? null
+  const claudeLimitUnit = settingsQuery.data?.claudeLimitUnit
   const claudeLimitUsed = settingsQuery.data?.claudeLimitUsed ?? null
   const claudeLimitTotal = settingsQuery.data?.claudeLimitTotal ?? null
   const claudeLimitRemaining = settingsQuery.data?.claudeLimitRemaining ?? null
@@ -344,6 +345,7 @@ export function useChatWithSync() {
     settings,
     credentialFlags,
     claudeLimitResetAt,
+    claudeLimitUnit,
     claudeLimitUsed,
     claudeLimitTotal,
     claudeLimitRemaining,

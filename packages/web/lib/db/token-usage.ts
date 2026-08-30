@@ -9,7 +9,11 @@
  *
  * `sumSharedUsage` is the read path the rate limiter uses: total tokens/cost a
  * user has consumed from a given shared pool since the start of the period.
+ * `sumSharedUsageInUnit` wraps it (and the message count) to answer in whatever
+ * unit a pool's budget is denominated in.
  */
+
+import type { BudgetUnit } from "@/lib/server/usage-budgets"
 
 import { prisma } from "./prisma"
 
@@ -281,4 +285,24 @@ export async function sumSharedUsage(params: {
     },
   })
   return toTotals(agg._sum)
+}
+
+/**
+ * A user's shared-pool usage for one provider since `since`, expressed in that
+ * provider's budget unit. The one place that knows how each unit maps onto the
+ * ledger — the limiter, the settings limit display and the usage view all read
+ * through it, so they can't disagree about what "used" means.
+ */
+export async function sumSharedUsageInUnit(params: {
+  userId: string
+  provider: string
+  unit: BudgetUnit
+  since: Date
+}): Promise<number> {
+  const { userId, provider, unit, since } = params
+  if (unit === "messages") {
+    return countSharedMessages({ userId, provider, since })
+  }
+  const { limitedTokens, costUsd } = await sumSharedUsage({ userId, provider, since })
+  return unit === "cost" ? costUsd : limitedTokens
 }
