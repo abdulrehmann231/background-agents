@@ -213,7 +213,7 @@ const SHARED_GEMINI_POOL_PRO_MODELS = new Set<string>([
 export const agentModels: Record<Agent, ModelOption[]> = {
   "claude-code": [
     { value: "sonnet", label: "Sonnet", requiresKey: "anthropic" },
-    { value: "default", label: "Default", requiresKey: "anthropic" },
+    { value: "default", label: "Auto", requiresKey: "anthropic" },
     { value: "best", label: "Best", requiresKey: "anthropic" },
     { value: "fable", label: "Fable", requiresKey: "anthropic" },
     { value: "opus", label: "Opus", requiresKey: "anthropic" },
