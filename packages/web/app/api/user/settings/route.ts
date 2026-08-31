@@ -22,6 +22,7 @@ import {
   validateEndpoints,
 } from "@/lib/server/custom-endpoints"
 import type { Settings } from "@/lib/types"
+import type { BudgetUnit } from "@/lib/server/usage-budgets"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
 interface SettingsResponse {
@@ -31,11 +32,13 @@ interface SettingsResponse {
   customEndpoints: CustomEndpoint[]
   /** ISO timestamp when the daily Claude limit resets, or null if not limited */
   claudeLimitResetAt: string | null
-  /** Remaining Claude Code messages today, or null if not applicable */
+  /** Unit the three amounts below are in — "cost" (USD) for the Claude pool. */
+  claudeLimitUnit: BudgetUnit
+  /** Remaining Claude allowance today, or null if not applicable */
   claudeLimitRemaining: number | null
-  /** Number of shared Claude messages used in current period, or null if not using shared pool */
+  /** Claude allowance used in the current period, or null if not using shared pool */
   claudeLimitUsed: number | null
-  /** Daily limit (10 for free users), or null if pro/unlimited */
+  /** Daily budget for free/pro, or null if unlimited */
   claudeLimitTotal: number | null
   /** Whether user is a pro subscriber */
   claudeIsPro: boolean
@@ -79,6 +82,7 @@ export async function GET(): Promise<Response> {
       credentialFlags: effective.flags,
       customEndpoints: decryptUserEndpoints(user?.customEndpoints),
       claudeLimitResetAt: effective.limitResetAt?.toISOString() ?? null,
+      claudeLimitUnit: effective.limitUnit,
       claudeLimitRemaining: effective.limitRemaining,
       claudeLimitUsed: effective.limitUsed,
       claudeLimitTotal: effective.limitTotal,
@@ -171,6 +175,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
         newEndpoints ?? (user?.customEndpoints as unknown)
       ),
       claudeLimitResetAt: effective.limitResetAt?.toISOString() ?? null,
+      claudeLimitUnit: effective.limitUnit,
       claudeLimitRemaining: effective.limitRemaining,
       claudeLimitUsed: effective.limitUsed,
       claudeLimitTotal: effective.limitTotal,

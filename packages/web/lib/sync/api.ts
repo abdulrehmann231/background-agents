@@ -8,6 +8,7 @@
 
 import type { Chat, Message, Settings, CustomEndpoint } from "@/lib/types"
 import type { Credentials, CredentialFlags } from "@/lib/credentials"
+import type { BudgetUnit } from "@/lib/server/usage-budgets"
 
 // =============================================================================
 // Types
@@ -66,6 +67,7 @@ export interface SettingsResponse {
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
   claudeLimitResetAt?: string | null
+  claudeLimitUnit?: BudgetUnit
   claudeLimitRemaining?: number | null
   claudeLimitUsed?: number | null
   claudeLimitTotal?: number | null

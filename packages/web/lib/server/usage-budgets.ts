@@ -4,14 +4,20 @@
  * Budgets scale by plan: `free` gets the base daily budget, `pro` gets 2× that
  * budget (still daily), and `unlimited` is uncapped. The budget *unit* differs
  * by provider — each pool is metered in whatever measure best reflects its cost:
- *   - claude   → "tokens": cache-excluded limited tokens (input + output +
- *                reasoning; see UsageTotals.limitedTokens).
+ *   - claude   → "cost": USD spend, priced from Anthropic's published rates in
+ *                lib/server/claude-pricing. The pool spans Haiku through Fable,
+ *                a 10× spread in price per token, so a token cap would hand a
+ *                Fable user ten times the value of a Haiku user for the same
+ *                allowance.
  *   - opencode → "cost": USD spend (tokscale's per-turn cost), since OpenCode
  *                spans many models with wildly different per-token prices.
  *   - gemini   → "messages": number of assistant turns, a simple message cap.
  *
- * NOTE: numbers below are PLACEHOLDERS. Tune them once real usage has been
- * logged to the TokenUsage ledger. Omit a provider to leave it unlimited.
+ * Unlike the token unit, "cost" counts cache reads and writes: they're priced
+ * at 0.1× and 1.25× base input, so they no longer swamp the measure the way raw
+ * cache token *counts* do.
+ *
+ * Omit a provider to leave it unlimited.
  */
 
 import type { ProviderName } from "@background-agents/common"
@@ -31,10 +37,43 @@ export interface ProviderBudget {
 /** Multiplier applied to the free daily budget for `pro` users. */
 export const PRO_BUDGET_MULTIPLIER = 2
 
-/** Free-tier daily budget per shared-pool provider, with its unit. */
+/**
+ * Free-tier daily budget per shared-pool provider, with its unit.
+ *
+ * The Claude figure is sized from the ledger, not modelled. Over 77 active days
+ * (Jun–Aug 2026): 106 users, 6,463 shared turns, $14,846 of API-equivalent
+ * value — ~$193/day at ~11.9 users active per day, averaging $2.30 a turn. Note
+ * a "turn" here is a whole agentic run (many API round-trips, each re-reading
+ * cache), not a single call, which is why it costs orders of magnitude more than
+ * a chat message.
+ *
+ * Cost per user-day was distributed:  p50 $8.37 · p75 $17.26 · p90 $42.55 ·
+ * max $237.39. The tail is the problem this cap exists to solve — 8 of those 106
+ * users accounted for 75% of all spend, and left alone they crowd everyone else
+ * out as the pool grows.
+ *
+ * The old 100k-token cap it replaces was worth a median of $8.10 of real value
+ * per user-day — but anywhere from $4.80 (p25) to $26.78 (p90), because the same
+ * token allowance buys wildly different amounts depending on the model. That
+ * spread is why a token cap never controlled the pool: we were hitting the
+ * subscription's weekly limit (77 times in this window, plus 57 Fable-specific
+ * and 26 session limits) while the cap looked like it was holding.
+ *
+ * $5/day sits below that $8.10 median, so it is a genuine tightening rather than
+ * a sideways move. Replayed over the same history with plan multipliers applied,
+ * it would have allowed ~$88/day against ~$193/day actual — a 54% reduction,
+ * most of it taken off the tail the token rule let run unchecked.
+ *
+ * Two things this does NOT bound:
+ *   - The `unlimited` plan, which is uncapped by definition. It accounted for
+ *     $44/day of the historical draw, and no value here touches it.
+ *   - The pool as a whole. This caps a single user; 200 users active at once is
+ *     still 200 × the cap. A pool-wide daily ceiling is the only hard bound, and
+ *     it does not exist yet.
+ */
 const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
-  // TODO(token-budgets): replace placeholders with tuned values.
-  claude: { unit: "tokens", limit: 100_000 },
+  claude: { unit: "cost", limit: 5 },
+  // TODO(token-budgets): tune these two against the ledger, as above.
   opencode: { unit: "cost", limit: 0.5 },
   gemini: { unit: "messages", limit: 100 },
 }
@@ -55,19 +94,6 @@ export function getProviderBudget(
     return { unit: base.unit, limit: base.limit * PRO_BUDGET_MULTIPLIER }
   }
   return base
-}
-
-/**
- * Daily token budget for a provider on a given plan, or null when the provider
- * isn't metered in tokens (cost/message-based) or is unlimited. Used by the
- * Claude-specific limit display in credential-flags.
- */
-export function getDailyTokenBudget(
-  provider: ProviderName,
-  plan: Plan = "free"
-): number | null {
-  const b = getProviderBudget(provider, plan)
-  return b && b.unit === "tokens" ? b.limit : null
 }
 
 /**

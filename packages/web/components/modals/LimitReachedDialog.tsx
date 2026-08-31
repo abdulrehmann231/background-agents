@@ -40,11 +40,13 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 type BudgetUnit = "tokens" | "cost" | "messages"
 
-/** Map provider to its budget unit. Mirrors server usage-budgets. */
+/**
+ * Map provider to its budget unit. Mirrors server usage-budgets, and is only a
+ * fallback for a caller that didn't pass the server-resolved unit.
+ */
 function unitForProvider(provider?: string): BudgetUnit {
-  if (provider === "opencode") return "cost"
   if (provider === "gemini") return "messages"
-  return "tokens"
+  return "cost"
 }
 
 export function LimitReachedDialog({

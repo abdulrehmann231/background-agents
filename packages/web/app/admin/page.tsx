@@ -70,19 +70,32 @@ const USAGE_PROVIDERS: { key: UsageProvider; label: string }[] = [
 
 // Tokens vs cost for the usage section. Independent of a provider's budget unit
 // — OpenCode is budgeted in USD, but its token volume is still worth seeing.
-//
-// Cost is offered for OpenCode only. It's the one provider billed per token, so
-// its dollar figure is money we actually spend. Claude runs on a flat
-// subscription through the rotating credential and Gemini on a shared key, so a
-// per-token cost there is a notional API-equivalent price rather than spend —
-// showing it would invite adding up numbers that don't correspond to a bill.
 const USAGE_METRICS: { key: UsageMetric; label: string }[] = [
   { key: "tokens", label: "Tokens" },
   { key: "cost", label: "Cost" },
 ]
 
-/** Providers billed per token, where a cost figure reflects real spend. */
-const METERED_PROVIDERS: ReadonlySet<UsageProvider> = new Set<UsageProvider>(["opencode"])
+/**
+ * Providers whose usage is worth looking at in dollars.
+ *
+ * OpenCode because it's billed per token, so the figure is money we spend.
+ * Claude because its shared pool is *budgeted* in dollars — the admin view has
+ * to show the same measure the limiter enforces, or there's no way to see why
+ * someone hit their cap. Gemini stays out: it's capped by message count, so a
+ * dollar figure there answers no question anyone is asking.
+ */
+const COST_PROVIDERS: ReadonlySet<UsageProvider> = new Set<UsageProvider>([
+  "opencode",
+  "claude",
+])
+
+/**
+ * Of those, the ones where a dollar is an actual bill. Claude runs on a flat
+ * subscription, so its cost is API-equivalent value — real for comparing users
+ * and models against each other, but not a number that shows up on an invoice.
+ * Labelled as such rather than hidden, so nobody totals it as spend.
+ */
+const BILLED_PROVIDERS: ReadonlySet<UsageProvider> = new Set<UsageProvider>(["opencode"])
 
 type SectionKey = "overview" | "users" | "activity" | "credentials"
 
@@ -137,12 +150,16 @@ export default function AdminDashboard() {
   // Overview's pool filter or its "all" range.
   const [usageProvider, setUsageProvider] = useState<UsageProvider>("opencode")
   const [usageMetric, setUsageMetric] = useState<UsageMetric>("tokens")
-  // Cost only means something for a metered provider. Rather than resetting the
-  // stored preference when switching to Claude/Gemini, derive the effective
-  // metric — so returning to OpenCode lands you back on Cost if that's where you
-  // were, and the view can never be left showing a figure with no toggle to escape.
-  const costSupported = METERED_PROVIDERS.has(usageProvider)
+  // Cost only means something for a provider whose usage is denominated in it.
+  // Rather than resetting the stored preference when switching to Gemini, derive
+  // the effective metric — so returning to OpenCode or Claude lands you back on
+  // Cost if that's where you were, and the view can never be left showing a
+  // figure with no toggle to escape.
+  const costSupported = COST_PROVIDERS.has(usageProvider)
   const effectiveUsageMetric: UsageMetric = costSupported ? usageMetric : "tokens"
+  // Dollars that aren't an invoice line need saying so, once, next to the number.
+  const costIsNotional =
+    effectiveUsageMetric === "cost" && !BILLED_PROVIDERS.has(usageProvider)
   // The distribution view is day-bucketed, so it has no "all" range. Follow the
   // global range where it can and fall back to 30d for "all".
   const usageRange: UsageRange = globalTimeRange === "all" ? "30d" : globalTimeRange
@@ -515,11 +532,13 @@ export default function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">
                     Where our credential spend goes
                     {globalTimeRange === "all" && " · last 30 days"}
+                    {costIsNotional &&
+                      " · API-equivalent value on a flat subscription, not a bill"}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  {/* Hidden entirely for subscription-backed providers — see
-                      METERED_PROVIDERS. With one option left there's nothing to
+                  {/* Hidden for providers with no meaningful cost view — see
+                      COST_PROVIDERS. With one option left there's nothing to
                       toggle, so the control disappears rather than showing a
                       single dead button. */}
                   {costSupported && (

@@ -7,9 +7,12 @@
  * recorded for the session (sum of prior delta rows) to get this turn's delta,
  * and append it to the TokenUsage ledger.
  *
- * Pricing lives entirely inside the tokscale binary — the web app owns no price
- * tables. The only thing tokscale can't know (which credential pool ran, and
- * which user) is supplied by the caller.
+ * Pricing comes from tokscale for every provider but Claude. The Claude pool is
+ * budgeted in dollars, so its cost is recomputed here from Anthropic's
+ * published rates (see lib/server/claude-pricing) rather than trusted from
+ * tokscale's network-fetched price table, which returns $0 for any model id it
+ * fails to resolve. The only thing tokscale can't know (which credential pool
+ * ran, and which user) is supplied by the caller.
  *
  * Everything here is best-effort: metering must never break turn finalization.
  */
@@ -27,6 +30,7 @@ import {
   type UsagePool,
 } from "@/lib/db/token-usage"
 import { isFreeModel } from "@/lib/server/usage-budgets"
+import { priceClaudeTurn } from "@/lib/server/claude-pricing"
 import { readUsageMeta } from "@/lib/server/shared-pool"
 
 /** `tokscale models --json --group-by session,model` entry shape (subset). */
@@ -186,7 +190,32 @@ async function meterTurnUsage(
     // Free models: tokscale misprices them, so force cost to 0. They're still
     // recorded (counted in overall totals) but flagged out of shared budgets.
     const free = isFreeModel(e.model)
-    const costUsd = free ? 0 : Math.max(0, e.cost - prev.costUsd)
+    // The Claude pool's budget is denominated in dollars, so price its deltas
+    // from Anthropic's own rates. Every other provider (and any model these
+    // rates don't cover) keeps tokscale's figure, diffed like the token
+    // components. Note this prices the *delta* directly rather than differencing
+    // two cumulative costs — same result, one less place to drift.
+    const ownPrice =
+      provider === "claude"
+        ? priceClaudeTurn(e.model, {
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
+            reasoningTokens,
+          })
+        : null
+    if (provider === "claude" && ownPrice === null && !free) {
+      // A model id our rate table doesn't cover — usually a release we haven't
+      // added yet. Worth a line in the logs: the fallback is only as good as
+      // whatever tokscale resolved, which may be $0.
+      console.warn(
+        `[token-metering] no first-party rate for Claude model "${e.model}" — using tokscale's cost`
+      )
+    }
+    const costUsd = free
+      ? 0
+      : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
 
     // Skip no-op turns (nothing new since last capture).
     if (totalTokens === 0 && costUsd === 0) continue
@@ -213,6 +242,8 @@ async function meterTurnUsage(
       coverage: e.performance?.tokenCoverage ?? null,
       sessionId,
       cumulativeTotal: Math.round(cumulativeTokens),
+      // tokscale's own cumulative, kept verbatim as an audit trail — for Claude
+      // it won't match the sum of our repriced deltas.
       cumulativeCost: e.cost,
       createdAt: baselineAt,
     })

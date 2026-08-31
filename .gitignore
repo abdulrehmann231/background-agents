@@ -44,3 +44,6 @@ __v0_jsx-dev-runtime.ts
 
 # macOS screenshots dropped into the repo root (uploaded in chat, not project files)
 Screenshot*.png
+
+# Backfill snapshots (originals dumped before a repricing run)
+packages/web/scripts/*.backup.*.json
