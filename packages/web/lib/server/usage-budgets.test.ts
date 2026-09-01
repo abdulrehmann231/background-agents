@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest"
 
 import {
+  BUDGET_BOOSTS,
   getProviderBudget,
   isFreeModel,
   PRO_BUDGET_MULTIPLIER,
@@ -21,6 +22,35 @@ describe("getProviderBudget", () => {
     const pro = getProviderBudget("claude", "pro")!
     expect(pro.unit).toBe(free.unit)
     expect(pro.limit).toBeCloseTo(free.limit * PRO_BUDGET_MULTIPLIER, 10)
+  })
+
+  it("scales both plans by a live boost, and drops it once it expires", () => {
+    const boost = BUDGET_BOOSTS.claude
+    if (!boost) return // no boost configured — nothing to assert
+
+    const during = new Date(boost.until.getTime() - 1000)
+    const after = boost.until
+
+    const baseFree = getProviderBudget("claude", "free", after)!
+    expect(getProviderBudget("claude", "free", during)!.limit).toBeCloseTo(
+      baseFree.limit * boost.multiplier,
+      10
+    )
+    expect(getProviderBudget("claude", "pro", during)!.limit).toBeCloseTo(
+      baseFree.limit * boost.multiplier * PRO_BUDGET_MULTIPLIER,
+      10
+    )
+    expect(getProviderBudget("claude", "pro", after)!.limit).toBeCloseTo(
+      baseFree.limit * PRO_BUDGET_MULTIPLIER,
+      10
+    )
+  })
+
+  it("leaves the unlimited plan uncapped while a boost is live", () => {
+    const boost = BUDGET_BOOSTS.claude
+    if (!boost) return
+    const during = new Date(boost.until.getTime() - 1000)
+    expect(getProviderBudget("claude", "unlimited", during)).toBeNull()
   })
 
   it("leaves the unlimited plan uncapped", () => {
