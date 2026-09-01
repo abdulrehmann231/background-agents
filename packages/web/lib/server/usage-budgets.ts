@@ -2,7 +2,8 @@
  * Per-provider daily budgets for the shared credential pools.
  *
  * Budgets scale by plan: `free` gets the base daily budget, `pro` gets 2× that
- * budget (still daily), and `unlimited` is uncapped. The budget *unit* differs
+ * budget (still daily), and `unlimited` is uncapped. A temporary, self-expiring
+ * multiplier can sit on top of both — see `BUDGET_BOOSTS`. The budget *unit* differs
  * by provider — each pool is metered in whatever measure best reflects its cost:
  *   - claude   → "cost": USD spend, priced from Anthropic's published rates in
  *                lib/server/claude-pricing. The pool spans Haiku through Fable,
@@ -79,21 +80,60 @@ const FREE_DAILY_BUDGETS: Partial<Record<ProviderName, ProviderBudget>> = {
 }
 
 /**
+ * A temporary boost to one provider's budgets, with a hard expiry.
+ *
+ * While live, the multiplier scales the free daily budget — and through it the
+ * Pro budget, which is still `PRO_BUDGET_MULTIPLIER`× free. At `until` the
+ * boost lapses on its own and the baseline returns; nothing has to be changed
+ * back by hand.
+ */
+interface BudgetBoost {
+  multiplier: number
+  /** Instant the boost stops applying (exclusive). */
+  until: Date
+}
+
+/**
+ * Live boosts, keyed by provider.
+ *
+ * Claude, 2026-09-02: Anthropic has the subscription's weekly Claude Code limit
+ * 50% higher through September 13, and this week's window is 2% used with ~16
+ * hours left to run, so that headroom expires unused. 4× puts free at $20/day
+ * and Pro at $40/day until the weekly window resets at 2026-09-02T12:00Z
+ * (17:00 PKT), after which the $5/$10 baseline applies again automatically.
+ *
+ * An entry whose `until` is in the past is inert and can be deleted whenever.
+ */
+export const BUDGET_BOOSTS: Partial<Record<ProviderName, BudgetBoost>> = {
+  claude: { multiplier: 4, until: new Date("2026-09-02T12:00:00Z") },
+}
+
+/** The provider's boost multiplier at `now` — 1 when no boost is live. */
+function getBoostMultiplier(provider: ProviderName, now: Date): number {
+  const boost = BUDGET_BOOSTS[provider]
+  if (!boost || now >= boost.until) return 1
+  return boost.multiplier
+}
+
+/**
  * Daily budget descriptor for a provider on a given plan, or null when
  * unlimited (the `unlimited` plan, or a provider with no configured budget).
  * `pro` gets `PRO_BUDGET_MULTIPLIER`× the free budget; `free` gets the base.
+ * Both are scaled again by any live `BUDGET_BOOSTS` entry.
  */
 export function getProviderBudget(
   provider: ProviderName,
-  plan: Plan = "free"
+  plan: Plan = "free",
+  now: Date = new Date()
 ): ProviderBudget | null {
   if (plan === "unlimited") return null
   const base = FREE_DAILY_BUDGETS[provider]
   if (!base) return null
-  if (plan === "pro") {
-    return { unit: base.unit, limit: base.limit * PRO_BUDGET_MULTIPLIER }
-  }
-  return base
+  const multiplier =
+    (plan === "pro" ? PRO_BUDGET_MULTIPLIER : 1) *
+    getBoostMultiplier(provider, now)
+  if (multiplier === 1) return base
+  return { unit: base.unit, limit: base.limit * multiplier }
 }
 
 /**
