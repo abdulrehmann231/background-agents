@@ -148,7 +148,12 @@ export function useMessageDispatch({
     try {
       if (!session) return
 
-      const isFirstMessage = chat.messages.length === 0
+      // A branched chat's `messages` includes the parent's history, prepended
+      // and flagged `inherited` (see /api/chats/[chatId]) so it renders in the
+      // UI — but that's not a message *this* chat has sent. Only count the
+      // chat's own messages so branches still get auto-named on their actual
+      // first send.
+      const isFirstMessage = chat.messages.every((m) => m.inherited)
       const { agent: selectedAgent, model: selectedModel } = resolveAgentAndModel(
         agent ?? chat.agent,
         model ?? chat.model,
