@@ -12,6 +12,9 @@ import {
   agentHasFreeUsage,
   agentIsReady,
   hasCredentialsForModel,
+  getFreeModelForAgent,
+  modelRequiresKey,
+  getAgentModels,
   type CredentialFlags,
 } from "@background-agents/common"
 
@@ -128,5 +131,45 @@ describe("shared Gemini pool unlocks Flash but not Pro", () => {
   it("unlocks Pro once the user brings their own Gemini key", () => {
     expect(hasCredentialsForModel(pro, geminiOwnKey, "gemini")).toBe(true)
     expect(hasCredentialsForModel(piPro, geminiOwnKey, "pi")).toBe(true)
+  })
+})
+
+describe("free models survive a spent balance", () => {
+  // The escape hatch: with the balance gone, OpenCode's free tier is what a
+  // user is told to switch to. Two separate gates have to agree on that — the
+  // picker (hasCredentialsForModel) and the send path (checkSharedPoolUsage,
+  // which keys on modelRequiresKey). If they drift, the UI offers a model the
+  // server then 429s, and "Continue with OpenCode" loops.
+  const spentWithSharedOpencode: CredentialFlags = {
+    SHARED_BALANCE_EXHAUSTED: true,
+    OPENCODE_API_KEY: true,
+    OPENCODE_API_KEY_SHARED: true,
+  }
+
+  const freeModels = getAgentModels("opencode").filter(
+    (m) => m.requiresKey === "none"
+  )
+
+  it("has free OpenCode models to fall back to", () => {
+    expect(freeModels.length).toBeGreaterThan(0)
+    expect(getFreeModelForAgent("opencode")).toBe(freeModels[0].value)
+  })
+
+  it("keeps every free model selectable in the picker", () => {
+    for (const m of freeModels) {
+      expect(hasCredentialsForModel(m, spentWithSharedOpencode, "opencode")).toBe(true)
+    }
+  })
+
+  it("marks them as needing no key, which is what the send path checks", () => {
+    for (const m of freeModels) {
+      expect(modelRequiresKey("opencode", m.value)).toBe("none")
+    }
+  })
+
+  it("still blocks the paid shared models", () => {
+    const paid = { value: "opencode-go/mimo-v2.5-pro", label: "MiMo", requiresKey: "opencode" as const }
+    expect(hasCredentialsForModel(paid, spentWithSharedOpencode, "opencode")).toBe(false)
+    expect(modelRequiresKey("opencode", paid.value)).toBe("opencode")
   })
 })

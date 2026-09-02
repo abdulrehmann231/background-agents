@@ -15,7 +15,7 @@
  * allowance resets at UTC midnight and nothing carries over.
  */
 
-import type { Agent, ProviderName } from "@background-agents/common"
+import { modelRequiresKey, type Agent, type ProviderName } from "@background-agents/common"
 
 import { prisma } from "./prisma"
 import { sumSharedSpend } from "./token-usage"
@@ -85,6 +85,21 @@ export async function checkSharedPoolUsage(
   // genuine shared-pool run (incl. a Gemini model under Pi/Droid), so gating on
   // the resolved pool covers every case without an agent allowlist.
   if (pool === "user") {
+    return { ...base, allowed: true, limit: null, remaining: null }
+  }
+
+  // A model that needs no credential costs the platform nothing and is already
+  // excluded from the balance sum (freeModel), so it stays available at zero.
+  // This mirrors the first line of hasCredentialsForModel, which is what keeps
+  // the picker and the send path in agreement: without it the UI offers
+  // OpenCode's free tier as the way out of a spent balance and the server then
+  // rejects it — including the "Continue with OpenCode" retry, which would loop
+  // straight back into a 429.
+  //
+  // Checked via requiresKey rather than isFreeModel: that helper matches
+  // tokscale's bare ids at write time and misses "opencode/big-pickle", which
+  // has no -free suffix.
+  if (modelRequiresKey(agent, model) === "none") {
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
