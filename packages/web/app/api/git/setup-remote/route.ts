@@ -67,8 +67,29 @@ export async function POST(req: Request) {
       `cd ${repoPath} && git remote add origin "${remoteUrl}"`
     )
 
-    // 8. Push to the remote (token passed via -c http.extraHeader, not stored)
+    // 8. The sandbox's local history for a brand-new-repo chat starts with its
+    // own throwaway init commit (README) made before this GitHub repo existed.
+    // The GitHub repo has its own, unrelated init commit. Rebase the sandbox's
+    // branch onto the real origin/main so it shares ancestry with `main` instead
+    // of pushing up a second, disconnected history (which later conflicts on
+    // README.md when merging with no common ancestor).
     const git = createSandboxGit(sandbox)
+    await git.fetchBranch(repoPath, "main", githubToken)
+
+    const rootCommit = (
+      await sandbox.process.executeCommand(
+        `cd ${repoPath} && git rev-list --max-parents=0 HEAD`
+      )
+    ).result.trim()
+    const rebaseResult = await sandbox.process.executeCommand(
+      `cd ${repoPath} && git rebase --onto origin/main ${rootCommit} HEAD 2>&1`
+    )
+    if (rebaseResult.exitCode !== 0) {
+      await sandbox.process.executeCommand(`cd ${repoPath} && git rebase --abort 2>/dev/null || true`)
+      return internalError(new Error(`Failed to rebase onto origin/main: ${rebaseResult.result}`))
+    }
+
+    // 9. Push to the remote (token passed via -c http.extraHeader, not stored)
     await git.push(repoPath, githubToken, pushOptions)
 
     return Response.json({ success: true })
