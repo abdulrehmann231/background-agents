@@ -53,7 +53,6 @@ export async function resolveSendCredentials(
         message: usageCheck.error,
         plan: usageCheck.plan,
         provider: usageCheck.provider,
-        unit: usageCheck.unit,
         used: usageCheck.used,
         remaining: usageCheck.remaining,
         limit: usageCheck.limit,

@@ -6,20 +6,18 @@ import { useSession } from "next-auth/react"
 import { queryKeys } from "../keys"
 import { fetchSettings, fetchSharedPoolFlags } from "@/lib/sync/api"
 import type { Settings, CredentialFlags, CustomEndpoint } from "@/lib/types"
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
 export interface SettingsData {
   settings: Settings
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
-  claudeLimitResetAt?: string | null
-  claudeLimitUnit?: BudgetUnit
-  claudeLimitRemaining?: number | null
-  claudeLimitUsed?: number | null
-  claudeLimitTotal?: number | null
-  claudeIsPro?: boolean
-  claudeIsWeekly?: boolean
+  balanceResetAt?: string | null
+  balanceRemaining?: number | null
+  balanceUsed?: number | null
+  balanceTotal?: number | null
+  planIsPro?: boolean
+  balanceWeekly?: boolean
 }
 
 /**
@@ -59,13 +57,12 @@ export function useSettingsQuery() {
         settings: response.settings,
         credentialFlags: response.credentialFlags,
         customEndpoints: response.customEndpoints,
-        claudeLimitResetAt: response.claudeLimitResetAt,
-        claudeLimitUnit: response.claudeLimitUnit,
-        claudeLimitRemaining: response.claudeLimitRemaining,
-        claudeLimitUsed: response.claudeLimitUsed,
-        claudeLimitTotal: response.claudeLimitTotal,
-        claudeIsPro: response.claudeIsPro,
-        claudeIsWeekly: response.claudeIsWeekly,
+        balanceResetAt: response.balanceResetAt,
+        balanceRemaining: response.balanceRemaining,
+        balanceUsed: response.balanceUsed,
+        balanceTotal: response.balanceTotal,
+        planIsPro: response.planIsPro,
+        balanceWeekly: response.balanceWeekly,
       }
     },
     // Wait until NextAuth resolves so we don't fetch the anon endpoint for a

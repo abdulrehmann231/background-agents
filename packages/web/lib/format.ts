@@ -18,19 +18,13 @@ export function fmtTokens(n: number): string {
 }
 
 /**
- * Format a usage amount in its budget unit:
- *   cost     → "$1.23", or "<$0.01" for a nonzero amount that rounds to nothing
- *   messages → "3 messages" / "1 message"
- *   tokens   → "12.3K tokens"
+ * Format a balance for display: "$5.00", "$4.20", or "<$0.01".
  *
- * The sub-cent case matters: a daily cost budget is a fraction of a dollar, so
- * the first turn of the day would otherwise read "$0.00 used" and look broken.
+ * The balance is denominated in dollars of API list value, so it reads as money
+ * — "$4.20 of $5.00", not "4.20 credits". The sub-cent case matters: a daily
+ * balance is a handful of dollars, so the first turn of the day would otherwise
+ * read "$0.00 used" and look broken.
  */
-export function fmtBudgetAmount(n: number, unit: "tokens" | "cost" | "messages"): string {
-  if (unit === "cost") return n > 0 && n < 0.005 ? "<$0.01" : `$${n.toFixed(2)}`
-  if (unit === "messages") {
-    const m = Math.round(n)
-    return `${m} ${m === 1 ? "message" : "messages"}`
-  }
-  return `${fmtTokens(n)} tokens`
+export function fmtBalance(n: number): string {
+  return n > 0 && n < 0.005 ? "<$0.01" : `$${n.toFixed(2)}`
 }

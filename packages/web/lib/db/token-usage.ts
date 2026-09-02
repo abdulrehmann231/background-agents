@@ -7,13 +7,12 @@
  * (sessionId, model) — see `getSessionCumulatives` + `insertTokenUsageRows`,
  * driven by the runner in lib/server/token-metering.ts.
  *
- * `sumSharedUsage` is the read path the rate limiter uses: total tokens/cost a
- * user has consumed from a given shared pool since the start of the period.
- * `sumSharedUsageInUnit` wraps it (and the message count) to answer in whatever
- * unit a pool's budget is denominated in.
+ * `sumSharedSpend` is the read path the limiter uses: what a user has spent
+ * across every shared pool since the start of the period. `sumSharedUsage`
+ * answers the same question for one provider, for the usage views.
  */
 
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
+import { BALANCE_POOL_PROVIDERS } from "@/lib/server/usage-budgets"
 
 import { prisma } from "./prisma"
 
@@ -228,34 +227,6 @@ export async function sumChatUsageByProvider(
 }
 
 /**
- * Count distinct assistant turns (messages) a user ran on one pool for a given
- * provider since `since`. Used for message-based shared-pool budgets (Gemini).
- * Counts distinct messageId so a turn that produced several model rows is one
- * message; free-model turns are excluded from shared budgets like elsewhere.
- */
-export async function countSharedMessages(params: {
-  userId: string
-  provider: string
-  since: Date
-  pool?: UsagePool
-}): Promise<number> {
-  const { userId, provider, since, pool = "shared" } = params
-  const rows = await prisma.tokenUsage.findMany({
-    where: {
-      userId,
-      provider,
-      pool,
-      createdAt: { gte: since },
-      messageId: { not: null },
-      ...(pool === "shared" ? { freeModel: false } : {}),
-    },
-    distinct: ["messageId"],
-    select: { messageId: true },
-  })
-  return rows.length
-}
-
-/**
  * Sum a user's usage from one pool for a given provider since `since`.
  * This is the limiter's aggregation query (indexed by
  * userId+provider+pool+createdAt).
@@ -288,21 +259,56 @@ export async function sumSharedUsage(params: {
 }
 
 /**
- * A user's shared-pool usage for one provider since `since`, expressed in that
- * provider's budget unit. The one place that knows how each unit maps onto the
- * ledger — the limiter, the settings limit display and the usage view all read
- * through it, so they can't disagree about what "used" means.
+ * What a user has spent since `since`, pooled across every shared provider.
+ *
+ * This is the limiter's aggregation query, and the single definition of "used"
+ * — the limiter, the settings display and the usage view all read through it, so
+ * they cannot disagree. Own-key runs are excluded because they were never
+ * stamped `pool: "shared"`; free models are excluded by `freeModel`, which is
+ * what keeps them usable on a spent allowance.
  */
-export async function sumSharedUsageInUnit(params: {
+export async function sumSharedSpend(params: {
   userId: string
-  provider: string
-  unit: BudgetUnit
   since: Date
 }): Promise<number> {
-  const { userId, provider, unit, since } = params
-  if (unit === "messages") {
-    return countSharedMessages({ userId, provider, since })
+  const { userId, since } = params
+  const agg = await prisma.tokenUsage.aggregate({
+    where: {
+      userId,
+      pool: "shared",
+      freeModel: false,
+      provider: { in: [...BALANCE_POOL_PROVIDERS] },
+      createdAt: { gte: since },
+    },
+    _sum: { costUsd: true },
+  })
+  return agg._sum.costUsd ?? 0
+}
+
+/**
+ * The same sum, split by provider — for the breakdown under the usage bar.
+ * Providers with no spend are omitted.
+ */
+export async function sumSharedSpendByProvider(params: {
+  userId: string
+  since: Date
+}): Promise<Record<string, number>> {
+  const { userId, since } = params
+  const grouped = await prisma.tokenUsage.groupBy({
+    by: ["provider"],
+    where: {
+      userId,
+      pool: "shared",
+      freeModel: false,
+      provider: { in: [...BALANCE_POOL_PROVIDERS] },
+      createdAt: { gte: since },
+    },
+    _sum: { costUsd: true },
+  })
+  const out: Record<string, number> = {}
+  for (const g of grouped) {
+    const spend = g._sum.costUsd ?? 0
+    if (spend > 0) out[g.provider] = spend
   }
-  const { limitedTokens, costUsd } = await sumSharedUsage({ userId, provider, since })
-  return unit === "cost" ? costUsd : limitedTokens
+  return out
 }

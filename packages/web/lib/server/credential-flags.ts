@@ -5,31 +5,29 @@
 
 import { prisma } from "@/lib/db/prisma"
 import { isSharedPoolAvailable } from "@/lib/claude-credentials"
-import { sumSharedUsageInUnit } from "@/lib/db/token-usage"
+import { sumSharedSpend } from "@/lib/db/token-usage"
 import { decryptUserCredentials } from "@/lib/db/api-helpers"
 import {
-  getProviderBudget,
+  getDailyBalance,
   getStartOfUtcDay,
   getNextUtcDayReset,
   getStartOfUtcWeek,
   getNextUtcWeekReset,
-  type BudgetUnit,
   type Plan,
 } from "@/lib/server/usage-budgets"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
 import { hasSharedOpencodeKey } from "@/lib/server/opencode-pool"
-import { sharedClaudePoolEligible } from "@background-agents/common"
+import { SHARED_POOL_AGENTS } from "@/lib/server/shared-pool"
+import { agentUsesSharedPool } from "@background-agents/common"
 
 export interface EffectiveFlags {
   flags: CredentialFlags
   limitResetAt: Date | null
-  /** Unit the three amounts below are measured in (USD cost for Claude). */
-  limitUnit: BudgetUnit
-  /** Remaining allowance for capped plans; null = unlimited. */
+  /** Balance remaining for capped plans; null = unlimited. */
   limitRemaining: number | null
-  /** Amount used from the shared Claude pool this period (daily capped / weekly unlimited). */
+  /** Spent across the shared pools this period (daily capped / weekly unlimited). */
   limitUsed: number | null
-  /** Daily budget for capped plans (free/pro); null when unlimited. */
+  /** Daily balance for capped plans (free/pro); null when unlimited. */
   limitTotal: number | null
   /** Whether usage is tracked weekly (unlimited plan) vs daily (free/pro) */
   isWeekly: boolean
@@ -127,9 +125,12 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
     flags.CLAUDE_SHARED_POOL_AVAILABLE = true
   }
 
-  // Check daily limit only for free users who would use the shared pool
-  // (no personal API key or subscription token)
-  const usesSharedPool = sharedClaudePoolEligible(flags)
+  // The balance is pooled across every shared pool, so track it for anyone who
+  // draws on at least one of them. A user with their own key everywhere spends
+  // nothing and gets no balance display.
+  const usesSharedPool = SHARED_POOL_AGENTS.some((agent) =>
+    agentUsesSharedPool(agent, flags)
+  )
   const plan: Plan = user?.plan ?? "free"
   const isPro = plan !== "free"
 
@@ -139,47 +140,29 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   let limitTotal: number | null = null
   let isWeekly = false
 
-  // The unit the Claude pool is budgeted in (USD cost). Read from the free-tier
-  // descriptor so it's still defined on the `unlimited` plan, which has no
-  // budget of its own but still displays usage.
-  const budget = getProviderBudget("claude", plan)
-  const limitUnit: BudgetUnit = budget?.unit ?? getProviderBudget("claude")?.unit ?? "cost"
-
   if (usesSharedPool) {
-    if (plan === "unlimited") {
-      // Unlimited plan: weekly usage for display only — no cap.
+    const allowance = getDailyBalance(plan)
+
+    if (allowance == null) {
+      // Unlimited plan: weekly spend for display only — no cap.
       isWeekly = true
-      limitUsed = await sumSharedUsageInUnit({
-        userId,
-        provider: "claude",
-        unit: limitUnit,
-        since: getStartOfUtcWeek(),
-      })
+      limitUsed = await sumSharedSpend({ userId, since: getStartOfUtcWeek() })
       limitResetAt = getNextUtcWeekReset()
       // limitTotal / limitRemaining stay null (unlimited)
     } else {
-      // Free and Pro users: daily budget (Pro = PRO_BUDGET_MULTIPLIER× free).
-      const used = await sumSharedUsageInUnit({
-        userId,
-        provider: "claude",
-        unit: limitUnit,
-        since: getStartOfUtcDay(),
-      })
+      // Free and Pro: daily allowance (Pro = PRO_BUDGET_MULTIPLIER× free).
+      const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
       limitUsed = used
       limitResetAt = getNextUtcDayReset()
-
-      if (budget != null) {
-        limitTotal = budget.limit
-        limitRemaining = Math.max(0, budget.limit - used)
-        flags.CLAUDE_DAILY_LIMIT_EXCEEDED = used >= budget.limit
-      }
+      limitTotal = allowance
+      limitRemaining = Math.max(0, allowance - used)
+      flags.SHARED_BALANCE_EXHAUSTED = used >= allowance
     }
   }
 
   return {
     flags,
     limitResetAt,
-    limitUnit,
     limitRemaining,
     limitUsed,
     limitTotal,

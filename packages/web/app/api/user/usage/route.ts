@@ -1,34 +1,27 @@
 import { requireAuth, isAuthError, internalError, decryptUserCredentials } from "@/lib/db/api-helpers"
 import { prisma } from "@/lib/db/prisma"
-import { sumSharedUsage, countSharedMessages } from "@/lib/db/token-usage"
+import { sumSharedSpendByProvider } from "@/lib/db/token-usage"
 import {
   SHARED_POOL_AGENTS,
   providerForAgent,
   resolvePool,
 } from "@/lib/server/shared-pool"
 import {
-  getProviderBudget,
+  getDailyBalance,
   getStartOfUtcDay,
   getNextUtcDayReset,
-  type BudgetUnit,
   type Plan,
 } from "@/lib/server/usage-budgets"
 import { agentLabels, type Agent } from "@background-agents/common"
 
-/** Per-pool usage for one shared provider, for today (UTC). */
+/** One shared pool's contribution to today's spend. */
 export interface PoolUsage {
   agent: Agent
   provider: string
   label: string
-  /** Unit this pool's budget is measured in: tokens, USD cost, or messages. */
-  unit: BudgetUnit
-  /** Amount used from the shared pool today, in `unit`. */
+  /** What this pool has drawn today, in USD. */
   used: number
-  /** Estimated cost (USD) of today's shared-pool usage for this provider. */
-  costUsd: number
-  /** Daily budget in `unit`, or null when unlimited (unlimited plan, own key, or no budget). */
-  limit: number | null
-  /** True when the user has their own key for this provider (shared pool unused). */
+  /** True when the user has their own key for this provider (pool unused). */
   ownKey: boolean
 }
 
@@ -37,11 +30,16 @@ export interface UsageResponse {
   plan: Plan
   /** ISO timestamp of the next daily reset (UTC midnight). */
   resetAt: string
+  /** Spent today across every shared pool, in USD. */
+  used: number
+  /** Daily balance in USD, or null when uncapped (`unlimited` plan). */
+  limit: number | null
+  /** Per-pool breakdown of `used`, for the detail under the bar. */
   pools: PoolUsage[]
 }
 
 // =============================================================================
-// GET - per-provider shared-pool token usage for the current user (today)
+// GET - today's spend for the current user, with a per-pool breakdown
 // =============================================================================
 
 export async function GET(): Promise<Response> {
@@ -60,43 +58,25 @@ export async function GET(): Promise<Response> {
     )
     const since = getStartOfUtcDay()
 
-    const pools: PoolUsage[] = await Promise.all(
-      SHARED_POOL_AGENTS.map(async (agent) => {
-        const provider = providerForAgent(agent)
-        const ownKey = resolvePool(agent, storedCreds) === "user"
-        const budget = getProviderBudget(provider, plan)
-        const unit = budget?.unit ?? "tokens"
-        const { limitedTokens, costUsd } = await sumSharedUsage({
-          userId,
-          provider,
-          since,
-        })
-        // "used" is reported in the budget's unit so the UI can render it.
-        const used =
-          unit === "messages"
-            ? await countSharedMessages({ userId, provider, since })
-            : unit === "cost"
-              ? costUsd
-              : limitedTokens
-        // Unlimited on own key, or when the plan has no budget (unlimited plan
-        // or a provider with none configured). `budget` already reflects plan.
-        const limit = ownKey ? null : (budget?.limit ?? null)
-        return {
-          agent,
-          provider,
-          label: agentLabels[agent],
-          unit,
-          used,
-          costUsd,
-          limit,
-          ownKey,
-        }
-      })
-    )
+    // One grouped query for the whole breakdown, rather than one per provider.
+    const byProvider = await sumSharedSpendByProvider({ userId, since })
+
+    const pools: PoolUsage[] = SHARED_POOL_AGENTS.map((agent) => {
+      const provider = providerForAgent(agent)
+      return {
+        agent,
+        provider,
+        label: agentLabels[agent],
+        used: byProvider[provider] ?? 0,
+        ownKey: resolvePool(agent, storedCreds) === "user",
+      }
+    })
 
     const response: UsageResponse = {
       plan,
       resetAt: getNextUtcDayReset().toISOString(),
+      used: Object.values(byProvider).reduce((a, b) => a + b, 0),
+      limit: getDailyBalance(plan),
       pools,
     }
     return Response.json(response)

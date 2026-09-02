@@ -77,10 +77,11 @@ export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // credential at the UI gate so the user can pick claude-code without pasting
   // their own token. Not a CredentialId — it's a server capability, not an env var.
   CLAUDE_SHARED_POOL_AVAILABLE?: boolean
-  // Free user has hit daily limit on shared Claude credentials. When true,
-  // hasCredentialsForModel stops treating the shared pool as usable for
-  // Claude models, so the UI falls back to a model the user can actually run.
-  CLAUDE_DAILY_LIMIT_EXCEEDED?: boolean
+  // User has spent their daily balance. It is pooled across every shared pool
+  // (Claude, OpenCode, Gemini), so when true hasCredentialsForModel stops
+  // treating ANY shared pool as usable and the UI falls back to a model the user
+  // can actually run — their own key, or a free model, which never draws it.
+  SHARED_BALANCE_EXHAUSTED?: boolean
   // Whether the OPENCODE_API_KEY originates from the server environment (shared)
   OPENCODE_API_KEY_SHARED?: boolean
   // Whether the OPENCODE_API_KEY is a user-provided credential stored in DB
@@ -537,7 +538,7 @@ export function hasOwnAnthropicCredentials(flags: CredentialFlags | null | undef
 /**
  * Whether a Claude run would draw from the server's shared Claude pool: the
  * shared pool is available and the user has no personal Anthropic credentials.
- * Does not account for the daily limit — see CLAUDE_DAILY_LIMIT_EXCEEDED.
+ * Does not account for the daily balance — see SHARED_BALANCE_EXHAUSTED.
  */
 export function sharedClaudePoolEligible(flags: CredentialFlags | null | undefined): boolean {
   return !!flags?.CLAUDE_SHARED_POOL_AVAILABLE && !hasOwnAnthropicCredentials(flags)
@@ -567,22 +568,19 @@ export function agentUsesSharedPool(
 
 /**
  * Whether the agent's only route to usage is a shared pool that's been used up,
- * leaving nothing the user can actually run. Currently only the Claude shared
- * pool is metered (CLAUDE_DAILY_LIMIT_EXCEEDED); "exhausted" means the limit is
- * hit AND the user has no personal Anthropic credentials to fall back on. The
- * agent picker shows a yellow dot for this state — distinct from "ready" (green)
- * and "needs setup" (no dot).
+ * leaving nothing the user can actually run. The balance is pooled across all
+ * three shared pools, so spending it closes every one of them at once —
+ * but only for a user who is actually drawing on that pool. agentUsesSharedPool
+ * already returns false once the user stores their own key, so someone with a
+ * personal credential keeps working with a zero balance. The agent picker
+ * shows a yellow dot for this state — distinct from "ready" (green) and "needs
+ * setup" (no dot).
  */
 export function agentSharedPoolExhausted(
   agent: Agent,
   flags: CredentialFlags | null | undefined
 ): boolean {
-  if (agent !== "claude-code") return false
-  return (
-    !!flags?.CLAUDE_DAILY_LIMIT_EXCEEDED &&
-    !!flags?.CLAUDE_SHARED_POOL_AVAILABLE &&
-    !hasOwnAnthropicCredentials(flags)
-  )
+  return !!flags?.SHARED_BALANCE_EXHAUSTED && agentUsesSharedPool(agent, flags)
 }
 
 /**
@@ -636,8 +634,8 @@ export function hasCredentialsForModel(
     // needs a real API key.
     if (agent !== "claude-code") return !!flags?.ANTHROPIC_API_KEY
     // Claude Code can use either API key, the user's pasted subscription, or the shared pool.
-    // But if daily limit is exceeded on the shared pool, don't consider it usable.
-    if (flags?.CLAUDE_DAILY_LIMIT_EXCEEDED) {
+    // With the credit allowance spent, only the user's own credentials remain.
+    if (flags?.SHARED_BALANCE_EXHAUSTED) {
       return !!flags?.ANTHROPIC_API_KEY || !!flags?.CLAUDE_CODE_CREDENTIALS
     }
     return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE)
@@ -645,8 +643,11 @@ export function hasCredentialsForModel(
   if (model.requiresKey === "opencode") {
     // If the user has their own stored OpenCode key, allow all opencode models
     if (flags?.OPENCODE_API_KEY_USER) return true
-    // If only the server-shared key is available, allow only a curated subset
+    // If only the server-shared key is available, allow only a curated subset —
+    // and only while the user still has balance. OpenCode's free models never
+    // reach here (requiresKey "none" returns true above), so they stay usable.
     if (flags?.OPENCODE_API_KEY_SHARED) {
+      if (flags?.SHARED_BALANCE_EXHAUSTED) return false
       return SHARED_OPENCODE_ALLOWED.has(model.value)
     }
     return false
@@ -656,6 +657,7 @@ export function hasCredentialsForModel(
     // the free pool backs only the cheaper Flash tier — Pro-tier Gemini models
     // stay locked across every agent until the user adds their own key.
     if (flags?.GEMINI_API_KEY_SHARED && !flags?.GEMINI_API_KEY_USER) {
+      if (flags?.SHARED_BALANCE_EXHAUSTED) return false
       return !SHARED_GEMINI_POOL_PRO_MODELS.has(model.value)
     }
     // Otherwise the user's own Gemini key unlocks every Gemini model.
@@ -699,6 +701,21 @@ export function getDefaultModelForAgent(
 
   const firstAvailable = allModels.find(m => hasCredentialsForModel(m, flags, agent))
   return firstAvailable?.value || defaultModel
+}
+
+/**
+ * The agent's first model that needs no credential at all, or undefined when it
+ * has none. OpenCode's free tier is the one that matters: it never draws
+ * the balance, so it stays usable once a user's daily balance is spent.
+ *
+ * Deliberately takes no flags. getDefaultModelForAgent would also land here once
+ * SHARED_BALANCE_EXHAUSTED is set, but that flag arrives with the settings query
+ * and can be a request behind — when we already know the balance is gone (a 429
+ * just came back), picking the free model outright avoids retrying into the same
+ * wall.
+ */
+export function getFreeModelForAgent(agent: Agent): string | undefined {
+  return (agentModels[agent] ?? []).find((m) => m.requiresKey === "none")?.value
 }
 
 /**

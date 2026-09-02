@@ -110,10 +110,9 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     currentChatId,
     settings,
     credentialFlags,
-    claudeLimitResetAt,
-    claudeLimitUnit,
-    claudeLimitUsed,
-    claudeLimitTotal,
+    balanceResetAt,
+    balanceUsed,
+    balanceTotal,
     isHydrated,
     isLoading,
     isLoadingMessages,
@@ -642,10 +641,9 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                     setLimitReachedState({
                       show: true,
                       provider: "claude",
-                      unit: claudeLimitUnit,
-                      used: claudeLimitUsed,
-                      limit: claudeLimitTotal,
-                      resetAt: claudeLimitResetAt ? new Date(claudeLimitResetAt) : undefined,
+                      used: balanceUsed,
+                      limit: balanceTotal,
+                      resetAt: balanceResetAt ? new Date(balanceResetAt) : undefined,
                     })
                   }}
                   onSendMessage={handleSendMessage}

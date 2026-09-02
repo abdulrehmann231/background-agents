@@ -5,40 +5,37 @@ import {
 } from "./usage-limit-copy"
 
 describe("formatUsageLimitMessage", () => {
-  it("describes Pro as a higher limit for free users", () => {
-    expect(formatUsageLimitMessage({
-      plan: "free",
-      provider: "claude",
-      unit: "tokens",
-      limit: 100_000,
-    })).toBe(
-      "Daily Claude limit reached (100,000 tokens). " +
-      "Upgrade to Pro for higher daily limits, upgrade to Unlimited for unlimited usage, " +
-      "or add your own Claude key."
+  it("describes Pro as a bigger balance for free users, and names the free-model escape", () => {
+    expect(formatUsageLimitMessage({ plan: "free", limit: 5 })).toBe(
+      "Daily limit reached ($5.00). " +
+      "Upgrade to Pro for twice the daily balance, upgrade to Unlimited for uncapped usage, " +
+      "add your own API key, or switch to a free model."
     )
   })
 
-  it("only offers Unlimited or BYOK after a Pro user reaches the limit", () => {
-    expect(formatUsageLimitMessage({
-      plan: "pro",
-      provider: "gemini",
-      unit: "messages",
-      limit: 200,
-    })).toBe(
-      "Daily Gemini limit reached (200 messages). " +
-      "Upgrade to Unlimited for unlimited usage, or add your own Gemini key."
+  it("only offers Unlimited, BYOK or free models after a Pro user runs out", () => {
+    expect(formatUsageLimitMessage({ plan: "pro", limit: 10 })).toBe(
+      "Daily limit reached ($10.00). " +
+      "Upgrade to Unlimited for uncapped usage, add your own API key, " +
+      "or switch to a free model."
     )
   })
 
-  it("formats cost allowances without promising a plan upgrade to Unlimited users", () => {
-    expect(formatUsageLimitMessage({
-      plan: "unlimited",
-      provider: "opencode",
-      unit: "cost",
-      limit: 1,
-    })).toBe(
-      "Daily OpenCode limit reached ($1.00). Add your own OpenCode key to continue."
+  it("does not promise a plan upgrade to Unlimited users", () => {
+    expect(formatUsageLimitMessage({ plan: "unlimited", limit: 5 })).toBe(
+      "Daily limit reached ($5.00). Add your own API key to continue."
     )
+  })
+
+  it("names no provider — the balance is pooled across all three", () => {
+    const msg = formatUsageLimitMessage({ plan: "free", limit: 5 })
+    for (const provider of ["Claude", "Gemini", "OpenCode"]) {
+      expect(msg).not.toContain(provider)
+    }
+  })
+
+  it("renders the allowance as money", () => {
+    expect(formatUsageLimitMessage({ plan: "free", limit: 2.5 })).toContain("($2.50)")
   })
 })
 
@@ -47,7 +44,7 @@ describe("getLimitUpgradeCopy", () => {
     expect(getLimitUpgradeCopy("free")).toEqual({
       targetPlan: "pro",
       title: "Upgrade to Pro",
-      description: "Higher daily limits on all shared pools and priority support",
+      description: "Twice the daily balance and priority support",
     })
   })
 

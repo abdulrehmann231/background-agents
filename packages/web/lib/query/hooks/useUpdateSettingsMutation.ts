@@ -48,18 +48,18 @@ export function useUpdateSettingsMutation() {
     },
     onSuccess: (response) => {
       // Update with the full server response. Must carry every field —
-      // dropping any (e.g. customEndpoints or the claudeLimit* fields) would
+      // dropping any (e.g. customEndpoints or the balance* fields) would
       // blank it in the cache until the next refetch.
       queryClient.setQueryData<SettingsData>(queryKeys.settings.all, {
         settings: response.settings,
         credentialFlags: response.credentialFlags,
         customEndpoints: response.customEndpoints,
-        claudeLimitResetAt: response.claudeLimitResetAt,
-        claudeLimitRemaining: response.claudeLimitRemaining,
-        claudeLimitUsed: response.claudeLimitUsed,
-        claudeLimitTotal: response.claudeLimitTotal,
-        claudeIsPro: response.claudeIsPro,
-        claudeIsWeekly: response.claudeIsWeekly,
+        balanceResetAt: response.balanceResetAt,
+        balanceRemaining: response.balanceRemaining,
+        balanceUsed: response.balanceUsed,
+        balanceTotal: response.balanceTotal,
+        planIsPro: response.planIsPro,
+        balanceWeekly: response.balanceWeekly,
       })
     },
     onError: (err, _, context) => {

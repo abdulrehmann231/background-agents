@@ -8,7 +8,6 @@
 
 import type { Chat, Message, Settings, CustomEndpoint } from "@/lib/types"
 import type { Credentials, CredentialFlags } from "@/lib/credentials"
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
 
 // =============================================================================
 // Types
@@ -66,13 +65,12 @@ export interface SettingsResponse {
   settings: Settings
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
-  claudeLimitResetAt?: string | null
-  claudeLimitUnit?: BudgetUnit
-  claudeLimitRemaining?: number | null
-  claudeLimitUsed?: number | null
-  claudeLimitTotal?: number | null
-  claudeIsPro?: boolean
-  claudeIsWeekly?: boolean
+  balanceResetAt?: string | null
+  balanceRemaining?: number | null
+  balanceUsed?: number | null
+  balanceTotal?: number | null
+  planIsPro?: boolean
+  balanceWeekly?: boolean
 }
 
 // =============================================================================
