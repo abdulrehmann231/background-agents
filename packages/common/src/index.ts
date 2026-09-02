@@ -49,6 +49,7 @@ export {
   hasCredentialsForModel,
   modelRequiresKey,
   getDefaultModelForAgent,
+  getFreeModelForAgent,
   resolveModelForAgent,
   resolveAgent,
   resolveAgentAndModel,

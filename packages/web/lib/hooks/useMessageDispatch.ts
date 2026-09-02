@@ -221,7 +221,6 @@ export function useMessageDispatch({
               pendingMessage: { chatId, content, files, planMode },
               plan: result.plan,
               provider: result.provider,
-              unit: result.unit,
               used: result.used,
               limit: result.limit,
               resetAt: result.resetAt ? new Date(result.resetAt) : undefined,

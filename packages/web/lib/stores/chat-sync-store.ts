@@ -46,13 +46,11 @@ export interface LimitReachedState {
     files?: File[]
     planMode?: boolean
   }
-  /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
+  /** Shared-pool provider the blocked run would have used. */
   provider?: string
   /** Subscription tier used to select a non-redundant upgrade path. */
   plan?: Plan
-  /** Unit the budget is measured in (tokens | cost | messages). */
-  unit?: "tokens" | "cost" | "messages"
-  /** Amount used / daily budget for that provider, in `unit`. */
+  /** Spent today / the daily balance, in USD. */
   used?: number | null
   limit?: number | null
   resetAt?: Date

@@ -12,7 +12,7 @@ import { useEffect, useCallback, useMemo, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useQueryClient } from "@tanstack/react-query"
 import type { Chat, ChatStatus, CustomEndpoint } from "@/lib/types"
-import { getDefaultModelForAgent } from "@/lib/types"
+import { getDefaultModelForAgent, getFreeModelForAgent } from "@/lib/types"
 import type { Credentials } from "@/lib/credentials"
 import { basename } from "@/lib/format"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
@@ -98,13 +98,12 @@ export function useChatWithSync() {
 
   const settings = settingsQuery.data?.settings ?? DEFAULT_SETTINGS
   const credentialFlags = settingsQuery.data?.credentialFlags ?? {}
-  const claudeLimitResetAt = settingsQuery.data?.claudeLimitResetAt ?? null
-  const claudeLimitUnit = settingsQuery.data?.claudeLimitUnit
-  const claudeLimitUsed = settingsQuery.data?.claudeLimitUsed ?? null
-  const claudeLimitTotal = settingsQuery.data?.claudeLimitTotal ?? null
-  const claudeLimitRemaining = settingsQuery.data?.claudeLimitRemaining ?? null
-  const claudeIsPro = settingsQuery.data?.claudeIsPro ?? false
-  const claudeIsWeekly = settingsQuery.data?.claudeIsWeekly ?? false
+  const balanceResetAt = settingsQuery.data?.balanceResetAt ?? null
+  const balanceUsed = settingsQuery.data?.balanceUsed ?? null
+  const balanceTotal = settingsQuery.data?.balanceTotal ?? null
+  const balanceRemaining = settingsQuery.data?.balanceRemaining ?? null
+  const planIsPro = settingsQuery.data?.planIsPro ?? false
+  const balanceWeekly = settingsQuery.data?.balanceWeekly ?? false
   const currentChat = useMemo(() => chats.find((c) => c.id === currentChatId) ?? null, [chats, currentChatId])
   // While NextAuth is still resolving the session, the chats/settings queries
   // are disabled (enabled: isAuthenticated). A disabled React Query reports
@@ -324,8 +323,13 @@ export function useChatWithSync() {
     // Close the dialog first
     setLimitReachedState({ show: false })
 
-    // Get the default model for OpenCode
-    const openCodeModel = getDefaultModelForAgent("opencode", credentialFlags)
+    // The balance is spent, so route straight to a model that never draws it.
+    // Falling back through getDefaultModelForAgent would depend on the settings
+    // query having already delivered SHARED_BALANCE_EXHAUSTED, which it may not
+    // have — and retrying into a paid model would just hit the same 429.
+    const openCodeModel =
+      getFreeModelForAgent("opencode") ??
+      getDefaultModelForAgent("opencode", credentialFlags)
 
     // Send the message with OpenCode agent
     sendMessage(
@@ -344,13 +348,12 @@ export function useChatWithSync() {
     currentChatId,
     settings,
     credentialFlags,
-    claudeLimitResetAt,
-    claudeLimitUnit,
-    claudeLimitUsed,
-    claudeLimitTotal,
-    claudeLimitRemaining,
-    claudeIsPro,
-    claudeIsWeekly,
+    balanceResetAt,
+    balanceUsed,
+    balanceTotal,
+    balanceRemaining,
+    planIsPro,
+    balanceWeekly,
     isHydrated,
     isLoading,
     isLoadingMessages,

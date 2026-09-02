@@ -4,8 +4,8 @@ import { useEffect, useState } from "react"
 import { Gauge } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MobileSectionHeader } from "./shared"
-import type { UsageResponse, PoolUsage } from "@/app/api/user/usage/route"
-import { fmtBudgetAmount } from "@/lib/format"
+import type { UsageResponse } from "@/app/api/user/usage/route"
+import { fmtBalance } from "@/lib/format"
 import { PRO_BUDGET_MULTIPLIER } from "@/lib/server/usage-budgets"
 
 /** Tailwind classes for the bar fill based on how close to the limit we are. */
@@ -15,62 +15,16 @@ function fillClass(pct: number): string {
   return "bg-primary"
 }
 
-function PoolBar({ pool }: { pool: PoolUsage }) {
-  const unlimited = pool.limit == null
-  const pct = unlimited ? 0 : Math.min(1, pool.used / Math.max(1, pool.limit!))
-
-  return (
-    <div className="py-3 border-b border-border/30 last:border-b-0">
-      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-        <span className="text-sm font-medium">{pool.label}</span>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {pool.ownKey ? (
-            "Your own key"
-          ) : unlimited ? (
-            <>
-              {fmtBudgetAmount(pool.used, pool.unit)}{" "}
-              <span className="text-primary">· Unlimited</span>
-            </>
-          ) : (
-            <>
-              {fmtBudgetAmount(pool.used, pool.unit)} / {fmtBudgetAmount(pool.limit!, pool.unit)}
-            </>
-          )}
-        </span>
-      </div>
-
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        {pool.ownKey ? null : (
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              unlimited ? "bg-primary/40" : fillClass(pct)
-            )}
-            style={{ width: unlimited ? "100%" : `${Math.max(2, pct * 100)}%` }}
-          />
-        )}
-      </div>
-
-      {(pool.ownKey || !unlimited) && (
-        <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
-          {pool.ownKey
-            ? "Using your own key — shared pool not used"
-            : `${fmtBudgetAmount(Math.max(0, pool.limit! - pool.used), pool.unit)} left`}
-        </div>
-      )}
-    </div>
-  )
-}
-
 interface UsageSectionProps {
   isMobile: boolean
 }
 
 /**
- * Daily usage for each shared credential pool, in that pool's own budget unit
- * (USD for Claude and OpenCode, messages for Gemini). Free and Pro users see
- * their usage against the per-provider daily budget (Pro's is PRO_BUDGET_MULTIPLIER×
- * the free one); unlimited-plan users and own-key providers show as unlimited.
+ * Today's spend against the daily balance.
+ *
+ * One balance covers every shared pool, so this is a single bar with a per-pool
+ * breakdown underneath — the breakdown is where the money went, not separate
+ * budgets. Own-key pools are listed as such: they draw nothing.
  */
 export function UsageSection({ isMobile }: UsageSectionProps) {
   const [data, setData] = useState<UsageResponse | null>(null)
@@ -95,39 +49,89 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
     }
   }, [])
 
+  const unlimited = data?.limit == null
+  const pct =
+    data && data.limit != null ? Math.min(1, data.used / Math.max(data.limit, 0.0001)) : 0
+
   return (
     <div>
       {isMobile && <MobileSectionHeader icon={Gauge} label="Usage" />}
 
-      <p className="text-xs text-muted-foreground mb-2">
-        Daily usage on the shared credential pools. Resets at 00:00 UTC. Each
-        pool has its own limit, measured in whatever best reflects its cost
-        (spend, or messages).
+      <p className="text-xs text-muted-foreground mb-3">
+        Your daily balance, spent across every shared pool. Resets at 00:00 UTC.
+        Free models don&apos;t draw from it.
       </p>
 
       {error ? (
         <div className="text-sm text-destructive py-3">{error}</div>
       ) : !data ? (
         <div className="space-y-3 py-3" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="space-y-2">
-              <div className="h-3 w-24 rounded bg-muted animate-pulse" />
-              <div className="h-2 w-full rounded-full bg-muted animate-pulse" />
-            </div>
-          ))}
+          <div className="h-3 w-32 rounded bg-muted animate-pulse" />
+          <div className="h-2 w-full rounded-full bg-muted animate-pulse" />
+          <div className="h-3 w-full rounded bg-muted animate-pulse" />
         </div>
       ) : (
         <div>
-          {data.pools.map((pool) => (
-            <PoolBar key={pool.provider} pool={pool} />
-          ))}
+          {/* The allowance */}
+          <div className="flex items-baseline justify-between gap-2 mb-1.5">
+            <span className="text-sm font-medium">Used today</span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {unlimited ? (
+                <>
+                  {fmtBalance(data.used)} <span className="text-primary">· Unlimited</span>
+                </>
+              ) : (
+                <>
+                  {fmtBalance(data.used)} / {fmtBalance(data.limit!)}
+                </>
+              )}
+            </span>
+          </div>
+
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                unlimited ? "bg-primary/40" : fillClass(pct)
+              )}
+              style={{ width: unlimited ? "100%" : `${Math.max(2, pct * 100)}%` }}
+            />
+          </div>
+
+          {!unlimited && (
+            <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+              {fmtBalance(Math.max(0, data.limit! - data.used))} left
+            </div>
+          )}
+
+          {/* Where they went */}
+          <div className="mt-4 border-t border-border/30 pt-2">
+            {data.pools.map((pool) => (
+              <div
+                key={pool.provider}
+                className="flex items-baseline justify-between gap-2 py-1.5 text-xs"
+              >
+                <span className="text-muted-foreground">{pool.label}</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {pool.ownKey ? (
+                    "Your own key"
+                  ) : pool.used > 0 ? (
+                    <span className="text-foreground">{fmtBalance(pool.used)}</span>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+
           {data.plan === "unlimited" ? (
             <p className="text-[11px] text-primary mt-2">
               Unlimited plan — shared pools are uncapped. Usage shown for reference.
             </p>
           ) : data.plan === "pro" ? (
             <p className="text-[11px] text-primary mt-2">
-              Pro plan — {PRO_BUDGET_MULTIPLIER}× the free daily budget on each shared pool.
+              Pro plan — {PRO_BUDGET_MULTIPLIER}× the free daily balance.
             </p>
           ) : null}
         </div>

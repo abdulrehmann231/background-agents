@@ -131,8 +131,10 @@ export function AgentModelSelector({
     setShowAgentDropdown(false)
     setShowAgentSheet(false)
 
-    // Block switching to claude-code if daily limit is exceeded
-    if (agent === "claude-code" && credentialFlags.CLAUDE_DAILY_LIMIT_EXCEEDED) {
+    // Block switching to any agent whose only route is a shared pool the user
+    // has no balance left for. agentSharedPoolExhausted is per-agent, so an
+    // agent the user has their own key for stays selectable at zero balance.
+    if (agentSharedPoolExhausted(agent, credentialFlags)) {
       showClaudeLimitDialog()
       return
     }

@@ -22,7 +22,6 @@ import {
   validateEndpoints,
 } from "@/lib/server/custom-endpoints"
 import type { Settings } from "@/lib/types"
-import type { BudgetUnit } from "@/lib/server/usage-budgets"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
 interface SettingsResponse {
@@ -31,19 +30,18 @@ interface SettingsResponse {
   /** The user's custom endpoints, headers decrypted for the owner to edit. */
   customEndpoints: CustomEndpoint[]
   /** ISO timestamp when the daily Claude limit resets, or null if not limited */
-  claudeLimitResetAt: string | null
+  balanceResetAt: string | null
   /** Unit the three amounts below are in — "cost" (USD) for the Claude pool. */
-  claudeLimitUnit: BudgetUnit
   /** Remaining Claude allowance today, or null if not applicable */
-  claudeLimitRemaining: number | null
+  balanceRemaining: number | null
   /** Claude allowance used in the current period, or null if not using shared pool */
-  claudeLimitUsed: number | null
+  balanceUsed: number | null
   /** Daily budget for free/pro, or null if unlimited */
-  claudeLimitTotal: number | null
+  balanceTotal: number | null
   /** Whether user is a pro subscriber */
-  claudeIsPro: boolean
+  planIsPro: boolean
   /** Whether usage is tracked weekly (pro) vs daily (free) */
-  claudeIsWeekly: boolean
+  balanceWeekly: boolean
 }
 
 function readSettings(raw: unknown): Settings {
@@ -81,13 +79,12 @@ export async function GET(): Promise<Response> {
       settings: readSettings(user?.settings),
       credentialFlags: effective.flags,
       customEndpoints: decryptUserEndpoints(user?.customEndpoints),
-      claudeLimitResetAt: effective.limitResetAt?.toISOString() ?? null,
-      claudeLimitUnit: effective.limitUnit,
-      claudeLimitRemaining: effective.limitRemaining,
-      claudeLimitUsed: effective.limitUsed,
-      claudeLimitTotal: effective.limitTotal,
-      claudeIsPro: effective.isPro,
-      claudeIsWeekly: effective.isWeekly,
+      balanceResetAt: effective.limitResetAt?.toISOString() ?? null,
+      balanceRemaining: effective.limitRemaining,
+      balanceUsed: effective.limitUsed,
+      balanceTotal: effective.limitTotal,
+      planIsPro: effective.isPro,
+      balanceWeekly: effective.isWeekly,
     }
     return Response.json(response)
   } catch (error) {
@@ -174,13 +171,12 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       customEndpoints: decryptUserEndpoints(
         newEndpoints ?? (user?.customEndpoints as unknown)
       ),
-      claudeLimitResetAt: effective.limitResetAt?.toISOString() ?? null,
-      claudeLimitUnit: effective.limitUnit,
-      claudeLimitRemaining: effective.limitRemaining,
-      claudeLimitUsed: effective.limitUsed,
-      claudeLimitTotal: effective.limitTotal,
-      claudeIsPro: effective.isPro,
-      claudeIsWeekly: effective.isWeekly,
+      balanceResetAt: effective.limitResetAt?.toISOString() ?? null,
+      balanceRemaining: effective.limitRemaining,
+      balanceUsed: effective.limitUsed,
+      balanceTotal: effective.limitTotal,
+      planIsPro: effective.isPro,
+      balanceWeekly: effective.isWeekly,
     }
     return Response.json(response)
   } catch (error) {

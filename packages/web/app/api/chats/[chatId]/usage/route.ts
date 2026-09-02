@@ -6,9 +6,8 @@ import {
   notFound,
   internalError,
 } from "@/lib/db/api-helpers"
-import { sumChatUsageByProvider, countChatMessagesByProvider } from "@/lib/db/token-usage"
-import { getProviderBudget, type BudgetUnit } from "@/lib/server/usage-budgets"
-import { ALL_AGENTS, agentLabels, agentToProvider, type ProviderName } from "@background-agents/common"
+import { sumChatUsageByProvider } from "@/lib/db/token-usage"
+import { ALL_AGENTS, agentLabels, agentToProvider } from "@background-agents/common"
 
 /** Reverse map: SDK provider id → human label (via its agent). */
 const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
@@ -19,14 +18,22 @@ function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1)
 }
 
-/** Per-provider usage for a single chat, in that provider's budget unit. */
+/**
+ * Per-provider usage for a single chat: tokens and their API list-price value.
+ *
+ * Note this is NOT the daily balance. It spans every provider the chat touched,
+ * including ones with no shared pool, and it counts own-key runs — which cost
+ * the platform nothing. So it answers "what was this conversation worth", not
+ * "what did it take off my allowance". The balance lives in the Usage settings
+ * tab, which is scoped to the shared pools.
+ */
 export interface ChatProviderUsageView {
   provider: string
   label: string
-  /** Unit `value` is measured in: tokens, USD cost, or messages. */
-  unit: BudgetUnit
-  /** Amount used, in `unit`. */
-  value: number
+  /** Total tokens recorded for this provider in the chat (cache included). */
+  totalTokens: number
+  /** Those tokens priced at API list rates, in USD. Zero for free models. */
+  costUsd: number
 }
 
 export interface ChatUsageResponse {
@@ -51,18 +58,12 @@ export async function GET(
     if (!chat) return notFound("Chat not found")
 
     const rows = await sumChatUsageByProvider(chatId)
-    const providers: ChatProviderUsageView[] = await Promise.all(
-      rows.map(async (r) => {
-        const unit = getProviderBudget(r.provider as ProviderName)?.unit ?? "tokens"
-        const value =
-          unit === "cost"
-            ? r.costUsd
-            : unit === "messages"
-              ? await countChatMessagesByProvider(chatId, r.provider)
-              : r.totalTokens
-        return { provider: r.provider, label: providerLabel(r.provider), unit, value }
-      })
-    )
+    const providers: ChatProviderUsageView[] = rows.map((r) => ({
+      provider: r.provider,
+      label: providerLabel(r.provider),
+      totalTokens: r.totalTokens,
+      costUsd: r.costUsd,
+    }))
 
     const response: ChatUsageResponse = { providers }
     return Response.json(response)

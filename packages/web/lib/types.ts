@@ -19,6 +19,7 @@ export {
   agentLabels,
   agentSupportsPlanMode,
   getDefaultModelForAgent,
+  getFreeModelForAgent,
   resolveModelForAgent,
   resolveAgent,
   resolveAgentAndModel,

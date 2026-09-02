@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { Crown, Key, Zap } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
-import { fmtBudgetAmount } from "@/lib/format"
+import { fmtBalance } from "@/lib/format"
 import {
   getLimitUpgradeCopy,
   type LimitUpgradeTarget,
@@ -19,11 +19,9 @@ interface LimitReachedDialogProps {
   onContinueWithOpenCode: () => void
   onAddApiKey: () => void
   onUpgradePlan: (targetPlan: LimitUpgradeTarget) => void
-  /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
+  /** Shared-pool provider the blocked run would have used (claude | gemini | opencode). */
   provider?: string
-  /** Unit the budget is measured in; falls back to the provider's default. */
-  unit?: BudgetUnit
-  /** Amount used / daily budget for that provider, in `unit`. */
+  /** Spent today / the daily balance, in USD of API list value. */
   used?: number | null
   limit?: number | null
   /** Current subscription tier; defaults to Free for older responses. */
@@ -38,17 +36,6 @@ const PROVIDER_LABEL: Record<string, string> = {
   opencode: "OpenCode",
 }
 
-type BudgetUnit = "tokens" | "cost" | "messages"
-
-/**
- * Map provider to its budget unit. Mirrors server usage-budgets, and is only a
- * fallback for a caller that didn't pass the server-resolved unit.
- */
-function unitForProvider(provider?: string): BudgetUnit {
-  if (provider === "gemini") return "messages"
-  return "cost"
-}
-
 export function LimitReachedDialog({
   open,
   onClose,
@@ -56,7 +43,6 @@ export function LimitReachedDialog({
   onAddApiKey,
   onUpgradePlan,
   provider,
-  unit: unitProp,
   used,
   limit,
   plan,
@@ -64,11 +50,11 @@ export function LimitReachedDialog({
   isMobile = false,
 }: LimitReachedDialogProps) {
   const providerLabel = PROVIDER_LABEL[provider ?? ""] ?? "shared model"
-  // Don't offer "switch to OpenCode" when OpenCode itself is the limited pool.
-  const canSwitchToOpenCode = provider !== "opencode"
+  // Always offer it, even when OpenCode was the pool that ran the user out: the
+  // balance is pooled, and this routes to OpenCode's *free* models, which never
+  // draw it down and so stay available at zero.
+  const canSwitchToOpenCode = true
   const primaryButtonRef = useRef<HTMLButtonElement>(null)
-  // Prefer the server-provided unit; fall back to the provider's default.
-  const unit = unitProp ?? unitForProvider(provider)
   const upgradeCopy = getLimitUpgradeCopy(plan)
 
   // Focus the primary button when modal opens
@@ -135,19 +121,24 @@ export function LimitReachedDialog({
           <ModalHeader title="Daily Limit Reached" />
           <div className="px-4 pt-3 pb-4 space-y-4">
             <div className="text-sm text-muted-foreground">
-              You've reached your daily{" "}
-              <span className="font-medium text-foreground">{providerLabel}</span> limit
-              {typeof limit === "number" ? ` of ${fmtBudgetAmount(limit, unit)}` : ""}
-              {typeof used === "number" && typeof limit === "number"
-                ? ` (${fmtBudgetAmount(used, unit)} used)`
-                : ""}
+              You&apos;ve used your daily balance
+              {typeof limit === "number" ? (
+                <>
+                  {" "}
+                  &mdash;{" "}
+                  <span className="font-medium text-foreground">
+                    {typeof used === "number" ? fmtBalance(used) : fmtBalance(limit)} of{" "}
+                    {fmtBalance(limit)}
+                  </span>
+                </>
+              ) : null}
               . It resets at{" "}
               <span className="font-medium text-foreground">{resetTimeString}</span>.
+              Your balance is shared across Claude, OpenCode and Gemini.
             </div>
 
             <div className="space-y-2">
-              {/* Primary option: Continue with OpenCode (hidden when OpenCode is
-                  the pool that hit its limit). */}
+              {/* Primary option: OpenCode's free models, which never draw the balance. */}
               {canSwitchToOpenCode && (
                 <button
                   ref={primaryButtonRef}

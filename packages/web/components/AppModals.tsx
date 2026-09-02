@@ -251,7 +251,6 @@ export function AppModals({
         open={limitReachedState.show}
         onClose={onDismissLimitReached}
         provider={limitReachedState.provider}
-        unit={limitReachedState.unit}
         used={limitReachedState.used}
         limit={limitReachedState.limit}
         plan={limitReachedState.plan}

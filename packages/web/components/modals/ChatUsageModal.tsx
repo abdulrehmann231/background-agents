@@ -8,29 +8,30 @@ import { useModals } from "@/lib/contexts"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { ALL_AGENTS, agentToProvider, type Agent } from "@background-agents/common"
 import type { ChatUsageResponse } from "@/app/api/chats/[chatId]/usage/route"
-import { fmtTokens } from "@/lib/format"
+import { fmtTokens, fmtBalance } from "@/lib/format"
 
 /** Reverse map: SDK provider id → agent (for the provider's icon). */
 const PROVIDER_TO_AGENT: Record<string, Agent> = Object.fromEntries(
   ALL_AGENTS.map((agent) => [agentToProvider[agent], agent])
 )
 
-/** Render a usage amount in its budget unit (tokens / USD cost / messages). */
-function fmtUsage(value: number, unit: ChatUsageResponse["providers"][number]["unit"]) {
-  if (unit === "cost") return <>${value.toFixed(2)}</>
-  if (unit === "messages")
-    return (
-      <>
-        {Math.round(value)}
-        <span className="text-muted-foreground"> {Math.round(value) === 1 ? "message" : "messages"}</span>
-      </>
-    )
+/** Render a token count with its unit label. */
+function fmtUsage(totalTokens: number) {
   return (
     <>
-      {fmtTokens(value)}
+      {fmtTokens(totalTokens)}
       <span className="text-muted-foreground"> tokens</span>
     </>
   )
+}
+
+/**
+ * Sum a numeric field across the provider rows. The modal shows a total because
+ * a chat that switched agents mid-way splits across several rows, and the useful
+ * number is what the whole conversation came to.
+ */
+function sum(rows: ChatUsageResponse["providers"], key: "totalTokens" | "costUsd") {
+  return rows.reduce((acc, r) => acc + r[key], 0)
 }
 
 interface ChatUsageModalProps {
@@ -107,6 +108,7 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
                 No tokens recorded for this chat yet.
               </div>
             ) : (
+              <>
               <div className="divide-y divide-border/40">
                 {data.providers.map((p) => {
                   const agent = PROVIDER_TO_AGENT[p.provider]
@@ -116,13 +118,38 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
                         {agent && <AgentIcon agent={agent} className="h-4 w-4 shrink-0" />}
                         {p.label}
                       </span>
-                      <span className="text-sm font-medium tabular-nums">
-                        {fmtUsage(p.value, p.unit)}
+                      <span className="text-right">
+                        <span className="block text-sm font-medium tabular-nums">
+                          {fmtUsage(p.totalTokens)}
+                        </span>
+                        <span className="block text-xs text-muted-foreground tabular-nums">
+                          {fmtBalance(p.costUsd)}
+                        </span>
                       </span>
                     </div>
                   )
                 })}
+
+                {data.providers.length > 1 && (
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <span className="text-sm font-medium">Total</span>
+                    <span className="text-right">
+                      <span className="block text-sm font-medium tabular-nums">
+                        {fmtUsage(sum(data.providers, "totalTokens"))}
+                      </span>
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        {fmtBalance(sum(data.providers, "costUsd"))}
+                      </span>
+                    </span>
+                  </div>
+                )}
               </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Cost is what these tokens would bill at API list prices — including
+                turns run on your own key, which cost the platform nothing.
+              </p>
+              </>
             )}
 
             <button

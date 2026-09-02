@@ -1,43 +1,44 @@
 /**
- * Usage limits for the shared credential pools.
+ * The daily spending balance for the shared credential pools.
  *
- * Free users get a daily, per-provider budget when using a shared pool (Claude
- * OAuth / Gemini / OpenCode server keys), denominated in whatever unit that pool
- * is metered in — see lib/server/usage-budgets. Pro users get the same budget
- * scaled by PRO_BUDGET_MULTIPLIER; only `unlimited`-plan users (and anyone
- * running on their own key) are uncapped. Usage is summed from the TokenUsage
- * ledger (populated post-turn by tokscale metering).
+ * Free users get a daily balance, denominated in US dollars of API list value,
+ * spent across every shared pool (Claude OAuth / Gemini / OpenCode server keys)
+ * rather than budgeted per provider. Pro gets the same balance scaled by
+ * PRO_BUDGET_MULTIPLIER; only `unlimited`-plan users, and anyone running on
+ * their own key, are uncapped. Spending is summed from the TokenUsage ledger
+ * (populated post-turn by tokscale metering).
  *
  * Because a turn's cost is only known after it runs, enforcement is post-hoc:
- * we block the NEXT turn once the period's usage has met the budget.
+ * we block the NEXT turn once the day's spending has met the allowance. That
+ * means one turn can overshoot — a single agentic run has been observed at $476
+ * — and nothing here bounds that. The blast radius is one day, since the
+ * allowance resets at UTC midnight and nothing carries over.
  */
 
-import type { Agent, ProviderName } from "@background-agents/common"
+import { modelRequiresKey, type Agent, type ProviderName } from "@background-agents/common"
 
 import { prisma } from "./prisma"
-import { sumSharedUsageInUnit } from "./token-usage"
+import { sumSharedSpend } from "./token-usage"
 import { providerForRun, resolvePool } from "@/lib/server/shared-pool"
 import { decryptUserCredentials } from "./api-helpers"
 import { formatUsageLimitMessage } from "@/lib/usage-limit-copy"
 import {
-  getProviderBudget,
+  getDailyBalance,
   getNextUtcDayReset,
   getStartOfUtcDay,
-  type BudgetUnit,
   type Plan,
 } from "@/lib/server/usage-budgets"
 
 export interface UsageLimitResult {
   allowed: boolean
   plan: Plan
+  /** Provider this run would have been billed to — for logging and telemetry. */
   provider: ProviderName
-  /** "shared" pools are limited; "user" pools are always allowed. */
+  /** "shared" pools draw the balance; "user" pools are always allowed. */
   pool: "shared" | "user"
-  /** Unit the budget is measured in: tokens, USD cost, or message count. */
-  unit: BudgetUnit
-  /** Amount used in the current period, in `unit` (tokens / USD / messages). */
+  /** Spent today, across every shared pool. */
   used: number
-  /** Daily budget in `unit` (Free/Pro), or null for Unlimited/own-key runs. */
+  /** Daily balance (Free/Pro), or null for Unlimited/own-key runs. */
   limit: number | null
   remaining: number | null
   resetAt: Date
@@ -45,10 +46,16 @@ export interface UsageLimitResult {
 }
 
 /**
- * Check whether a user may start a turn on `agent` given the shared-pool token
- * budget. Unlimited (allowed, no limit) when: the agent has no shared pool, the
- * user supplied their own key for it, or the user is on the `unlimited` plan.
- * Free and Pro users are capped (Pro at PRO_BUDGET_MULTIPLIER× the free budget).
+ * Check whether a user may start a turn on `agent` given their daily
+ * balance. Uncapped (allowed, no limit) when: the agent has no shared pool,
+ * the user supplied their own key for it, or the user is on the `unlimited`
+ * plan. Free and Pro are capped (Pro at PRO_BUDGET_MULTIPLIER× free).
+ *
+ * Note the asymmetry, and that it is deliberate: whether *this* run is metered
+ * depends on the agent and model being used right now, but how much has been
+ * *spent* is pooled across every shared provider. So a user who spent their
+ * balance on Claude is blocked on Gemini too — unless they have their own
+ * Gemini key, in which case this run resolves to the "user" pool and is allowed.
  */
 export async function checkSharedPoolUsage(
   userId: string,
@@ -68,52 +75,50 @@ export async function checkSharedPoolUsage(
     user?.credentials as Record<string, unknown> | null
   )
   // resolvePool folds in the model: custom endpoints and own-key runs read as
-  // "user" (never rate-limited), and a Gemini model under a BYOK agent (Pi,
-  // Droid) reads as the shared Gemini pool.
+  // "user" (never limited), and a Gemini model under a BYOK agent (Pi, Droid)
+  // reads as the shared Gemini pool.
   const pool = resolvePool(agent, storedCreds, model)
 
-  const budget = getProviderBudget(provider, plan)
+  const base = { plan, provider, pool, used: 0, resetAt }
 
-  const base = {
-    plan,
-    provider,
-    pool,
-    unit: budget?.unit ?? ("tokens" as BudgetUnit),
-    used: 0,
-    resetAt,
-  }
-
-  // Not a shared-pool run → unlimited. resolvePool returns "shared" only for a
+  // Not a shared-pool run → uncapped. resolvePool returns "shared" only for a
   // genuine shared-pool run (incl. a Gemini model under Pi/Droid), so gating on
   // the resolved pool covers every case without an agent allowlist.
   if (pool === "user") {
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
-  if (budget == null) {
-    // Unlimited plan, or a provider with no configured budget ⇒ unlimited.
+  // A model that needs no credential costs the platform nothing and is already
+  // excluded from the balance sum (freeModel), so it stays available at zero.
+  // This mirrors the first line of hasCredentialsForModel, which is what keeps
+  // the picker and the send path in agreement: without it the UI offers
+  // OpenCode's free tier as the way out of a spent balance and the server then
+  // rejects it — including the "Continue with OpenCode" retry, which would loop
+  // straight back into a 429.
+  //
+  // Checked via requiresKey rather than isFreeModel: that helper matches
+  // tokscale's bare ids at write time and misses "opencode/big-pickle", which
+  // has no -free suffix.
+  if (modelRequiresKey(agent, model) === "none") {
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
-  const used = await sumSharedUsageInUnit({
-    userId,
-    provider,
-    unit: budget.unit,
-    since: getStartOfUtcDay(),
-  })
+  const allowance = getDailyBalance(plan)
+  if (allowance == null) {
+    // Unlimited plan ⇒ uncapped.
+    return { ...base, allowed: true, limit: null, remaining: null }
+  }
 
-  const remaining = Math.max(0, budget.limit - used)
-  const allowed = used < budget.limit
+  const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
+  const remaining = Math.max(0, allowance - used)
+  const allowed = used < allowance
 
   return {
     ...base,
-    unit: budget.unit,
     allowed,
     used,
-    limit: budget.limit,
+    limit: allowance,
     remaining,
-    error: allowed
-      ? undefined
-      : formatUsageLimitMessage({ plan, provider, unit: budget.unit, limit: budget.limit }),
+    error: allowed ? undefined : formatUsageLimitMessage({ plan, limit: allowance }),
   }
 }
