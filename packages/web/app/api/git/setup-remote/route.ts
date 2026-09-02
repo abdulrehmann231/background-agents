@@ -1,5 +1,5 @@
 import { Daytona } from "@daytonaio/sdk"
-import { createSandboxGit } from "@background-agents/sandbox-git"
+import { createSandboxGit, withAuth } from "@background-agents/sandbox-git"
 import { PATHS } from "@/lib/constants"
 import { requireGitHubAuth, isGitHubAuthError, internalError, badRequest, verifySandboxOwnership, forbidden } from "@/lib/db/api-helpers"
 import { getUserPushOptions } from "@/lib/git/push-options"
@@ -67,7 +67,20 @@ export async function POST(req: Request) {
       `cd ${repoPath} && git remote add origin "${remoteUrl}"`
     )
 
-    // 8. Push to the remote (token passed via -c http.extraHeader, not stored)
+    // 8. This GitHub repo is empty (create-repo never seeds it). Push the
+    // sandbox's local `main` — the branch holding its init commit — first, so
+    // this push is what creates `main` for the first time. That gives `main`
+    // and the working branch a shared ancestor by construction, instead of
+    // `main` getting an independently-created history later that the working
+    // branch conflicts with on merge.
+    const pushMainResult = await sandbox.process.executeCommand(
+      `cd ${repoPath} && ${withAuth(githubToken, "push origin main:main")} 2>&1`
+    )
+    if (pushMainResult.exitCode !== 0) {
+      return internalError(new Error(`Failed to push main: ${pushMainResult.result}`))
+    }
+
+    // 9. Push the working branch (token passed via -c http.extraHeader, not stored)
     const git = createSandboxGit(sandbox)
     await git.push(repoPath, githubToken, pushOptions)
 

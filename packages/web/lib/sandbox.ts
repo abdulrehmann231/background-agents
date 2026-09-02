@@ -9,6 +9,7 @@
 import type { Daytona, Sandbox } from "@daytonaio/sdk"
 import { randomUUID } from "crypto"
 import { createSandboxGit } from "@background-agents/sandbox-git"
+import { getRepoBranches } from "@background-agents/common"
 import { installSkills, discoverInstalledSkills } from "@background-agents/sandbox-skills/sandbox"
 import { TOKSCALE_VERSION, getActiveSnapshotName } from "@background-agents/sandbox-image"
 import { PATHS, SANDBOX_CONFIG } from "@/lib/constants"
@@ -208,7 +209,7 @@ export async function createSandboxForChat(
 
   if (isNewRepo) {
     await sandbox.process.executeCommand(`mkdir -p ${repoPath}`)
-    await sandbox.process.executeCommand(`cd ${repoPath} && git init`)
+    await sandbox.process.executeCommand(`cd ${repoPath} && git init -b main`)
     await sandbox.process.executeCommand(
       `cd ${repoPath} && git config user.email "agent@simplechat.dev" && git config user.name "Simple Chat Agent"`
     )
@@ -221,7 +222,32 @@ export async function createSandboxForChat(
   } else {
     const cloneUrl = `https://github.com/${owner}/${repoApiName}.git`
     const git = createSandboxGit(sandbox)
-    await git.clone(cloneUrl, repoPath, baseBranch, undefined, githubToken!)
+
+    // A repo the user picked can still be empty (e.g. just created via
+    // "Create repository", no commits pushed yet) — there's nothing to
+    // clone. Seed it the same way NEW_REPOSITORY chats do: init locally and
+    // push, so this push is what creates `main`. That way there's never an
+    // independently-created history on GitHub's side for the sandbox's later
+    // work to conflict with.
+    const existingBranches = await getRepoBranches(githubToken!, owner!, repoApiName!, {
+      paginate: false,
+      perPage: 1,
+    })
+
+    if (existingBranches.length === 0) {
+      await sandbox.process.executeCommand(`mkdir -p ${repoPath}`)
+      await sandbox.process.executeCommand(`cd ${repoPath} && git init -b ${baseBranch}`)
+      await sandbox.process.executeCommand(
+        `cd ${repoPath} && git config user.email "agent@simplechat.dev" && git config user.name "Simple Chat Agent"`
+      )
+      await sandbox.process.executeCommand(
+        `cd ${repoPath} && echo "# Project" > README.md && git add . && git commit -m "Initial commit"`
+      )
+      await sandbox.process.executeCommand(`cd ${repoPath} && git remote add origin "${cloneUrl}"`)
+      await git.push(repoPath, githubToken!)
+    } else {
+      await git.clone(cloneUrl, repoPath, baseBranch, undefined, githubToken!)
+    }
 
     let gitName = "Simple Chat Agent"
     let gitEmail = "noreply@example.com"
