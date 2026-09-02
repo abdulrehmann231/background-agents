@@ -1,4 +1,4 @@
-import { createRepo, createFileCommit, type GitHubRepo } from "@background-agents/common"
+import { createRepo, type GitHubRepo } from "@background-agents/common"
 import { requireGitHubAuth, isGitHubAuthError, internalError, badRequest } from "@/lib/db/api-helpers"
 
 export async function POST(req: Request) {
@@ -28,20 +28,11 @@ export async function POST(req: Request) {
       isPrivate: isPrivate ?? false,
     })
 
-    // 4. Create initial commit so the default branch exists
-    // Without this, the repo is empty and cloning with a branch fails
-    await createFileCommit(
-      ghAuth.token,
-      repo.owner.login,
-      repo.name,
-      {
-        path: "README.md",
-        message: "Initial commit",
-        content: `# ${name}\n`,
-      }
-    )
-
-    // 5. Return the created repository details
+    // 4. Return the created repository details. The repo is intentionally left
+    // empty (no commits/branches) here — whichever sandbox connects to it
+    // first (createSandboxForChat or setup-remote) seeds `main` with its own
+    // local history. That keeps there from ever being two independently
+    // created histories that later conflict with no common ancestor.
     return Response.json({
       name: repo.name,
       full_name: repo.full_name,

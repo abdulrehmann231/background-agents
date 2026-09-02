@@ -1,5 +1,5 @@
 import { Daytona } from "@daytonaio/sdk"
-import { createSandboxGit } from "@background-agents/sandbox-git"
+import { createSandboxGit, withAuth } from "@background-agents/sandbox-git"
 import { PATHS } from "@/lib/constants"
 import { requireGitHubAuth, isGitHubAuthError, internalError, badRequest, verifySandboxOwnership, forbidden } from "@/lib/db/api-helpers"
 import { getUserPushOptions } from "@/lib/git/push-options"
@@ -67,29 +67,21 @@ export async function POST(req: Request) {
       `cd ${repoPath} && git remote add origin "${remoteUrl}"`
     )
 
-    // 8. The sandbox's local history for a brand-new-repo chat starts with its
-    // own throwaway init commit (README) made before this GitHub repo existed.
-    // The GitHub repo has its own, unrelated init commit. Rebase the sandbox's
-    // branch onto the real origin/main so it shares ancestry with `main` instead
-    // of pushing up a second, disconnected history (which later conflicts on
-    // README.md when merging with no common ancestor).
-    const git = createSandboxGit(sandbox)
-    await git.fetchBranch(repoPath, "main", githubToken)
-
-    const rootCommit = (
-      await sandbox.process.executeCommand(
-        `cd ${repoPath} && git rev-list --max-parents=0 HEAD`
-      )
-    ).result.trim()
-    const rebaseResult = await sandbox.process.executeCommand(
-      `cd ${repoPath} && git rebase --onto origin/main ${rootCommit} HEAD 2>&1`
+    // 8. This GitHub repo is empty (create-repo never seeds it). Push the
+    // sandbox's local `main` — the branch holding its init commit — first, so
+    // this push is what creates `main` for the first time. That gives `main`
+    // and the working branch a shared ancestor by construction, instead of
+    // `main` getting an independently-created history later that the working
+    // branch conflicts with on merge.
+    const pushMainResult = await sandbox.process.executeCommand(
+      `cd ${repoPath} && ${withAuth(githubToken, "push origin main:main")} 2>&1`
     )
-    if (rebaseResult.exitCode !== 0) {
-      await sandbox.process.executeCommand(`cd ${repoPath} && git rebase --abort 2>/dev/null || true`)
-      return internalError(new Error(`Failed to rebase onto origin/main: ${rebaseResult.result}`))
+    if (pushMainResult.exitCode !== 0) {
+      return internalError(new Error(`Failed to push main: ${pushMainResult.result}`))
     }
 
-    // 9. Push to the remote (token passed via -c http.extraHeader, not stored)
+    // 9. Push the working branch (token passed via -c http.extraHeader, not stored)
+    const git = createSandboxGit(sandbox)
     await git.push(repoPath, githubToken, pushOptions)
 
     return Response.json({ success: true })
