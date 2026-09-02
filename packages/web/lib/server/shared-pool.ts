@@ -95,6 +95,19 @@ export interface UsageMeta {
    * keys. Absent for own-key runs and single-credential pools.
    */
   keyId?: string
+  /**
+   * The model this run was actually started with.
+   *
+   * Normally redundant — tokscale reports the model itself. It exists for the
+   * CLIs that don't: Droid runs a BYOK model through a synthetic
+   * `custom:byok-0` entry and writes `byok-0` as the model id, which no price
+   * table can resolve, so the turn would meter at $0. Metering falls back to
+   * this when tokscale's id is a known placeholder (see token-metering).
+   *
+   * Omitted for custom endpoints, whose `endpoint:<id>` value names our config
+   * row rather than a model anyone can price.
+   */
+  model?: string
 }
 
 /**
@@ -118,7 +131,16 @@ export function buildUsageMeta(
     pool === "shared" && provider === "opencode"
       ? fingerprintKey(resolvedKey)
       : undefined
-  return { pool, provider, ...(keyId ? { keyId } : {}) }
+  // An `endpoint:<id>` value names a config row, not a model, so it would be
+  // useless (and misleading) as a pricing fallback.
+  const runModel =
+    model && !model.startsWith(ENDPOINT_MODEL_PREFIX) ? model : undefined
+  return {
+    pool,
+    provider,
+    ...(keyId ? { keyId } : {}),
+    ...(runModel ? { model: runModel } : {}),
+  }
 }
 
 /**
@@ -129,16 +151,18 @@ export function readUsageMeta(metadata: unknown): UsageMeta | null {
   if (!metadata || typeof metadata !== "object") return null
   const usage = (metadata as { usage?: unknown }).usage
   if (!usage || typeof usage !== "object") return null
-  const { pool, provider, keyId } = usage as {
+  const { pool, provider, keyId, model } = usage as {
     pool?: unknown
     provider?: unknown
     keyId?: unknown
+    model?: unknown
   }
   if ((pool === "shared" || pool === "user") && typeof provider === "string") {
     return {
       pool,
       provider: provider as ProviderName,
       ...(typeof keyId === "string" && keyId ? { keyId } : {}),
+      ...(typeof model === "string" && model ? { model } : {}),
     }
   }
   return null

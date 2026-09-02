@@ -32,6 +32,7 @@ import {
 import { isFreeModel } from "@/lib/server/usage-budgets"
 import { priceClaudeTurn } from "@/lib/server/claude-pricing"
 import { readUsageMeta } from "@/lib/server/shared-pool"
+import { resolveTurnModel, floorCostUsd } from "@/lib/server/turn-pricing"
 
 /** `tokscale models --json --group-by session,model` entry shape (subset). */
 interface TokscaleEntry {
@@ -69,6 +70,12 @@ export interface MeterTurnParams {
   keyId?: string | null
   /** the agent session id (matches tokscale's groupBy=session value) */
   sessionId: string
+  /**
+   * The model the run was started with, from the stamped usage metadata. Used
+   * only to replace a placeholder id the CLI reported (see resolveTurnModel);
+   * null when unknown or when the run used a custom endpoint.
+   */
+  runModel?: string | null
 }
 
 /**
@@ -110,7 +117,8 @@ async function meterTurnUsage(
   sandbox: DaytonaSandbox,
   params: MeterTurnParams
 ): Promise<number> {
-  const { userId, chatId, messageId, provider, pool, keyId, sessionId } = params
+  const { userId, chatId, messageId, provider, pool, keyId, sessionId, runModel } =
+    params
 
   if (!sessionId) return 0
 
@@ -176,6 +184,11 @@ async function meterTurnUsage(
     const key = e.model ?? ""
     const prev = prior.get(key) ?? ZERO_CUMULATIVE
 
+    // Recover a real model id when the CLI reported a placeholder. The diff
+    // cursor above still keys on tokscale's own id (`key`), so substituting
+    // here changes what we price and store without breaking the delta chain.
+    const model = resolveTurnModel(e.model, runModel)
+
     // Per-component delta = current tokscale cumulative − sum of prior deltas.
     // Clamp at 0 to absorb any non-monotonic reporting (e.g. session reset).
     const d = (cur: number, was: number) => Math.max(0, Math.round(cur - was))
@@ -189,7 +202,7 @@ async function meterTurnUsage(
       inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens + reasoningTokens
     // Free models: tokscale misprices them, so force cost to 0. They're still
     // recorded (counted in overall totals) but flagged out of shared budgets.
-    const free = isFreeModel(e.model)
+    const free = isFreeModel(model)
     // The Claude pool's budget is denominated in dollars, so price its deltas
     // from Anthropic's own rates. Every other provider (and any model these
     // rates don't cover) keeps tokscale's figure, diffed like the token
@@ -197,7 +210,7 @@ async function meterTurnUsage(
     // two cumulative costs — same result, one less place to drift.
     const ownPrice =
       provider === "claude"
-        ? priceClaudeTurn(e.model, {
+        ? priceClaudeTurn(model, {
             inputTokens,
             outputTokens,
             cacheReadTokens,
@@ -210,12 +223,21 @@ async function meterTurnUsage(
       // added yet. Worth a line in the logs: the fallback is only as good as
       // whatever tokscale resolved, which may be $0.
       console.warn(
-        `[token-metering] no first-party rate for Claude model "${e.model}" — using tokscale's cost`
+        `[token-metering] no first-party rate for Claude model "${model}" — using tokscale's cost`
       )
     }
-    const costUsd = free
-      ? 0
-      : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
+    let costUsd = free ? 0 : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
+
+    // Nothing on a shared pool may cost zero while consuming real tokens: the
+    // daily balance is the only cap, so a $0 turn is a free route around it.
+    // This catches a model id neither our rates nor tokscale could resolve.
+    if (!free && pool === "shared" && totalTokens > 0 && costUsd === 0) {
+      costUsd = floorCostUsd(totalTokens)
+      console.warn(
+        `[token-metering] no price for "${model}" (${provider}) — ` +
+          `charging the floor rate for ${totalTokens} tokens`
+      )
+    }
 
     // Skip no-op turns (nothing new since last capture).
     if (totalTokens === 0 && costUsd === 0) continue
@@ -228,7 +250,7 @@ async function meterTurnUsage(
       chatId,
       messageId: messageId ?? null,
       provider,
-      model: e.model ?? null,
+      model: model ?? null,
       pool,
       keyId: keyId ?? null,
       freeModel: free,
@@ -290,5 +312,6 @@ export async function meterAssistantTurn(
     pool: meta?.pool ?? "user",
     keyId: meta?.keyId ?? null,
     sessionId: params.sessionId,
+    runModel: meta?.model ?? null,
   })
 }
