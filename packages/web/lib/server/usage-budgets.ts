@@ -96,17 +96,11 @@ interface BudgetBoost {
 /**
  * Live boosts, keyed by provider.
  *
- * Claude, 2026-09-02: Anthropic has the subscription's weekly Claude Code limit
- * 50% higher through September 13, and this week's window is 2% used with ~16
- * hours left to run, so that headroom expires unused. 4× puts free at $20/day
- * and Pro at $40/day until the weekly window resets at 2026-09-02T12:00Z
- * (17:00 PKT), after which the $5/$10 baseline applies again automatically.
- *
- * An entry whose `until` is in the past is inert and can be deleted whenever.
+ * No boost is currently live — the Claude pool runs on its $5/$10 baseline.
+ * Add an entry here (with a hard `until` expiry) to temporarily scale a
+ * provider's budget; an entry whose `until` is in the past is inert.
  */
-export const BUDGET_BOOSTS: Partial<Record<ProviderName, BudgetBoost>> = {
-  claude: { multiplier: 4, until: new Date("2026-09-02T12:00:00Z") },
-}
+export const BUDGET_BOOSTS: Partial<Record<ProviderName, BudgetBoost>> = {}
 
 /** The provider's boost multiplier at `now` — 1 when no boost is live. */
 function getBoostMultiplier(provider: ProviderName, now: Date): number {
