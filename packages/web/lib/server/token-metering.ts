@@ -25,14 +25,18 @@ import { prisma } from "@/lib/db/prisma"
 import {
   getSessionCumulatives,
   insertTokenUsageRows,
-  ZERO_CUMULATIVE,
   type TokenUsageInsert,
   type UsagePool,
 } from "@/lib/db/token-usage"
+import { cursorForModel } from "@/lib/server/usage-cursor"
 import { isFreeModel } from "@/lib/server/usage-budgets"
 import { priceClaudeTurn } from "@/lib/server/claude-pricing"
 import { readUsageMeta } from "@/lib/server/shared-pool"
-import { resolveTurnModel, floorCostUsd } from "@/lib/server/turn-pricing"
+import {
+  resolveTurnModel,
+  floorCostUsd,
+  snapCostResidue,
+} from "@/lib/server/turn-pricing"
 
 /** `tokscale models --json --group-by session,model` entry shape (subset). */
 interface TokscaleEntry {
@@ -181,13 +185,14 @@ async function meterTurnUsage(
   const rows: TokenUsageInsert[] = []
 
   for (const e of entries) {
-    const key = e.model ?? ""
-    const prev = prior.get(key) ?? ZERO_CUMULATIVE
-
-    // Recover a real model id when the CLI reported a placeholder. The diff
-    // cursor above still keys on tokscale's own id (`key`), so substituting
-    // here changes what we price and store without breaking the delta chain.
+    // Recover a real model id when the CLI reported a placeholder (Droid's
+    // `byok-0`, Claude Code's `<synthetic>`).
     const model = resolveTurnModel(e.model, runModel)
+
+    // Look the diff cursor up under the id we STORE, not the one tokscale
+    // reported — getSessionCumulatives groups by the persisted `model` column.
+    // See cursorForModel for why both ids are summed.
+    const prev = cursorForModel(prior, e.model, model)
 
     // Per-component delta = current tokscale cumulative − sum of prior deltas.
     // Clamp at 0 to absorb any non-monotonic reporting (e.g. session reset).
@@ -226,7 +231,12 @@ async function meterTurnUsage(
         `[token-metering] no first-party rate for Claude model "${model}" — using tokscale's cost`
       )
     }
-    let costUsd = free ? 0 : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
+    // Snapped because that subtraction diffs a float against a *sum* of
+    // floats: a no-op turn lands on ~4e-16, not 0, which silently defeated
+    // both `costUsd === 0` tests below. See snapCostResidue.
+    let costUsd = snapCostResidue(
+      free ? 0 : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
+    )
 
     // Nothing on a shared pool may cost zero while consuming real tokens: the
     // daily balance is the only cap, so a $0 turn is a free route around it.

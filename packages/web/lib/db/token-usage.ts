@@ -13,6 +13,10 @@
  */
 
 import { BALANCE_POOL_PROVIDERS } from "@/lib/server/usage-budgets"
+import {
+  ZERO_CUMULATIVE,
+  type SessionCumulative,
+} from "@/lib/server/usage-cursor"
 
 import { prisma } from "./prisma"
 
@@ -55,26 +59,10 @@ export interface TokenUsageInsert {
   createdAt?: Date
 }
 
-/** Prior cumulative totals for one (session, model) pair, per component. */
-export interface SessionCumulative {
-  inputTokens: number
-  outputTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-  reasoningTokens: number
-  totalTokens: number
-  costUsd: number
-}
-
-const ZERO_CUMULATIVE: SessionCumulative = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-  reasoningTokens: 0,
-  totalTokens: 0,
-  costUsd: 0,
-}
+// The cursor shape and its keying rules live in lib/server/usage-cursor, which
+// stays free of database imports so they can be unit-tested; re-exported here
+// so callers of this module keep importing them from one place.
+export { ZERO_CUMULATIVE, type SessionCumulative }
 
 /**
  * Reconstruct the prior cumulative per model for a session by summing the
@@ -116,8 +104,6 @@ export async function getSessionCumulatives(
   }
   return out
 }
-
-export { ZERO_CUMULATIVE }
 
 /**
  * Persist a batch of per-turn delta rows. No-op for an empty array.
