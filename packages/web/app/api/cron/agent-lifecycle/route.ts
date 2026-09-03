@@ -3,6 +3,7 @@ import { addMinutes, differenceInMinutes } from "date-fns"
 
 import { prisma } from "@/lib/db/prisma"
 import { logLlmProviderError } from "@/lib/db/activity-log"
+import { UsageLimitError } from "@/lib/db/usage-limit"
 
 import { INTERACTIVE_HARD_TIMEOUT, SCHEDULED_HARD_TIMEOUT } from "./_lib/constants"
 import { monitorAgent, stopAgent } from "./_lib/monitor"
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
     completedScheduled: 0,
     timedOutInteractive: 0,
     timedOutScheduled: 0,
+    skippedOverLimit: 0,
     errors: [] as string[],
   }
 
@@ -103,6 +105,16 @@ export async function GET(req: Request) {
         await startJobExecution(run.job, run, daytona)
         results.startedPendingRuns++
       } catch (err) {
+        // A spent daily balance isn't a job failure: record it on the run so
+        // the user can see why it didn't run, but leave the job enabled and
+        // its failure streak untouched. The balance resets at UTC midnight and
+        // nextRunAt was already advanced at dispatch, so the job resumes on
+        // its own.
+        if (err instanceof UsageLimitError) {
+          await failScheduledRun(run, err.message, daytona, { countFailure: false })
+          results.skippedOverLimit++
+          continue
+        }
         await failScheduledRun(run, `Failed to start: ${err}`, daytona)
         results.errors.push(`Failed to start run ${run.id}: ${err}`)
       }
