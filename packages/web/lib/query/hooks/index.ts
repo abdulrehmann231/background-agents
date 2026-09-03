@@ -30,6 +30,7 @@ export type {
   UserUsage,
   UserModelUsage,
   PoolSplitPoint,
+  MessageHistogramBucket,
 } from "./useUsageDistributionQuery"
 export { useAdminActivityQuery } from "./useAdminActivityQuery"
 export { useAdminUsersQuery, useUpdateUserMutation } from "./useAdminUsersQuery"

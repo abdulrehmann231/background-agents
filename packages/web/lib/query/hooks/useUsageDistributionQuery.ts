@@ -46,6 +46,13 @@ export interface UserUsage {
   models: UserModelUsage[]
 }
 
+/** One bin of the per-message tokens/cost histogram. */
+export interface MessageHistogramBucket {
+  bucketStart: number
+  bucketEnd: number
+  count: number
+}
+
 export interface UsageDistribution {
   range: UsageRange
   provider: UsageProvider
@@ -58,6 +65,8 @@ export interface UsageDistribution {
   byKey: Record<UsageMetric, Array<Record<string, number | string>>>
   /** Per-user totals with a per-model breakdown, heaviest spender first. */
   users: UserUsage[]
+  /** Distribution of per-message size, one histogram per metric. */
+  messageHistogram: Record<UsageMetric, MessageHistogramBucket[]>
 }
 
 async function fetchUsageDistribution(

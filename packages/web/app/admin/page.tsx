@@ -15,6 +15,7 @@ import {
   X,
   ArrowLeft,
   Wallet,
+  BarChart3,
 } from "lucide-react"
 import { ActivityFeed } from "@/components/admin/ActivityFeed"
 import { ClaudeCredentials } from "@/components/admin/ClaudeCredentials"
@@ -26,6 +27,7 @@ import { HourlyActivityChart } from "@/components/admin/charts/HourlyActivityCha
 import { DailyMessagesChatsChart } from "@/components/admin/charts/DailyMessagesChatsChart"
 import { PoolSplitChart } from "@/components/admin/charts/PoolSplitChart"
 import { UsageByKeyChart } from "@/components/admin/charts/UsageByKeyChart"
+import { MessageValueHistogramChart } from "@/components/admin/charts/MessageValueHistogramChart"
 import { UsageByUserTable } from "@/components/admin/UsageByUserTable"
 import {
   useAdminStatsQuery,
@@ -61,18 +63,21 @@ const POOL_DISABLED_HINT =
   "Message counts come from the activity log, which has no credential-pool dimension. Switch to Tokens or Cost to filter by pool."
 
 // Providers backed by a shared credential pool. Scoped one at a time so token
-// counts and costs stay comparable within a view.
+// counts and costs stay comparable within a view. Claude first — it's the
+// pool most admins are watching day to day — then OpenCode, then Gemini.
 const USAGE_PROVIDERS: { key: UsageProvider; label: string }[] = [
-  { key: "opencode", label: "OpenCode" },
   { key: "claude", label: "Claude" },
+  { key: "opencode", label: "OpenCode" },
   { key: "gemini", label: "Gemini" },
 ]
 
-// Tokens vs cost for the usage section. Independent of a provider's budget unit
-// — OpenCode is budgeted in USD, but its token volume is still worth seeing.
+// Tokens vs cost for the usage section. Cost first and selected by default —
+// it's the figure that answers "what is this costing us," which is usually
+// the first question. Independent of a provider's budget unit — OpenCode is
+// budgeted in USD, but its token volume is still worth seeing.
 const USAGE_METRICS: { key: UsageMetric; label: string }[] = [
-  { key: "tokens", label: "Tokens" },
   { key: "cost", label: "Cost" },
+  { key: "tokens", label: "Tokens" },
 ]
 
 /**
@@ -149,8 +154,8 @@ export default function AdminDashboard() {
   // Provider + measure for the usage block. Its own controls: the section is
   // always shared-pool-aware and always day-bucketed, so it doesn't inherit the
   // Overview's pool filter or its "all" range.
-  const [usageProvider, setUsageProvider] = useState<UsageProvider>("opencode")
-  const [usageMetric, setUsageMetric] = useState<UsageMetric>("tokens")
+  const [usageProvider, setUsageProvider] = useState<UsageProvider>("claude")
+  const [usageMetric, setUsageMetric] = useState<UsageMetric>("cost")
   // Cost only means something for a provider whose usage is denominated in it.
   // Rather than resetting the stored preference when switching to Gemini, derive
   // the effective metric — so returning to OpenCode or Claude lands you back on
@@ -495,7 +500,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Peak Hours */}
-                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm lg:col-span-2">
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-500/10">
                       <Clock className="h-4 w-4 text-pink-500" />
@@ -566,12 +571,7 @@ export default function AdminDashboard() {
 
               <section className="grid gap-4 md:gap-6 lg:grid-cols-2">
                 {/* Shared vs own key */}
-                <div
-                  className={cn(
-                    "rounded-xl border bg-card p-4 md:p-6 shadow-sm",
-                    usageProvider !== "opencode" && "lg:col-span-2"
-                  )}
-                >
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10">
                       <Wallet className="h-4 w-4 text-teal-500" />
@@ -608,6 +608,33 @@ export default function AdminDashboard() {
                     )}
                   </div>
                 )}
+
+                {/* Per-message distribution — how heavy a typical turn is for
+                    the selected provider. Alone in the row once OpenCode's
+                    per-key card is showing, so it spans full width there. */}
+                <div
+                  className={cn(
+                    "rounded-xl border bg-card p-4 md:p-6 shadow-sm",
+                    usageProvider === "opencode" && "lg:col-span-2"
+                  )}
+                >
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10">
+                      <BarChart3 className="h-4 w-4 text-rose-500" />
+                    </div>
+                    <h3 className="font-medium">
+                      {effectiveUsageMetric === "cost" ? "Cost" : "Tokens"} per message
+                    </h3>
+                  </div>
+                  {usageQuery.isLoading ? (
+                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                  ) : (
+                    <MessageValueHistogramChart
+                      data={usage?.messageHistogram[effectiveUsageMetric] ?? []}
+                      metric={effectiveUsageMetric}
+                    />
+                  )}
+                </div>
               </section>
             </>
           )}
