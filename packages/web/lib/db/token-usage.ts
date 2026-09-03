@@ -12,6 +12,8 @@
  * answers the same question for one provider, for the usage views.
  */
 
+import { Prisma } from "@prisma/client"
+
 import { BALANCE_POOL_PROVIDERS } from "@/lib/server/usage-budgets"
 import {
   ZERO_CUMULATIVE,
@@ -22,6 +24,45 @@ import { prisma } from "./prisma"
 
 /** Credential pool a turn ran against. */
 export type UsagePool = "shared" | "user"
+
+/**
+ * A Prisma client or an interactive-transaction handle. The cursor read and
+ * the row insert must be able to run on the *same* transaction, or the lock
+ * that serialises them has nothing to protect.
+ */
+export type UsageDb = Prisma.TransactionClient | typeof prisma
+
+/**
+ * Namespace for this app's Postgres advisory locks, so a key derived from a
+ * session id cannot collide with a lock taken for some unrelated purpose.
+ * Arbitrary, but must stay stable: "toku" as ASCII.
+ */
+const ADVISORY_LOCK_NAMESPACE = 0x746f6b75
+
+/**
+ * Serialise metering for one agent session against every other writer.
+ *
+ * The ledger's delta is computed read-modify-write — read the prior rows, sum
+ * them, insert the difference — with nothing making that atomic. Two writers
+ * that read before either inserts compute the same delta and both persist it,
+ * which is how one production reply came to be billed twice at $44.10.
+ *
+ * Takes a *transaction-scoped* advisory lock, which matters twice over: it is
+ * released when the transaction ends however it ends (commit, rollback, or a
+ * dropped connection), so a crashed finalizer cannot strand the session; and
+ * it is the only advisory-lock form that is safe through a transaction-mode
+ * pooler such as the Supabase/pgbouncer endpoint this app connects on, because
+ * the transaction is pinned to one server connection for its whole life.
+ *
+ * The loser blocks here, then reads a cursor that already includes the
+ * winner's rows, computes a zero delta, and writes nothing.
+ */
+export async function lockSessionForMetering(
+  sessionId: string,
+  tx: UsageDb
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ADVISORY_LOCK_NAMESPACE}::int, hashtext(${sessionId})::int)`
+}
 
 /** A single delta row to persist for one (session, model) of one turn. */
 export interface TokenUsageInsert {
@@ -74,9 +115,10 @@ export { ZERO_CUMULATIVE, type SessionCumulative }
  * Keyed by `model ?? ""`. Missing key ⇒ first capture for that model.
  */
 export async function getSessionCumulatives(
-  sessionId: string
+  sessionId: string,
+  tx: UsageDb = prisma
 ): Promise<Map<string, SessionCumulative>> {
-  const grouped = await prisma.tokenUsage.groupBy({
+  const grouped = await tx.tokenUsage.groupBy({
     by: ["model"],
     where: { sessionId },
     _sum: {
@@ -109,10 +151,11 @@ export async function getSessionCumulatives(
  * Persist a batch of per-turn delta rows. No-op for an empty array.
  */
 export async function insertTokenUsageRows(
-  rows: TokenUsageInsert[]
+  rows: TokenUsageInsert[],
+  tx: UsageDb = prisma
 ): Promise<void> {
   if (rows.length === 0) return
-  await prisma.tokenUsage.createMany({
+  await tx.tokenUsage.createMany({
     data: rows.map((r) => ({
       userId: r.userId,
       chatId: r.chatId ?? null,

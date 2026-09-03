@@ -12,6 +12,58 @@
  * rules can be unit-tested directly.
  */
 
+/** The part of a tokscale entry that carries a model's cumulative counts. */
+export interface ModelCumulativeEntry {
+  model: string | null
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+}
+
+/**
+ * Reduce tokscale's entries to at most one per model.
+ *
+ * `--group-by session,model` should already guarantee that, but production
+ * shows it does not: 19 ledger rows were written by a single insert because
+ * one tokscale run reported the same (session, model) twice. Both were diffed
+ * against the same cursor, so both charged the full delta.
+ *
+ * A model's cumulative is a high-water mark, so the largest entry is the
+ * truthful one and summing would invent usage that never happened. Entries
+ * that disagree are reported in `conflicted` for the caller to log — that
+ * would mean tokscale is partitioning one model across rows, which is worth
+ * knowing about rather than silently resolving.
+ */
+export function collapseEntriesByModel<T extends ModelCumulativeEntry>(
+  entries: T[]
+): { entries: T[]; collapsed: number; conflicted: string[] } {
+  const total = (e: T) =>
+    e.input + e.output + e.cacheRead + e.cacheWrite + e.reasoning
+
+  const best = new Map<string, T>()
+  const conflicted = new Set<string>()
+
+  for (const entry of entries) {
+    const key = entry.model ?? ""
+    const held = best.get(key)
+    if (!held) {
+      best.set(key, entry)
+      continue
+    }
+    if (total(entry) !== total(held)) conflicted.add(key)
+    if (total(entry) > total(held)) best.set(key, entry)
+  }
+
+  const kept = [...best.values()]
+  return {
+    entries: kept,
+    collapsed: entries.length - kept.length,
+    conflicted: [...conflicted],
+  }
+}
+
 /** Prior cumulative totals for one (session, model) pair, per component. */
 export interface SessionCumulative {
   inputTokens: number

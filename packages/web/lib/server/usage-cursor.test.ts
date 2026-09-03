@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest"
 
 import {
+  collapseEntriesByModel,
   cursorForModel,
   sumCumulatives,
   ZERO_CUMULATIVE,
@@ -83,5 +84,73 @@ describe("cursorForModel", () => {
     expect(cursorForModel(new Map(), "claude-fable-5", "claude-fable-5")).toEqual(
       ZERO_CUMULATIVE
     )
+  })
+})
+
+describe("collapseEntriesByModel", () => {
+  const entry = (model: string | null, input: number) => ({
+    model,
+    input,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    reasoning: 0,
+  })
+
+  it("passes distinct models through untouched", () => {
+    const given = [entry("claude-fable-5", 10), entry("gemini-3-flash", 20)]
+    const got = collapseEntriesByModel(given)
+    expect(got.entries).toEqual(given)
+    expect(got.collapsed).toBe(0)
+    expect(got.conflicted).toEqual([])
+  })
+
+  it("collapses a model tokscale reported twice", () => {
+    // The regression: one tokscale run reporting the same (session, model)
+    // twice wrote two rows from a single insert, each diffed against the same
+    // cursor, so the turn was charged twice.
+    const got = collapseEntriesByModel([
+      entry("claude-fable-5", 100),
+      entry("claude-fable-5", 100),
+    ])
+    expect(got.entries).toEqual([entry("claude-fable-5", 100)])
+    expect(got.collapsed).toBe(1)
+    expect(got.conflicted).toEqual([])
+  })
+
+  it("keeps the high-water mark, never the sum", () => {
+    // A cumulative is a high-water mark. Summing would invent usage: 100 and
+    // 140 are two readings of one counter, not 240 tokens.
+    const got = collapseEntriesByModel([
+      entry("claude-fable-5", 100),
+      entry("claude-fable-5", 140),
+      entry("claude-fable-5", 120),
+    ])
+    expect(got.entries).toEqual([entry("claude-fable-5", 140)])
+    expect(got.collapsed).toBe(2)
+  })
+
+  it("reports models whose entries disagreed, so the caller can log it", () => {
+    const got = collapseEntriesByModel([
+      entry("claude-fable-5", 100),
+      entry("claude-fable-5", 140),
+      entry("gemini-3-flash", 5),
+      entry("gemini-3-flash", 5),
+    ])
+    expect(got.conflicted).toEqual(["claude-fable-5"])
+  })
+
+  it("treats a null model as its own key rather than dropping it", () => {
+    const got = collapseEntriesByModel([entry(null, 7), entry("claude-fable-5", 3)])
+    expect(got.entries).toHaveLength(2)
+    expect(got.collapsed).toBe(0)
+  })
+
+  it("handles an empty list", () => {
+    expect(collapseEntriesByModel([])).toEqual({
+      entries: [],
+      collapsed: 0,
+      conflicted: [],
+    })
   })
 })
