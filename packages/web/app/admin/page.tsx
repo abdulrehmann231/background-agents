@@ -15,6 +15,7 @@ import {
   X,
   ArrowLeft,
   Wallet,
+  BarChart3,
 } from "lucide-react"
 import { ActivityFeed } from "@/components/admin/ActivityFeed"
 import { ClaudeCredentials } from "@/components/admin/ClaudeCredentials"
@@ -26,6 +27,7 @@ import { HourlyActivityChart } from "@/components/admin/charts/HourlyActivityCha
 import { DailyMessagesChatsChart } from "@/components/admin/charts/DailyMessagesChatsChart"
 import { PoolSplitChart } from "@/components/admin/charts/PoolSplitChart"
 import { UsageByKeyChart } from "@/components/admin/charts/UsageByKeyChart"
+import { MessageValueHistogramChart } from "@/components/admin/charts/MessageValueHistogramChart"
 import { UsageByUserTable } from "@/components/admin/UsageByUserTable"
 import {
   useAdminStatsQuery,
@@ -61,18 +63,21 @@ const POOL_DISABLED_HINT =
   "Message counts come from the activity log, which has no credential-pool dimension. Switch to Tokens or Cost to filter by pool."
 
 // Providers backed by a shared credential pool. Scoped one at a time so token
-// counts and costs stay comparable within a view.
+// counts and costs stay comparable within a view. Claude first — it's the
+// pool most admins are watching day to day — then OpenCode, then Gemini.
 const USAGE_PROVIDERS: { key: UsageProvider; label: string }[] = [
-  { key: "opencode", label: "OpenCode" },
   { key: "claude", label: "Claude" },
+  { key: "opencode", label: "OpenCode" },
   { key: "gemini", label: "Gemini" },
 ]
 
-// Tokens vs cost for the usage section. Independent of a provider's budget unit
-// — OpenCode is budgeted in USD, but its token volume is still worth seeing.
+// Tokens vs cost for the usage section. Cost first and selected by default —
+// it's the figure that answers "what is this costing us," which is usually
+// the first question. Independent of a provider's budget unit — OpenCode is
+// budgeted in USD, but its token volume is still worth seeing.
 const USAGE_METRICS: { key: UsageMetric; label: string }[] = [
-  { key: "tokens", label: "Tokens" },
   { key: "cost", label: "Cost" },
+  { key: "tokens", label: "Tokens" },
 ]
 
 /**
@@ -97,10 +102,11 @@ const COST_PROVIDERS: ReadonlySet<UsageProvider> = new Set<UsageProvider>([
  */
 const BILLED_PROVIDERS: ReadonlySet<UsageProvider> = new Set<UsageProvider>(["opencode"])
 
-type SectionKey = "overview" | "users" | "activity" | "credentials"
+type SectionKey = "overview" | "leaderboard" | "users" | "activity" | "credentials"
 
 const sections: { key: SectionKey; label: string; icon: typeof Users }[] = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "leaderboard", label: "Leaderboard", icon: Trophy },
   { key: "users", label: "Users", icon: Users },
   { key: "activity", label: "Activity", icon: Activity },
   { key: "credentials", label: "Credentials", icon: KeyRound },
@@ -148,8 +154,8 @@ export default function AdminDashboard() {
   // Provider + measure for the usage block. Its own controls: the section is
   // always shared-pool-aware and always day-bucketed, so it doesn't inherit the
   // Overview's pool filter or its "all" range.
-  const [usageProvider, setUsageProvider] = useState<UsageProvider>("opencode")
-  const [usageMetric, setUsageMetric] = useState<UsageMetric>("tokens")
+  const [usageProvider, setUsageProvider] = useState<UsageProvider>("claude")
+  const [usageMetric, setUsageMetric] = useState<UsageMetric>("cost")
   // Cost only means something for a provider whose usage is denominated in it.
   // Rather than resetting the stored preference when switching to Gemini, derive
   // the effective metric — so returning to OpenCode or Claude lands you back on
@@ -493,23 +499,8 @@ export default function AdminDashboard() {
                   <UserGrowthChart data={weeklyActiveUsers} />
                 </div>
 
-                {/* Top Active Users */}
-                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
-                      <Trophy className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <h3 className="font-medium">Top Users by {metricName}</h3>
-                  </div>
-                  <TopUsersTable
-                    data={topUsers}
-                    metric={metric}
-                    isLoading={statsQuery.isFetching}
-                  />
-                </div>
-
                 {/* Peak Hours */}
-                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm lg:col-span-2">
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-500/10">
                       <Clock className="h-4 w-4 text-pink-500" />
@@ -618,13 +609,206 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {/* Per-user breakdown, expandable to models */}
+                {/* Per-message distribution — how heavy a typical turn is for
+                    the selected provider. Alone in the row once OpenCode's
+                    per-key card is showing, so it spans full width there. */}
                 <div
                   className={cn(
                     "rounded-xl border bg-card p-4 md:p-6 shadow-sm",
-                    usageProvider !== "opencode" && "lg:col-span-2"
+                    usageProvider === "opencode" && "lg:col-span-2"
                   )}
                 >
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10">
+                      <BarChart3 className="h-4 w-4 text-rose-500" />
+                    </div>
+                    <h3 className="font-medium">
+                      {effectiveUsageMetric === "cost" ? "Cost" : "Tokens"} per message
+                    </h3>
+                  </div>
+                  {usageQuery.isLoading ? (
+                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                  ) : (
+                    <MessageValueHistogramChart
+                      data={usage?.messageHistogram[effectiveUsageMetric] ?? []}
+                      metric={effectiveUsageMetric}
+                    />
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* Leaderboard Section */}
+          {activeSection === "leaderboard" && (
+            <>
+              {/* Global Time Range Selector — shared with Overview, since Top
+                  Users is driven by the same stats query. */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold md:text-xl">Leaderboard</h2>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  {/* Include admins toggle */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={includeAdmins}
+                    onClick={() => setIncludeAdmins((v) => !v)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all sm:text-sm",
+                      includeAdmins
+                        ? "border-primary/30 bg-primary/10 text-primary"
+                        : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-4 w-7 items-center rounded-full p-0.5 transition-colors",
+                        includeAdmins ? "bg-primary" : "bg-muted-foreground/30"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "h-3 w-3 rounded-full bg-background transition-transform",
+                          includeAdmins ? "translate-x-3" : "translate-x-0"
+                        )}
+                      />
+                    </span>
+                    Include admins
+                  </button>
+                  {/* Metric selector */}
+                  <div className="flex gap-1 rounded-lg bg-muted p-1">
+                    {METRIC_OPTIONS.map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setMetric(option.key)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                          metric === option.key
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Credential pool selector. Disabled under the Messages
+                      metric, which is sourced from ActivityLog and carries no
+                      pool dimension — see POOL_DISABLED_HINT. */}
+                  <div
+                    className={cn(
+                      "flex gap-1 rounded-lg bg-muted p-1",
+                      poolFilterDisabled && "opacity-50"
+                    )}
+                    title={poolFilterDisabled ? POOL_DISABLED_HINT : undefined}
+                  >
+                    {POOL_OPTIONS.map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setPool(option.key)}
+                        disabled={poolFilterDisabled}
+                        title={poolFilterDisabled ? POOL_DISABLED_HINT : option.hint}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                          poolFilterDisabled && "cursor-not-allowed",
+                          !poolFilterDisabled && pool === option.key
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Time range buttons */}
+                  <div className="flex gap-1 rounded-lg bg-muted p-1">
+                    {(["24h", "7d", "30d", "all"] as const).map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => setGlobalTimeRange(range)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                          globalTimeRange === range
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {range === "all" ? "All" : range}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Top Active Users */}
+              <section className="grid gap-4 md:gap-6">
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+                      <Trophy className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <h3 className="font-medium">Top Users by {metricName}</h3>
+                  </div>
+                  <TopUsersTable
+                    data={topUsers}
+                    metric={metric}
+                    isLoading={statsQuery.isFetching}
+                  />
+                </div>
+              </section>
+
+              {/* Usage by user — its own provider/metric controls, since it
+                  isn't scoped by the Overview metric selector above. */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div>
+                  <h2 className="text-lg font-semibold md:text-xl">Usage by user</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Per-user breakdown of shared pool usage
+                    {globalTimeRange === "all" && " · last 30 days"}
+                    {costIsNotional &&
+                      " · API-equivalent value on a flat subscription, not a bill"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  {costSupported && (
+                    <div className="flex gap-1 rounded-lg bg-muted p-1">
+                      {USAGE_METRICS.map((option) => (
+                        <button
+                          key={option.key}
+                          onClick={() => setUsageMetric(option.key)}
+                          className={cn(
+                            "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                            effectiveUsageMetric === option.key
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-1 rounded-lg bg-muted p-1">
+                    {USAGE_PROVIDERS.map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => setUsageProvider(option.key)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm",
+                          usageProvider === option.key
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <section className="grid gap-4 md:gap-6">
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
                       <Users className="h-4 w-4 text-indigo-500" />

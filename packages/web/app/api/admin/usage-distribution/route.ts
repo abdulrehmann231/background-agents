@@ -13,7 +13,8 @@ type Provider = (typeof VALID_PROVIDERS)[number]
  * GET /api/admin/usage-distribution
  *
  * Powers the "Shared pool & usage" block on the admin Overview: where our
- * credential spend goes, split by pool, by pool key, and by user/model.
+ * credential spend goes, split by pool, by pool key, by user/model, and by
+ * per-message size (messageHistogram).
  *
  * Every response carries BOTH tokens and cost for each series, so the dashboard
  * can toggle between them without a refetch. (Notably this decouples the view
@@ -115,10 +116,28 @@ export async function GET(request: NextRequest) {
     GROUP BY tu."userId", u.name, u.image, tu.model, tu."pool"
   `
 
-  const [poolSplitRaw, byKeyRaw, perUserRaw] = await Promise.all([
+  // --- Per message, for the tokens/cost-per-message histogram ---------------
+  // One row per assistant message: how heavy was that single turn. Messages
+  // written before per-message attribution existed (messageId null) are
+  // excluded rather than lumped into one giant "unattributed" bucket.
+  const perMessagePromise = prisma.$queryRaw<Array<{ tokens: number; cost: number }>>`
+    SELECT
+      SUM(tu."totalTokens")::float as tokens,
+      SUM(tu."costUsd")::float as cost
+    FROM "TokenUsage" tu
+    JOIN "User" u ON u.id = tu."userId"
+    WHERE tu."createdAt" >= NOW() - ${interval}::interval
+      AND tu.provider = ${provider}
+      AND tu."messageId" IS NOT NULL
+      AND (${excludeAdmins} = false OR u."isAdmin" = false)
+    GROUP BY tu."messageId"
+  `
+
+  const [poolSplitRaw, byKeyRaw, perUserRaw, perMessageRaw] = await Promise.all([
     poolSplitPromise,
     byKeyPromise,
     perUserPromise,
+    perMessagePromise,
   ])
 
   // --- Day axis -------------------------------------------------------------
@@ -231,6 +250,26 @@ export async function GET(request: NextRequest) {
     .filter((u) => u.tokens > 0 || u.cost > 0)
     .sort((a, b) => b.cost - a.cost || b.tokens - a.tokens)
 
+  // --- messageHistogram: equal-width bins from 0 to the heaviest message ----
+  const HISTOGRAM_BUCKETS = 10
+  const makeHistogram = (values: number[]) => {
+    const positive = values.filter((v) => Number.isFinite(v) && v >= 0)
+    if (positive.length === 0) return []
+    const max = Math.max(...positive)
+    if (max <= 0) return [{ bucketStart: 0, bucketEnd: 0, count: positive.length }]
+    const width = max / HISTOGRAM_BUCKETS
+    const buckets = Array.from({ length: HISTOGRAM_BUCKETS }, (_, i) => ({
+      bucketStart: i * width,
+      bucketEnd: (i + 1) * width,
+      count: 0,
+    }))
+    for (const v of positive) {
+      const idx = Math.min(HISTOGRAM_BUCKETS - 1, Math.floor(v / width))
+      buckets[idx].count += 1
+    }
+    return buckets
+  }
+
   return NextResponse.json({
     range,
     provider,
@@ -239,5 +278,9 @@ export async function GET(request: NextRequest) {
     poolSplit: { tokens: makeSplit("tokens"), cost: makeSplit("cost") },
     byKey: { tokens: makeByKey("tokens"), cost: makeByKey("cost") },
     users,
+    messageHistogram: {
+      tokens: makeHistogram(perMessageRaw.map((r) => Number(r.tokens) || 0)),
+      cost: makeHistogram(perMessageRaw.map((r) => Number(r.cost) || 0)),
+    },
   })
 }
