@@ -220,11 +220,24 @@ const SHARED_GEMINI_POOL_PRO_MODELS = new Set<string>([
   "google/gemini-3.1-pro-preview",
 ])
 
+/**
+ * Claude Code models the server-shared Claude pool must NOT unlock. Unlike every
+ * other anthropic model on claude-code, these run only on the user's OWN key or
+ * subscription token — never the free shared pool. Fable ($10/M) is too costly to
+ * serve for free, so it's BYOK-only. This also retroactively gates existing chats
+ * still pointed at such a model: with no personal Anthropic credential the picker
+ * shows a lock and the send path (hasRequiredCredentials) blocks the turn.
+ */
+const SHARED_CLAUDE_POOL_EXCLUDED_MODELS = new Set<string>(["fable"])
+
 export const agentModels: Record<Agent, ModelOption[]> = {
   "claude-code": [
     { value: "sonnet", label: "Sonnet", requiresKey: "anthropic", priceLabel: "$2/M" },
     { value: "opus", label: "Opus", requiresKey: "anthropic", priceLabel: "$5/M" },
     { value: "haiku", label: "Haiku", requiresKey: "anthropic", priceLabel: "$1/M" },
+    // BYOK-only: excluded from the shared Claude pool (see
+    // SHARED_CLAUDE_POOL_EXCLUDED_MODELS) — no priceLabel since it never draws it.
+    { value: "fable", label: "Fable", requiresKey: "anthropic" },
     { value: "default", label: "Auto", requiresKey: "anthropic" },
     { value: "best", label: "Best", requiresKey: "anthropic" },
   ],
@@ -646,6 +659,12 @@ export function hasCredentialsForModel(
     // (see resolveSendCredentials). Every other agent (OpenCode, Pi, Goose, …)
     // needs a real API key.
     if (agent !== "claude-code") return !!flags?.ANTHROPIC_API_KEY
+    // BYOK-only Claude models (e.g. Fable) never run on the shared pool — they
+    // require the user's own API key or subscription, regardless of balance. This
+    // is what gates existing chats still pointed at such a model.
+    if (SHARED_CLAUDE_POOL_EXCLUDED_MODELS.has(model.value)) {
+      return !!flags?.ANTHROPIC_API_KEY || !!flags?.CLAUDE_CODE_CREDENTIALS
+    }
     // Claude Code can use either API key, the user's pasted subscription, or the shared pool.
     // With the credit allowance spent, only the user's own credentials remain.
     if (flags?.SHARED_BALANCE_EXHAUSTED) {

@@ -134,6 +134,30 @@ describe("shared Gemini pool unlocks Flash but not Pro", () => {
   })
 })
 
+describe("shared Claude pool does not unlock BYOK-only models (Fable)", () => {
+  // Fable is back in the claude-code picker but excluded from the shared pool
+  // (SHARED_CLAUDE_POOL_EXCLUDED_MODELS): it runs only on the user's own key or
+  // subscription. The other claude-code models stay available on the shared pool.
+  const fable = { value: "fable", label: "Fable", requiresKey: "anthropic" as const }
+  const sonnet = { value: "sonnet", label: "Sonnet", requiresKey: "anthropic" as const }
+
+  it("blocks Fable on the shared pool alone", () => {
+    expect(hasCredentialsForModel(fable, sharedPoolFresh, "claude-code")).toBe(false)
+  })
+
+  it("still allows the regular Sonnet model on the shared pool", () => {
+    expect(hasCredentialsForModel(sonnet, sharedPoolFresh, "claude-code")).toBe(true)
+  })
+
+  it("unlocks Fable with the user's own Anthropic key", () => {
+    expect(hasCredentialsForModel(fable, { ANTHROPIC_API_KEY: true }, "claude-code")).toBe(true)
+  })
+
+  it("unlocks Fable with the user's pasted subscription token", () => {
+    expect(hasCredentialsForModel(fable, { CLAUDE_CODE_CREDENTIALS: true }, "claude-code")).toBe(true)
+  })
+})
+
 describe("free models survive a spent balance", () => {
   // The escape hatch: with the balance gone, OpenCode's free tier is what a
   // user is told to switch to. Two separate gates have to agree on that — the
