@@ -225,7 +225,6 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "sonnet", label: "Sonnet", requiresKey: "anthropic", priceLabel: "$2/M" },
     { value: "opus", label: "Opus", requiresKey: "anthropic", priceLabel: "$5/M" },
     { value: "haiku", label: "Haiku", requiresKey: "anthropic", priceLabel: "$1/M" },
-    { value: "fable", label: "Fable", requiresKey: "anthropic", priceLabel: "$10/M" },
     { value: "default", label: "Auto", requiresKey: "anthropic" },
     { value: "best", label: "Best", requiresKey: "anthropic" },
   ],
