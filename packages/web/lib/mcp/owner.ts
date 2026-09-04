@@ -6,6 +6,7 @@
  * needs to read or mutate connections is parameterized by this discriminated
  * union so the chat- and job-side surfaces share one implementation.
  */
+import { requireAuth, isAuthError, notFound } from "@/lib/db/api-helpers"
 import { prisma } from "@/lib/db/prisma"
 import type { Prisma } from "@prisma/client"
 
@@ -74,4 +75,28 @@ export async function requireMcpOwnerAuth(
     select: { userId: true },
   })
   return !!row && row.userId === userId
+}
+
+export type ResolvedMcpOwner =
+  | { ok: true; owner: McpOwner; userId: string }
+  | { ok: false; response: Response }
+
+/**
+ * Authenticate the caller and verify they own the given chat/job. Collapses
+ * the requireAuth + requireMcpOwnerAuth boilerplate shared by every
+ * `/mcp-servers` route handler into a single call.
+ *
+ * On success returns the owner and authenticated userId; on failure returns
+ * the Response (401 or 404) the handler should return verbatim.
+ */
+export async function resolveMcpOwner(
+  owner: McpOwner
+): Promise<ResolvedMcpOwner> {
+  const auth = await requireAuth()
+  if (isAuthError(auth)) return { ok: false, response: auth }
+  if (!(await requireMcpOwnerAuth(owner, auth.userId))) {
+    const label = owner.kind === "chat" ? "Chat" : "Scheduled job"
+    return { ok: false, response: notFound(`${label} not found`) }
+  }
+  return { ok: true, owner, userId: auth.userId }
 }
