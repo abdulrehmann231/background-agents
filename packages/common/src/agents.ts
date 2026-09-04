@@ -334,7 +334,6 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "github" },
     { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash", requiresKey: "github" },
     { value: "gemini-3.1-pro", label: "Gemini 3.1 Pro", requiresKey: "github" },
-    { value: "gemini-3-flash", label: "Gemini 3 Flash", requiresKey: "github" },
   ],
   "gemini": [
     // Default first, then Flash tier (newest → oldest), then Pro.
