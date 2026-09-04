@@ -32,28 +32,49 @@ export function getLimitUpgradeCopy(plan: Plan | undefined): LimitUpgradeCopy | 
 }
 
 /**
- * The message shown when the daily allowance runs out.
+ * The message shown when a user has nothing left to spend.
  *
  * Deliberately names no provider: the balance is pooled, so "your Claude limit"
  * was both wrong and confusing once the same allowance covered Gemini and
  * OpenCode. Free models are called out because they genuinely still work — they
  * never draw down the balance — and that is the most useful thing a blocked user
  * can be told.
+ *
+ * Topping up leads the list of next steps now that it exists: it is the only
+ * one the user can act on immediately and alone. Upgrading still means emailing
+ * a human, and adding an API key means having one.
  */
 export function formatUsageLimitMessage({
   plan,
   limit,
+  creditBalance = 0,
 }: {
   plan: Plan
   limit: number
+  /**
+   * Purchased credits in USD. Negative when the turn that emptied them
+   * overshot — a cost is only known once the turn has run.
+   */
+  creditBalance?: number
 }): string {
+  // A deficit is the one case where topping up is not merely an option: nothing
+  // will run until it is cleared, so say that plainly instead of offering a
+  // menu of upgrades that would not help either.
+  if (creditBalance < 0) {
+    return (
+      `Daily limit reached (${fmtBalance(limit)}), and your last turn ran ` +
+      `${fmtBalance(Math.abs(creditBalance))} past your credits. Top up to clear it, ` +
+      `add your own API key, or switch to a free model.`
+    )
+  }
+
   const nextStep =
     plan === "free"
-      ? "Upgrade to Pro for twice the daily balance, upgrade to Unlimited for uncapped usage, " +
+      ? "Top up credits, upgrade to Pro for twice the daily balance, " +
         "add your own API key, or switch to a free model."
       : plan === "pro"
-        ? "Upgrade to Unlimited for uncapped usage, add your own API key, " +
-          "or switch to a free model."
+        ? "Top up credits, upgrade to Unlimited for uncapped usage, " +
+          "add your own API key, or switch to a free model."
         : "Add your own API key to continue."
 
   return `Daily limit reached (${fmtBalance(limit)}). ${nextStep}`

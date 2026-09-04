@@ -13,6 +13,12 @@
  * means one turn can overshoot — a single agentic run has been observed at $476
  * — and nothing here bounds that. The blast radius is one day, since the
  * allowance resets at UTC midnight and nothing carries over.
+ *
+ * Behind the allowance sits a second balance: credits bought through Stripe,
+ * which never reset. A run is allowed while EITHER pot has something in it, so
+ * a user whose day is spent keeps working on credits, and only stops when both
+ * are gone. The same post-hoc overshoot applies to credits, except its blast
+ * radius is not one day — a deficit carries until a top-up clears it.
  */
 
 import { modelRequiresKey, type Agent, type ProviderName } from "@background-agents/common"
@@ -22,6 +28,7 @@ import { sumSharedSpend } from "./token-usage"
 import { providerForRun, resolvePool } from "@/lib/server/shared-pool"
 import { decryptUserCredentials } from "./api-helpers"
 import { formatUsageLimitMessage } from "@/lib/usage-limit-copy"
+import { microToUsd } from "@/lib/server/credits"
 import {
   getDailyBalance,
   getNextUtcDayReset,
@@ -41,6 +48,12 @@ export interface UsageLimitResult {
   /** Daily balance (Free/Pro), or null for Unlimited/own-key runs. */
   limit: number | null
   remaining: number | null
+  /**
+   * Purchased credits, in USD. Negative when the turn that emptied the balance
+   * overshot it. Reported as a number, not the stored BigInt, because this
+   * result is serialised straight into a JSON response.
+   */
+  creditBalance: number
   resetAt: Date
   error?: string
 }
@@ -67,7 +80,7 @@ export async function checkSharedPoolUsage(
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { plan: true, credentials: true },
+    select: { plan: true, credentials: true, creditBalanceMicroUsd: true },
   })
 
   const plan: Plan = user?.plan ?? "free"
@@ -79,7 +92,10 @@ export async function checkSharedPoolUsage(
   // reads as the shared Gemini pool.
   const pool = resolvePool(agent, storedCreds, model)
 
-  const base = { plan, provider, pool, used: 0, resetAt }
+  const credits = user?.creditBalanceMicroUsd ?? 0n
+  const creditBalance = microToUsd(credits)
+
+  const base = { plan, provider, pool, used: 0, creditBalance, resetAt }
 
   // Not a shared-pool run → uncapped. resolvePool returns "shared" only for a
   // genuine shared-pool run (incl. a Gemini model under Pi/Droid), so gating on
@@ -111,7 +127,15 @@ export async function checkSharedPoolUsage(
 
   const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
   const remaining = Math.max(0, allowance - used)
-  const allowed = used < allowance
+
+  // Purchased credits sit behind the daily allowance: they are only reached
+  // once it is spent, and any balance above zero is enough to start one more
+  // turn. Strictly above — a balance of exactly zero, or a negative one left by
+  // a turn that overshot, refuses. Since a turn's cost is only known after it
+  // runs, this is the whole of the overshoot policy: one turn may exceed
+  // whatever was left, and the deficit it writes then blocks the account until
+  // a top-up clears it.
+  const allowed = used < allowance || credits > 0n
 
   return {
     ...base,
@@ -119,7 +143,9 @@ export async function checkSharedPoolUsage(
     used,
     limit: allowance,
     remaining,
-    error: allowed ? undefined : formatUsageLimitMessage({ plan, limit: allowance }),
+    error: allowed
+      ? undefined
+      : formatUsageLimitMessage({ plan, limit: allowance, creditBalance }),
   }
 }
 

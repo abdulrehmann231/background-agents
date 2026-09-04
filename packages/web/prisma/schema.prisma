@@ -53,19 +53,37 @@ model User {
   // where `headers` is encrypted at rest (it can carry auth); the rest is plaintext.
   customEndpoints Json?
 
+  // Stripe customer for this user, created lazily on their first top-up and
+  // reused for every later one so the payment history stays on one customer.
+  stripeCustomerId String? @unique
+
+  // Purchased credits, in micro-dollars (1e-6 USD). Spent only once the day's
+  // plan allowance is gone — see lib/server/credits.
+  //
+  // Integer on purpose: turn costs run well under a cent, so cents would either
+  // overcharge or round to zero (the free-route-around-the-cap bug that
+  // token-metering already guards against), and a Float would inherit the
+  // residue that snapCostResidue exists to absorb.
+  //
+  // Goes negative when the turn that emptied it overshot — a cost is only known
+  // after the turn has run. The gate then refuses further shared-pool runs
+  // until a top-up brings it back above zero.
+  creditBalanceMicroUsd BigInt @default(0)
+
   // GitHub App installation id, captured in the install callback. Null until
   // the user installs our GitHub App. Used to mint short-lived installation
   // access tokens at agent-run time so the agent can call GitHub's MCP server
   // with properly-scoped credentials.
   githubAppInstallationId String?
 
-  chats         Chat[]
-  accounts      Account[]
-  sessions      Session[]
-  activityLogs  ActivityLog[]
-  scheduledJobs ScheduledJob[]
-  skills        Skill[]
-  tokenUsages   TokenUsage[]
+  chats              Chat[]
+  accounts           Account[]
+  sessions           Session[]
+  activityLogs       ActivityLog[]
+  scheduledJobs      ScheduledJob[]
+  skills             Skill[]
+  tokenUsages        TokenUsage[]
+  creditTransactions CreditTransaction[]
 }
 
 // =============================================================================
@@ -309,7 +327,7 @@ model CcAuthRun {
 model ActivityLog {
   id        String   @id @default(cuid())
   userId    String
-  action    String // "login" | "logout" | "chat_created" | "chat_deleted" | "message_sent" | "settings_updated" | "admin_promoted" | "admin_demoted"
+  action    String // "login" | "logout" | "chat_created" | "chat_deleted" | "message_sent" | "settings_updated" | "admin_promoted" | "admin_demoted" | "credits_adjusted"
   metadata  Json? // Flexible payload: { chatId, targetUserId, repo, model, etc. }
   createdAt DateTime @default(now())
 
@@ -381,6 +399,73 @@ model TokenUsage {
   @@index([provider, createdAt]) // admin per-provider rollups
   @@index([provider, keyId, createdAt]) // admin per-key rollups
   @@index([sessionId, model, createdAt]) // diff-cursor lookup
+}
+
+// =============================================================================
+// CreditTransaction - append-only ledger behind User.creditBalanceMicroUsd
+// =============================================================================
+// Every movement of a user's purchased balance, signed: positive for a top-up,
+// a manual grant or a reversal-of-a-reversal; negative for usage debits,
+// refunds and chargebacks. The balance on User is authoritative for reads (the
+// gate checks it on every send); this table is the audit trail, and the
+// reconciliation cron asserts the two agree.
+//
+// `balanceAfterMicroUsd` is the balance the moment this row committed, so a
+// disagreement can be traced to a single row without replaying from zero.
+
+model CreditTransaction {
+  id     String @id @default(cuid())
+  userId String
+
+  amountMicroUsd       BigInt
+  balanceAfterMicroUsd BigInt
+
+  // purchase | debit | refund | grant | chargeback | adjustment
+  type String
+
+  // Idempotency key, unique across the table: a Stripe checkout session id for
+  // purchases, a refund/dispute id for reversals. Null for rows whose
+  // uniqueness comes from elsewhere (usage debits key on tokenUsageId).
+  // Postgres allows many NULLs under a unique index, which is what makes that
+  // work.
+  externalId String? @unique
+
+  stripeEventId         String?
+  stripePaymentIntentId String?
+
+  // The TokenUsage row this debit paid for. Unique, so a turn cannot be
+  // charged to credits twice even if the metering path were to run again.
+  tokenUsageId String? @unique
+  chatId       String?
+
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+// =============================================================================
+// StripeEvent - every webhook Stripe has delivered, keyed by its own event id
+// =============================================================================
+// Stripe delivers at least once and retries for days, so the handler must be
+// idempotent. Inserting the event id first, in its own transaction, turns a
+// redelivery into a unique-constraint violation the handler can treat as
+// "already done" — the first of the two guards against double-crediting (the
+// second being CreditTransaction.externalId).
+
+model StripeEvent {
+  id          String    @id // Stripe's evt_…
+  type        String
+  payload     Json
+  processedAt DateTime?
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([type, createdAt])
 }
 
 // =============================================================================
