@@ -44,6 +44,7 @@ export async function resolveSendCredentials(
       provider: usageCheck.provider,
       used: usageCheck.used,
       limit: usageCheck.limit,
+      creditBalance: usageCheck.creditBalance,
       resetAt: usageCheck.resetAt.toISOString(),
     })
 
@@ -56,6 +57,9 @@ export async function resolveSendCredentials(
         used: usageCheck.used,
         remaining: usageCheck.remaining,
         limit: usageCheck.limit,
+        // Negative when the last turn overshot: the client shows "top up to
+        // clear it" rather than "come back tomorrow", which would be a lie.
+        creditBalance: usageCheck.creditBalance,
         resetAt: usageCheck.resetAt.toISOString(),
       },
       { status: 429 }

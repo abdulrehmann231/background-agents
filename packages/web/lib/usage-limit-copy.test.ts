@@ -5,10 +5,10 @@ import {
 } from "./usage-limit-copy"
 
 describe("formatUsageLimitMessage", () => {
-  it("describes Pro as a bigger balance for free users, and names the free-model escape", () => {
+  it("leads with the top-up and describes Pro as a bigger balance for free users", () => {
     expect(formatUsageLimitMessage({ plan: "free", limit: 5 })).toBe(
       "Daily limit reached ($5.00). " +
-      "Upgrade to Pro for twice the daily balance, upgrade to Unlimited for uncapped usage, " +
+      "Top up credits, upgrade to Pro for twice the daily balance, " +
       "add your own API key, or switch to a free model."
     )
   })
@@ -16,8 +16,24 @@ describe("formatUsageLimitMessage", () => {
   it("only offers Unlimited, BYOK or free models after a Pro user runs out", () => {
     expect(formatUsageLimitMessage({ plan: "pro", limit: 10 })).toBe(
       "Daily limit reached ($10.00). " +
-      "Upgrade to Unlimited for uncapped usage, add your own API key, " +
-      "or switch to a free model."
+      "Top up credits, upgrade to Unlimited for uncapped usage, " +
+      "add your own API key, or switch to a free model."
+    )
+  })
+
+  it("explains a deficit instead of listing upgrades that would not clear it", () => {
+    const msg = formatUsageLimitMessage({ plan: "free", limit: 5, creditBalance: -12.5 })
+    expect(msg).toBe(
+      "Daily limit reached ($5.00), and your last turn ran $12.50 past your credits. " +
+      "Top up to clear it, add your own API key, or switch to a free model."
+    )
+    // A plan upgrade does not pay off a deficit, so it must not be offered here.
+    expect(msg).not.toContain("Upgrade")
+  })
+
+  it("reads as the plain limit message when credits are simply absent", () => {
+    expect(formatUsageLimitMessage({ plan: "free", limit: 5, creditBalance: 0 })).toBe(
+      formatUsageLimitMessage({ plan: "free", limit: 5 })
     )
   })
 
