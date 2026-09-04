@@ -155,11 +155,11 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
             <button
               onClick={() => {
                 onClose()
-                modals.openSettingsSection("usage")
+                modals.openSettingsSection("credits")
               }}
               className="text-xs text-primary hover:underline cursor-pointer"
             >
-              See shared pool usage →
+              See credits →
             </button>
           </div>
         </Dialog.Content>
