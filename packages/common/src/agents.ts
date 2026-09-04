@@ -227,7 +227,6 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // Free models (opencode/) - no API key needed
     { value: "opencode/big-pickle", label: "Big Pickle", requiresKey: "none" },
     { value: "opencode/nemotron-3-ultra-free", label: "Nemotron 3 Ultra", requiresKey: "none" },
-    { value: "opencode/deepseek-v4-flash-free", label: "DeepSeek V4 Flash", requiresKey: "none" },
     { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5", requiresKey: "none" },
     // Curated OpenCode Go models (opencode-go/ prefix), runnable on the
     // server-shared Go subscription key. Shown first when OPENCODE_API_KEY is
@@ -307,6 +306,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "openai/o4-mini", label: "o4 Mini", requiresKey: "openai" },
   ],
   "codex": [
+    { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "openai" },
     { value: "gpt-5.6-sol", label: "GPT-5.6 Sol", requiresKey: "openai" },
     { value: "gpt-5.6-terra", label: "GPT-5.6 Terra", requiresKey: "openai" },
     { value: "gpt-5.6-luna", label: "GPT-5.6 Luna", requiresKey: "openai" },
@@ -353,12 +353,12 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   "kilo": [
     // Auto-routers
     { value: "kilo/kilo-auto/free", label: "Auto Free", requiresKey: "none" },
-    { value: "kilo/kilo-auto/balanced", label: "Auto Balanced", requiresKey: "kilo" },
     { value: "kilo/kilo-auto/frontier", label: "Auto Frontier", requiresKey: "kilo" },
     { value: "kilo/kilo-auto/efficient", label: "Auto Efficient", requiresKey: "kilo" },
+    { value: "kilo/kilo-auto/small", label: "Auto Small", requiresKey: "kilo" },
     // Free models
     { value: "kilo/deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", requiresKey: "none" },
-    { value: "kilo/nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super", requiresKey: "none" },
+    { value: "kilo/nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra", requiresKey: "none" },
     { value: "kilo/stepfun/step-3.7-flash:free", label: "Step 3.7 Flash", requiresKey: "none" },
     // Anthropic via Kilo gateway
     { value: "kilo/anthropic/claude-fable-5", label: "Claude Fable 5", requiresKey: "kilo" },
