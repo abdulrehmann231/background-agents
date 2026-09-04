@@ -42,6 +42,19 @@ export function microToUsd(micro: bigint): number {
   return Number(micro) / MICRO_PER_USD
 }
 
+/**
+ * A Stripe amount (integer minor units — cents, for USD) → micro-dollars.
+ *
+ * Deliberately not routed through `usdToMicro`: Stripe already hands us an
+ * exact integer, and dividing it by 100 to get dollars and multiplying back up
+ * would put a float in the middle of the one number in this system that a user
+ * actually paid. 1 cent is 10,000 micro-dollars, and BigInt keeps it exact.
+ */
+export function stripeAmountToMicro(amountInCents: number): bigint {
+  if (!Number.isInteger(amountInCents)) return 0n
+  return BigInt(amountInCents) * 10_000n
+}
+
 /** How a single turn's cost divides between the two balances. */
 export interface TurnCostSplit {
   /** Paid out of the plan's daily allowance. */
