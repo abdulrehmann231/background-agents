@@ -1,28 +1,24 @@
 /**
  * Gating for the shared credential pools.
  *
- * Free users get a daily balance, denominated in US dollars of API list value,
- * spent across every shared pool (Claude OAuth / Gemini / OpenCode server keys)
- * rather than budgeted per provider. Pro gets the same balance scaled by
- * PRO_BUDGET_MULTIPLIER; only `unlimited`-plan users, and anyone running on
- * their own key, are uncapped. Spending is summed from the TokenUsage ledger
- * (populated post-turn by tokscale metering).
- *
- * The daily balance is a spend CAP, not a granted pot: it is today's spending
- * measured against today's allowance, so it resets at UTC midnight and unused
- * room never carries forward. Nothing accumulates.
+ * Free and Pro are gated purely on purchased credits now: a run is allowed
+ * while `creditBalanceMicroUsd > 0`, full stop, whatever the plan. There is no
+ * separate free daily tier to fall back on any more, and Free/Pro are
+ * therefore identical here. Only `unlimited`-plan users, and anyone running on
+ * their own key, are uncapped.
  *
  * Because a turn's cost is only known after it runs, enforcement is post-hoc:
- * we block the NEXT turn once the day's spending has met the allowance. That
- * means one turn can overshoot — a single agentic run has been observed at $476
- * — and nothing here bounds that. The blast radius is one day, since the
- * allowance resets at UTC midnight and nothing carries over.
+ * we block the NEXT turn once the balance has hit zero. That means one turn
+ * can overshoot — a single agentic run has been observed at $476 — and
+ * nothing here bounds that; the overshoot is recorded as a negative balance,
+ * which then blocks the account until a top-up clears it. Credits never
+ * expire or reset on their own.
  *
- * Behind the allowance sits a second balance: credits bought through Stripe,
- * which never reset. A run is allowed while EITHER pot has something in it, so
- * a user whose day is spent keeps working on credits, and only stops when both
- * are gone. The same post-hoc overshoot applies to credits, except its blast
- * radius is not one day — a deficit carries until a top-up clears it.
+ * The daily-allowance machinery (`getDailyBalance`, `sumSharedSpend` since UTC
+ * midnight) is kept and still computed below — `used`/`limit`/`remaining` feed
+ * the Settings usage bar and are used elsewhere for manual/bonus credit
+ * grants — but it no longer decides whether a turn is allowed. We are not
+ * managing a separate free-credit pool any more.
  */
 
 import { modelRequiresKey, type Agent, type ProviderName } from "@background-agents/common"
@@ -63,11 +59,11 @@ export interface UsageLimitResult {
 }
 
 /**
- * Check whether a user may start a turn on `agent` given their daily
- * balance. Uncapped (allowed, no limit) when: the agent has no shared pool,
- * the user supplied their own key for it, or the user is on the `unlimited`
- * plan. Free and Pro are capped (Pro at PRO_BUDGET_MULTIPLIER× free), and both
- * fall through to purchased credits once the day's allowance is spent.
+ * Check whether a user may start a turn on `agent` given their purchased
+ * credit balance. Uncapped (allowed, no limit) when: the agent has no shared
+ * pool, the user supplied their own key for it, or the user is on the
+ * `unlimited` plan. Free and Pro both require `creditBalance > 0` — they are
+ * treated identically here.
  *
  * Note the asymmetry, and that it is deliberate: whether *this* run is metered
  * depends on the agent and model being used right now, but how much has been
@@ -130,17 +126,19 @@ export async function checkSharedPoolUsage(
     return { ...base, allowed: true, limit: null, remaining: null }
   }
 
+  // Still computed for display (the Settings usage bar) and for anything else
+  // that wants to know today's spend, but no longer part of the allow/deny
+  // decision below.
   const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
   const remaining = Math.max(0, allowance - used)
 
-  // Purchased credits sit behind the daily allowance: they are only reached
-  // once it is spent, and any balance above zero is enough to start one more
-  // turn. Strictly above — a balance of exactly zero, or a negative one left by
-  // a turn that overshot, refuses. Since a turn's cost is only known after it
-  // runs, this is the whole of the overshoot policy: one turn may exceed
-  // whatever was left, and the deficit it writes then blocks the account until
-  // a top-up clears it.
-  const allowed = used < allowance || credits > 0n
+  // Any balance above zero is enough to start one more turn. Strictly above —
+  // a balance of exactly zero, or a negative one left by a turn that
+  // overshot, refuses. Since a turn's cost is only known after it runs, this
+  // is the whole of the overshoot policy: one turn may exceed whatever was
+  // left, and the deficit it writes then blocks the account until a top-up
+  // clears it.
+  const allowed = credits > 0n
 
   return {
     ...base,
@@ -148,9 +146,7 @@ export async function checkSharedPoolUsage(
     used,
     limit: allowance,
     remaining,
-    error: allowed
-      ? undefined
-      : formatUsageLimitMessage({ limit: allowance, creditBalance }),
+    error: allowed ? undefined : formatUsageLimitMessage({ creditBalance }),
   }
 }
 

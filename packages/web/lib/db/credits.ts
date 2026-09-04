@@ -12,7 +12,12 @@
 
 import { Prisma } from "@prisma/client"
 
-import { splitTurnCost, usdToMicro } from "@/lib/server/credits"
+import {
+  SIGNUP_CREDIT_USD,
+  signupGrantKey,
+  splitTurnCost,
+  usdToMicro,
+} from "@/lib/server/credits"
 import { BALANCE_POOL_PROVIDERS } from "@/lib/server/usage-budgets"
 
 import { prisma } from "./prisma"
@@ -97,6 +102,42 @@ export async function applyCreditTransaction(
   }
   if (tx) return applyInTransaction(params, tx)
   return prisma.$transaction((inner) => applyInTransaction(params, inner))
+}
+
+/**
+ * Give a new account its starting balance. Returns true if this call granted.
+ *
+ * Idempotent through `externalId`, not through a prior read: the unique index
+ * is what actually decides, so a retried signup callback and the backfill
+ * script can both run against the same user, in any order or at the same time,
+ * and exactly one grant survives. A duplicate is the expected outcome here
+ * rather than an error, which is why this is the one caller that swallows the
+ * constraint — see applyCreditTransaction on why it does not swallow it there.
+ *
+ * Never throws: a signup must not fail because crediting did. A user who slips
+ * through with no grant is a support ticket; a user who cannot create an
+ * account is a lost one.
+ */
+export async function grantSignupCredit(userId: string): Promise<boolean> {
+  try {
+    await applyCreditTransaction({
+      userId,
+      amountMicroUsd: usdToMicro(SIGNUP_CREDIT_USD),
+      type: "grant",
+      externalId: signupGrantKey(userId),
+      description: "Signup credit",
+    })
+    return true
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return false
+    }
+    console.error(`[credits] signup grant failed for user ${userId}:`, error)
+    return false
+  }
 }
 
 /** Current balance in micro-dollars. Zero for an unknown user. */

@@ -18,12 +18,10 @@ interface LimitReachedDialogProps {
   /** Shared-pool provider the blocked run would have used (claude | gemini | opencode). */
   provider?: string
   /**
-   * Purchased credits in USD — the pot behind the daily allowance (see
+   * Purchased credits in USD — this is what actually gates a send (see
    * lib/db/usage-limit). Negative when the turn that emptied them overshot.
    */
   creditBalance?: number | null
-  /** Today's allowance in USD, so the summary can name what was reached. */
-  limit?: number | null
   isMobile?: boolean
 }
 
@@ -41,7 +39,6 @@ export function LimitReachedDialog({
   onBuyCredits,
   provider,
   creditBalance,
-  limit,
   isMobile = false,
 }: LimitReachedDialogProps) {
   const providerLabel = PROVIDER_LABEL[provider ?? ""] ?? "shared model"
@@ -50,9 +47,6 @@ export function LimitReachedDialog({
   // draw it down and so stay available at zero.
   const canSwitchToOpenCode = true
   const primaryButtonRef = useRef<HTMLButtonElement>(null)
-  // A negative balance is the one state a reset does not fix, so it changes
-  // what both the summary and the top-up option say.
-  const inDeficit = typeof creditBalance === "number" && creditBalance < 0
 
   // Focus the primary button when modal opens
   useEffect(() => {
@@ -104,27 +98,21 @@ export function LimitReachedDialog({
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-xl shadow-xl"
           )}
         >
-          <ModalHeader title="Daily Limit Reached" />
+          <ModalHeader title="Out of Credits" />
           <div className="px-4 pt-3 pb-4 space-y-4">
             <div className="text-sm text-muted-foreground">
-              {inDeficit ? (
+              {typeof creditBalance === "number" && creditBalance < 0 ? (
                 <>
-                  Your daily balance is spent and your last turn ran{" "}
+                  Your last turn ran{" "}
                   <span className="font-medium text-foreground">
-                    {fmtBalance(Math.abs(creditBalance!))}
+                    {fmtBalance(Math.abs(creditBalance))}
                   </span>{" "}
-                  past your credits. Topping up is the only thing that clears a
-                  deficit — tomorrow&apos;s allowance won&apos;t.
+                  past your credits.
                 </>
               ) : (
-                <>
-                  You&apos;ve spent today&apos;s balance
-                  {typeof limit === "number" ? ` (${fmtBalance(limit)})` : ""} and
-                  have no credits left. It resets at midnight UTC, or top up to
-                  keep going now.
-                </>
+                "You're out of credits."
               )}{" "}
-              Your balance is shared across Claude, OpenCode and Gemini.
+              Top up to continue — your balance is shared across Claude, OpenCode and Gemini.
             </div>
 
             <div className="space-y-2">
@@ -194,7 +182,7 @@ export function LimitReachedDialog({
                     Buy more credits
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {inDeficit
+                    {typeof creditBalance === "number" && creditBalance < 0
                       ? "Clear the deficit and pick up where you left off"
                       : "Top up your balance and pick up where you left off"}
                   </div>

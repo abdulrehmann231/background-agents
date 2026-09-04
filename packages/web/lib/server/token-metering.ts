@@ -26,18 +26,12 @@ import {
   getSessionCumulatives,
   insertTokenUsageRows,
   lockSessionForMetering,
-  sumSharedSpend,
   type TokenUsageInsert,
   type UsagePool,
 } from "@/lib/db/token-usage"
 import { chargeTurnToCredits } from "@/lib/db/credits"
 import { microToUsd } from "@/lib/server/credits"
-import {
-  getDailyBalance,
-  getStartOfUtcDay,
-  isFreeModel,
-  type Plan,
-} from "@/lib/server/usage-budgets"
+import { isFreeModel, type Plan } from "@/lib/server/usage-budgets"
 import {
   collapseEntriesByModel,
   cursorForModel,
@@ -346,42 +340,34 @@ async function meterTurnUsage(
 
         if (rows.length === 0) return 0
 
-        // What the day's allowance had left BEFORE this turn. Read here, ahead
-        // of the insert, or the turn's own cost counts as already-spent and the
-        // split hands it back to an allowance that no longer has room for it.
-        // Skipped entirely for baseline rows: they are backdated out of every
-        // budget window precisely so the pre-metering backlog charges nobody,
-        // and charging it to a real balance would drain a top-up on a chat's
-        // first metered turn.
-        let dailyLeft = 0
+        // There is no free daily tier any more: a chargeable turn is debited
+        // straight from purchased credits in full (dailyLeft: 0 makes
+        // splitTurnCost send the whole cost to credits — see
+        // lib/server/credits). The only carve-out is the `unlimited` plan,
+        // which never touches credits at all. Skipped entirely for baseline
+        // rows: they are backdated out of every budget window precisely so
+        // the pre-metering backlog charges nobody, and charging it to a real
+        // balance would drain a top-up on a chat's first metered turn.
+        let chargeCredits = false
         if (!baselineAt) {
           const user = await tx.user.findUnique({
             where: { id: userId },
             select: { plan: true },
           })
-          const allowance = getDailyBalance((user?.plan as Plan) ?? "free")
-          if (allowance == null) {
-            dailyLeft = Infinity
-          } else {
-            const spentBefore = await sumSharedSpend(
-              { userId, since: getStartOfUtcDay() },
-              tx
-            )
-            dailyLeft = Math.max(0, allowance - spentBefore)
-          }
+          chargeCredits = ((user?.plan as Plan) ?? "free") !== "unlimited"
         }
 
         const inserted = await insertTokenUsageRows(rows, tx)
 
-        if (!baselineAt && dailyLeft !== Infinity) {
+        if (chargeCredits) {
           const debited = await chargeTurnToCredits(
-            { userId, chatId, rows: inserted, dailyLeft },
+            { userId, chatId, rows: inserted, dailyLeft: 0 },
             tx
           )
           if (debited > 0n) {
             console.log(
-              `[token-metering] charged $${microToUsd(debited).toFixed(4)} of ` +
-                `credits for session ${sessionId} (allowance had $${dailyLeft.toFixed(4)} left)`
+              `[token-metering] charged $${microToUsd(debited).toFixed(4)} of credits ` +
+                `for session ${sessionId}`
             )
           }
         }

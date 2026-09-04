@@ -25,6 +25,32 @@
  */
 export const MICRO_PER_USD = 1_000_000
 
+/**
+ * What a new account is granted on signup, in USD.
+ *
+ * This is the whole free tier: there is no daily allowance behind it and
+ * nothing refills it (see lib/db/usage-limit), so once it is spent the user
+ * tops up or runs on their own key. Kept here, next to the unit it is
+ * denominated in, so changing the figure is a one-line change rather than a
+ * hunt through the auth callbacks and the backfill script that both apply it.
+ *
+ * Worth sizing deliberately: these are dollars of API list value, and a single
+ * agentic run on a real repo can spend several of them.
+ */
+export const SIGNUP_CREDIT_USD = 5
+
+/**
+ * The `externalId` a signup grant is keyed on.
+ *
+ * That column is uniquely indexed, so this string is what actually prevents a
+ * second grant — not a prior read. The auth callback and the backfill script
+ * both build it from here rather than each writing the literal, because a typo
+ * in one of them would silently double-credit every user it touched.
+ */
+export function signupGrantKey(userId: string): string {
+  return `signup:${userId}`
+}
+
 /** USD → micro-dollars, rounded to the nearest micro-dollar. */
 export function usdToMicro(usd: number): bigint {
   if (!Number.isFinite(usd)) return 0n

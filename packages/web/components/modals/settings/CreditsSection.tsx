@@ -155,7 +155,7 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
                 <span>
                   {isNegative
                     ? "Your last turn ran past your balance — top up to clear it and keep going."
-                    : "Top up to keep going once your daily balance runs out."}
+                    : "Top up to keep going, or switch to a free model."}
                 </span>
               </div>
             )}
