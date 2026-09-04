@@ -111,9 +111,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     currentChatId,
     settings,
     credentialFlags,
-    balanceResetAt,
-    balanceUsed,
-    balanceTotal,
     isHydrated,
     isLoading,
     isLoadingMessages,
@@ -666,13 +663,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   settings={settings}
                   credentialFlags={credentialFlags}
                   showClaudeLimitDialog={() => {
-                    setLimitReachedState({
-                      show: true,
-                      provider: "claude",
-                      used: balanceUsed,
-                      limit: balanceTotal,
-                      resetAt: balanceResetAt ? new Date(balanceResetAt) : undefined,
-                    })
+                    setLimitReachedState({ show: true, provider: "claude" })
                   }}
                   onSendMessage={handleSendMessage}
                   onReload={reloadChat}

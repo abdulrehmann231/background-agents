@@ -1,11 +1,12 @@
 /**
  * The price map is the security boundary for checkout: the client sends a pack
- * id and never an amount, so what can be bought is exactly what this resolves.
- * These tests pin that boundary, and the kill switch that fails closed.
+ * id, and an amount only for the custom-amount price, so what can be bought is
+ * exactly what this resolves. These tests pin that boundary, and the kill
+ * switch that fails closed.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 
-import { isBillingEnabled, resolvePriceId } from "./stripe"
+import { getPriceMap, isBillingEnabled } from "./stripe"
 
 const ENV_KEYS = [
   "STRIPE_PRICE_MAP",
@@ -31,15 +32,15 @@ afterEach(() => {
   }
 })
 
-describe("resolvePriceId", () => {
+describe("getPriceMap", () => {
   it("resolves a pack the environment sells", () => {
     process.env.STRIPE_PRICE_MAP = JSON.stringify({ pack_10: "price_abc" })
-    expect(resolvePriceId("pack_10")).toBe("price_abc")
+    expect(getPriceMap().pack_10).toBe("price_abc")
   })
 
   it("refuses a pack id that is not in the map", () => {
     process.env.STRIPE_PRICE_MAP = JSON.stringify({ pack_10: "price_abc" })
-    expect(resolvePriceId("pack_1000000")).toBeNull()
+    expect(getPriceMap().pack_1000000).toBeUndefined()
   })
 
   it("refuses anything that is not a Stripe price id", () => {
@@ -50,20 +51,21 @@ describe("resolvePriceId", () => {
       bad: "prod_abc",
       worse: "sk_live_abc",
     })
-    expect(resolvePriceId("good")).toBe("price_abc")
-    expect(resolvePriceId("bad")).toBeNull()
-    expect(resolvePriceId("worse")).toBeNull()
+    const map = getPriceMap()
+    expect(map.good).toBe("price_abc")
+    expect(map.bad).toBeUndefined()
+    expect(map.worse).toBeUndefined()
   })
 
   it("sells nothing when the map is missing or malformed", () => {
-    expect(resolvePriceId("pack_10")).toBeNull()
+    expect(getPriceMap()).toEqual({})
 
     process.env.STRIPE_PRICE_MAP = "not json"
-    expect(resolvePriceId("pack_10")).toBeNull()
+    expect(getPriceMap()).toEqual({})
 
     // An array parses as JSON but is not a map; it must not yield index lookups.
     process.env.STRIPE_PRICE_MAP = JSON.stringify(["price_abc"])
-    expect(resolvePriceId("0")).toBeNull()
+    expect(getPriceMap()).toEqual({})
   })
 })
 

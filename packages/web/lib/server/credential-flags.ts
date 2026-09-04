@@ -5,16 +5,8 @@
 
 import { prisma } from "@/lib/db/prisma"
 import { isSharedPoolAvailable } from "@/lib/claude-credentials"
-import { sumSharedSpend } from "@/lib/db/token-usage"
 import { decryptUserCredentials } from "@/lib/db/api-helpers"
-import {
-  getDailyBalance,
-  getStartOfUtcDay,
-  getNextUtcDayReset,
-  getStartOfUtcWeek,
-  getNextUtcWeekReset,
-  type Plan,
-} from "@/lib/server/usage-budgets"
+import { getDailyBalance, type Plan } from "@/lib/server/usage-budgets"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
 import { hasSharedOpencodeKey } from "@/lib/server/opencode-pool"
 import { SHARED_POOL_AGENTS } from "@/lib/server/shared-pool"
@@ -22,15 +14,6 @@ import { agentUsesSharedPool } from "@background-agents/common"
 
 export interface EffectiveFlags {
   flags: CredentialFlags
-  limitResetAt: Date | null
-  /** Balance remaining for capped plans; null = unlimited. */
-  limitRemaining: number | null
-  /** Spent across the shared pools this period (daily capped / weekly unlimited). */
-  limitUsed: number | null
-  /** Daily balance for capped plans (free/pro); null when unlimited. */
-  limitTotal: number | null
-  /** Whether usage is tracked weekly (unlimited plan) vs daily (free/pro) */
-  isWeekly: boolean
   /** Whether the user has a paid plan (pro or unlimited) */
   isPro: boolean
   /** The user's subscription tier. */
@@ -135,44 +118,12 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   const isPro = plan !== "free"
   const credits = user?.creditBalanceMicroUsd ?? 0n
 
-  let limitResetAt: Date | null = null
-  let limitRemaining: number | null = null
-  let limitUsed: number | null = null
-  let limitTotal: number | null = null
-  let isWeekly = false
-
-  if (usesSharedPool) {
-    const allowance = getDailyBalance(plan)
-
-    if (allowance == null) {
-      // Unlimited plan: weekly spend for display only — no cap, and it never
-      // touches credits, so SHARED_BALANCE_EXHAUSTED is never set here.
-      isWeekly = true
-      limitUsed = await sumSharedSpend({ userId, since: getStartOfUtcWeek() })
-      limitResetAt = getNextUtcWeekReset()
-      // limitTotal / limitRemaining stay null (unlimited)
-    } else {
-      // Free and Pro, identically: `used`/`limitTotal`/`limitRemaining` below
-      // are still computed for the Settings usage bar, but readiness
-      // (SHARED_BALANCE_EXHAUSTED) reflects the purchased-credit balance —
-      // the actual thing that gates a send now — not the daily numbers.
-      const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
-      limitUsed = used
-      limitResetAt = getNextUtcDayReset()
-      limitTotal = allowance
-      limitRemaining = Math.max(0, allowance - used)
-      flags.SHARED_BALANCE_EXHAUSTED = credits <= 0n
-    }
+  // Readiness for the agent picker: the exact negation of the send gate in
+  // lib/db/usage-limit, so the picker never offers a model the server refuses.
+  // Unlimited is uncapped there and so is never marked exhausted here.
+  if (usesSharedPool && getDailyBalance(plan) != null) {
+    flags.SHARED_BALANCE_EXHAUSTED = credits <= 0n
   }
 
-  return {
-    flags,
-    limitResetAt,
-    limitRemaining,
-    limitUsed,
-    limitTotal,
-    isPro,
-    isWeekly,
-    plan,
-  }
+  return { flags, isPro, plan }
 }

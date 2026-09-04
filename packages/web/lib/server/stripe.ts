@@ -59,7 +59,7 @@ export function isBillingEnabled(): boolean {
  * never an amount, and only ids in this map can be bought. Trusting a
  * client-sent amount is how a $100 pack gets bought for a cent.
  */
-function getPriceMap(): Record<string, string> {
+export function getPriceMap(): Record<string, string> {
   const raw = process.env.STRIPE_PRICE_MAP
   if (!raw) return {}
   try {
@@ -74,11 +74,6 @@ function getPriceMap(): Record<string, string> {
     console.error("[stripe] STRIPE_PRICE_MAP is not valid JSON — no packs available")
     return {}
   }
-}
-
-/** The Stripe price id for a pack, or null when the id is not one we sell. */
-export function resolvePriceId(packId: string): string | null {
-  return getPriceMap()[packId] ?? null
 }
 
 /** A purchasable pack, as the UI needs it. */

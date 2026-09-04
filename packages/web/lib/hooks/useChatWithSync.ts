@@ -98,12 +98,7 @@ export function useChatWithSync() {
 
   const settings = settingsQuery.data?.settings ?? DEFAULT_SETTINGS
   const credentialFlags = settingsQuery.data?.credentialFlags ?? {}
-  const balanceResetAt = settingsQuery.data?.balanceResetAt ?? null
-  const balanceUsed = settingsQuery.data?.balanceUsed ?? null
-  const balanceTotal = settingsQuery.data?.balanceTotal ?? null
-  const balanceRemaining = settingsQuery.data?.balanceRemaining ?? null
   const planIsPro = settingsQuery.data?.planIsPro ?? false
-  const balanceWeekly = settingsQuery.data?.balanceWeekly ?? false
   const currentChat = useMemo(() => chats.find((c) => c.id === currentChatId) ?? null, [chats, currentChatId])
   // While NextAuth is still resolving the session, the chats/settings queries
   // are disabled (enabled: isAuthenticated). A disabled React Query reports
@@ -348,12 +343,7 @@ export function useChatWithSync() {
     currentChatId,
     settings,
     credentialFlags,
-    balanceResetAt,
-    balanceUsed,
-    balanceTotal,
-    balanceRemaining,
     planIsPro,
-    balanceWeekly,
     isHydrated,
     isLoading,
     isLoadingMessages,

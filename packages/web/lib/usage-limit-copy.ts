@@ -1,9 +1,4 @@
-import type { Plan } from "@/lib/server/usage-budgets"
 import { fmtBalance } from "@/lib/format"
-
-export function isPlan(value: unknown): value is Plan {
-  return value === "free" || value === "pro" || value === "unlimited"
-}
 
 /**
  * The message shown when a user has nothing left to spend.

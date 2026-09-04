@@ -29,19 +29,8 @@ interface SettingsResponse {
   credentialFlags: CredentialFlags
   /** The user's custom endpoints, headers decrypted for the owner to edit. */
   customEndpoints: CustomEndpoint[]
-  /** ISO timestamp when the daily Claude limit resets, or null if not limited */
-  balanceResetAt: string | null
-  /** Unit the three amounts below are in — "cost" (USD) for the Claude pool. */
-  /** Remaining Claude allowance today, or null if not applicable */
-  balanceRemaining: number | null
-  /** Claude allowance used in the current period, or null if not using shared pool */
-  balanceUsed: number | null
-  /** Daily budget for free/pro, or null if unlimited */
-  balanceTotal: number | null
   /** Whether user is a pro subscriber */
   planIsPro: boolean
-  /** Whether usage is tracked weekly (pro) vs daily (free) */
-  balanceWeekly: boolean
 }
 
 function readSettings(raw: unknown): Settings {
@@ -79,12 +68,7 @@ export async function GET(): Promise<Response> {
       settings: readSettings(user?.settings),
       credentialFlags: effective.flags,
       customEndpoints: decryptUserEndpoints(user?.customEndpoints),
-      balanceResetAt: effective.limitResetAt?.toISOString() ?? null,
-      balanceRemaining: effective.limitRemaining,
-      balanceUsed: effective.limitUsed,
-      balanceTotal: effective.limitTotal,
       planIsPro: effective.isPro,
-      balanceWeekly: effective.isWeekly,
     }
     return Response.json(response)
   } catch (error) {
@@ -171,12 +155,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       customEndpoints: decryptUserEndpoints(
         newEndpoints ?? (user?.customEndpoints as unknown)
       ),
-      balanceResetAt: effective.limitResetAt?.toISOString() ?? null,
-      balanceRemaining: effective.limitRemaining,
-      balanceUsed: effective.limitUsed,
-      balanceTotal: effective.limitTotal,
       planIsPro: effective.isPro,
-      balanceWeekly: effective.isWeekly,
     }
     return Response.json(response)
   } catch (error) {
