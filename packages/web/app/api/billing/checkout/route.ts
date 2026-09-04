@@ -4,9 +4,9 @@ import { requireAuth, isAuthError, internalError } from "@/lib/db/api-helpers"
 import { prisma } from "@/lib/db/prisma"
 import {
   appUrl,
+  getCreditPack,
   getStripe,
   isBillingEnabled,
-  resolvePriceId,
 } from "@/lib/server/stripe"
 
 export const runtime = "nodejs"
@@ -19,9 +19,11 @@ export const runtime = "nodejs"
  * and nowhere else, because this response can be replayed, bookmarked, or never
  * reached at all, while the payment still succeeded.
  *
- * The body carries a pack id, never an amount. The id is resolved against
- * STRIPE_PRICE_MAP on the server, so the set of things that can be bought is
- * fixed by the environment rather than by whatever the browser sends.
+ * The body carries a pack id, and — only for the pack Stripe marks as a
+ * customer-chosen amount — an `amountUsd`. The id is resolved against
+ * STRIPE_PRICE_MAP on the server, and the amount is checked against the bounds
+ * on that Stripe price, so what can be bought and for how much is fixed by
+ * Stripe and the environment rather than by whatever the browser sends.
  */
 export async function POST(request: NextRequest) {
   if (!isBillingEnabled()) {
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
   if (isAuthError(auth)) return auth
   const { userId } = auth
 
-  let body: { packId?: unknown }
+  let body: { packId?: unknown; amountUsd?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -44,13 +46,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "packId is required" }, { status: 400 })
   }
 
-  const priceId = resolvePriceId(packId)
-  if (!priceId) {
-    return NextResponse.json({ error: "Unknown pack" }, { status: 400 })
-  }
-
   try {
     const stripe = getStripe()
+
+    const pack = await getCreditPack(packId)
+    if (!pack) {
+      return NextResponse.json({ error: "Unknown pack" }, { status: 400 })
+    }
+
+    // A chosen amount is only meaningful for a custom-amount price, and only
+    // within the bounds Stripe itself carries for it.
+    let customCents: number | null = null
+    if (body.amountUsd !== undefined) {
+      if (pack.amountUsd !== null) {
+        return NextResponse.json(
+          { error: "This pack has a fixed amount" },
+          { status: 400 }
+        )
+      }
+      const amountUsd = body.amountUsd
+      if (typeof amountUsd !== "number" || !Number.isFinite(amountUsd)) {
+        return NextResponse.json({ error: "amountUsd must be a number" }, { status: 400 })
+      }
+      const cents = Math.round(amountUsd * 100)
+      const minCents = Math.round((pack.minUsd ?? 0) * 100)
+      const maxCents = Math.round((pack.maxUsd ?? 0) * 100)
+      if (cents < minCents || (maxCents > 0 && cents > maxCents)) {
+        return NextResponse.json(
+          { error: `Enter an amount between $${(minCents / 100).toFixed(2)} and $${(maxCents / 100).toFixed(2)}` },
+          { status: 400 }
+        )
+      }
+      customCents = cents
+    } else if (pack.amountUsd === null) {
+      // No amount given for a custom pack — fall back to Stripe's preset so the
+      // request still buys something rather than failing at the redirect.
+      customCents = Math.round((pack.presetUsd ?? pack.minUsd ?? 0) * 100)
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -80,7 +112,21 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        customCents === null
+          ? { price: pack.priceId, quantity: 1 }
+          : {
+              // An ad-hoc line against the same product: the amount is already
+              // decided here, so Checkout shows a total to pay rather than an
+              // empty amount field.
+              price_data: {
+                currency: pack.currency,
+                product: pack.productId,
+                unit_amount: customCents,
+              },
+              quantity: 1,
+            },
+      ],
       // Three places to find the user, because the webhook must never guess.
       // client_reference_id and metadata cover the session events;
       // payment_intent_data.metadata carries the id onto the PaymentIntent, so

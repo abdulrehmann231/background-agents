@@ -2,17 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Coins,
-  CreditCard,
-  Loader2,
-  TriangleAlert,
-  Wallet,
-} from "lucide-react"
+import { CreditCard, Plus, TriangleAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MobileSectionHeader } from "./shared"
+import { TopUpDialog } from "./TopUpDialog"
 import { fmtBalance } from "@/lib/format"
 import type { UserCreditsResponse } from "@/app/api/user/credits/route"
 import type { PacksResponse } from "@/app/api/billing/packs/route"
@@ -41,13 +34,15 @@ function fmtSigned(usd: number): string {
  * This is the only balance that actually gates a send now (see
  * lib/db/usage-limit) — the daily numbers under the Usage tab are informational
  * only, which is why this tab, not that one, is what's surfaced by default.
+ *
+ * Buying is one button, not a wall of packs: the amount is chosen in
+ * TopUpDialog, so this tab stays about the balance and where it went.
  */
 export function CreditsSection({ isMobile }: CreditsSectionProps) {
   const [credits, setCredits] = useState<UserCreditsResponse | null>(null)
   const [creditsError, setCreditsError] = useState<string | null>(null)
   const [packs, setPacks] = useState<PacksResponse | null>(null)
-  const [buyingId, setBuyingId] = useState<string | null>(null)
-  const [buyError, setBuyError] = useState<string | null>(null)
+  const [topUpOpen, setTopUpOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -64,8 +59,8 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
         if (!cancelled) setCreditsError(e instanceof Error ? e.message : "Failed to load credits")
       })
 
-    // Packs failing (billing not configured on this deployment) just hides
-    // the top-up row rather than blocking the balance/history above it.
+    // Packs failing (billing not configured on this deployment) just disables
+    // the buy button rather than blocking the balance/history around it.
     fetch("/api/billing/packs")
       .then(async (res) => {
         if (!res.ok) throw new Error(`Failed to load packs (${res.status})`)
@@ -83,81 +78,80 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
     }
   }, [])
 
-  const buyPack = useCallback(async (packId: string) => {
-    setBuyError(null)
-    setBuyingId(packId)
-    try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packId }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || typeof data.url !== "string") {
-        throw new Error(data.error || "Could not start checkout")
-      }
-      // Full navigation, not a fetch redirect: Checkout is a hosted Stripe
-      // page, and the success/cancel URLs bring the user straight back here.
-      window.location.href = data.url
-    } catch (e) {
-      setBuyError(e instanceof Error ? e.message : "Could not start checkout")
-      setBuyingId(null)
-    }
-  }, [])
+  const closeTopUp = useCallback(() => setTopUpOpen(false), [])
 
   const isNegative = !!credits && credits.balanceUsd < 0
   const isEmpty = !!credits && credits.balanceUsd === 0
+  const canBuy = !!packs?.enabled && packs.packs.length > 0
 
   return (
     <div>
       {isMobile && <MobileSectionHeader icon={CreditCard} label="Credits" />}
 
-      <p className="text-xs text-muted-foreground mb-4">
-        Purchased credits, spent once your daily balance runs out. Unlike the
-        daily balance, they never expire or reset on their own.
-      </p>
-
       {creditsError ? (
         <div className="text-sm text-destructive py-3">{creditsError}</div>
       ) : !credits ? (
-        <div className="space-y-4" aria-hidden>
-          <div className="h-[72px] w-full rounded-xl bg-muted animate-pulse" />
-          <div className="grid grid-cols-3 gap-2">
-            <div className="h-16 rounded-lg bg-muted animate-pulse" />
-            <div className="h-16 rounded-lg bg-muted animate-pulse" />
-            <div className="h-16 rounded-lg bg-muted animate-pulse" />
-          </div>
+        <div className="space-y-3" aria-hidden>
+          <div className="h-24 w-full rounded-xl bg-muted animate-pulse" />
+          <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+          <div className="h-24 w-full rounded-lg bg-muted animate-pulse" />
         </div>
       ) : (
         <>
-          {/* Balance — the stat tile: one hero number, status called out with an
-              icon + label rather than color alone. */}
+          {/* Balance — one hero number and one action. Status is called out with
+              an icon and words, never colour alone. */}
           <div
             className={cn(
               "rounded-xl border p-4",
               isNegative ? "border-destructive/30 bg-destructive/5" : "border-border bg-muted/30"
             )}
           >
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Wallet className="h-3.5 w-3.5" />
-              Available credits
+            <div className="text-xs font-medium text-muted-foreground">Available credits</div>
+
+            <div className="mt-1.5 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div
+                  className={cn(
+                    "text-4xl font-semibold tabular-nums leading-none",
+                    isNegative ? "text-destructive" : "text-foreground"
+                  )}
+                >
+                  {isNegative
+                    ? `-${fmtBalance(Math.abs(credits.balanceUsd))}`
+                    : fmtBalance(credits.balanceUsd)}
+                </div>
+                <div className="mt-1.5 text-[11px] text-muted-foreground">
+                  Never expires · shared across Claude, OpenCode and Gemini
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setTopUpOpen(true)}
+                disabled={!canBuy}
+                title={canBuy ? undefined : "Top-ups aren't available on this deployment yet"}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground",
+                  "transition-colors hover:bg-primary/90 cursor-pointer",
+                  "focus:outline-none focus:ring-2 focus:ring-ring/60",
+                  "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
+                )}
+              >
+                <Plus className="h-4 w-4" />
+                Buy credits
+              </button>
             </div>
-            <div
-              className={cn(
-                "mt-1 text-3xl font-semibold",
-                isNegative ? "text-destructive" : "text-foreground"
-              )}
-            >
-              {isNegative ? `-${fmtBalance(Math.abs(credits.balanceUsd))}` : fmtBalance(credits.balanceUsd)}
-            </div>
+
             {(isNegative || isEmpty) && (
               <div
                 className={cn(
-                  "mt-2 flex items-center gap-1.5 text-xs",
-                  isNegative ? "text-destructive" : "text-muted-foreground"
+                  "mt-3 flex items-start gap-1.5 border-t pt-3 text-xs",
+                  isNegative
+                    ? "border-destructive/20 text-destructive"
+                    : "border-border/50 text-muted-foreground"
                 )}
               >
-                {isNegative && <TriangleAlert className="h-3.5 w-3.5 shrink-0" />}
+                {isNegative && <TriangleAlert className="h-3.5 w-3.5 shrink-0 mt-px" />}
                 <span>
                   {isNegative
                     ? "Your last turn ran past your balance — top up to clear it and keep going."
@@ -167,101 +161,60 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
             )}
           </div>
 
-          {/* Top up */}
-          <div className="mt-5">
-            <div className="text-sm font-medium mb-2">Top up</div>
-            {!packs ? (
-              <div className="grid grid-cols-3 gap-2" aria-hidden>
-                <div className="h-16 rounded-lg bg-muted animate-pulse" />
-                <div className="h-16 rounded-lg bg-muted animate-pulse" />
-                <div className="h-16 rounded-lg bg-muted animate-pulse" />
+          {!canBuy && packs && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Top-ups aren&apos;t available on this deployment yet.
+            </p>
+          )}
+
+          {/* Recent activity — a plain ledger. Amounts are the only thing worth
+              scanning, so they're the only thing aligned and emphasised. */}
+          {credits.transactions.length > 0 && (
+            <div className="mt-6">
+              <div className="text-xs font-medium text-muted-foreground mb-1">
+                Recent activity
               </div>
-            ) : !packs.enabled || packs.packs.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                Top-ups aren&apos;t available on this deployment yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {packs.packs.map((pack) => {
-                  const isCustom = pack.amountUsd == null
-                  const isBuying = buyingId === pack.id
+              <div className="divide-y divide-border/40">
+                {credits.transactions.map((t) => {
+                  const isCredit = t.amountUsd >= 0
                   return (
-                    <button
-                      key={pack.id}
-                      onClick={() => buyPack(pack.id)}
-                      disabled={buyingId !== null}
-                      className={cn(
-                        "group relative flex flex-col items-start gap-1 rounded-lg border border-border bg-background p-3 text-left transition-colors cursor-pointer",
-                        "hover:border-primary/40 hover:bg-primary/5",
-                        "disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-background",
-                        !isBuying && buyingId !== null && "opacity-50"
-                      )}
-                    >
-                      <Coins className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span className="text-lg font-semibold text-foreground">
-                        {isCustom ? "Custom" : fmtBalance(pack.amountUsd!)}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {isCustom
-                          ? `${fmtBalance(pack.minUsd ?? 0)}–${fmtBalance(pack.maxUsd ?? 0)}`
-                          : "One-time top-up"}
-                      </span>
-                      {isBuying && (
-                        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/80">
-                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                        </span>
-                      )}
-                    </button>
+                    <div key={t.id} className="flex items-baseline gap-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs text-foreground">
+                          {TRANSACTION_LABEL[t.type] ?? t.type}
+                          {t.description && (
+                            <span className="text-muted-foreground"> · {t.description}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(t.createdAt), { addSuffix: true })}
+                      </div>
+                      <div
+                        className={cn(
+                          "w-16 shrink-0 text-right text-xs font-medium tabular-nums",
+                          isCredit ? "text-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {fmtSigned(t.amountUsd)}
+                      </div>
+                    </div>
                   )
                 })}
               </div>
-            )}
-            {buyError && <p className="text-xs text-destructive mt-2">{buyError}</p>}
-          </div>
-
-          {/* Recent activity */}
-          {credits.transactions.length > 0 && (
-            <div className="mt-5 border-t border-border/30 pt-3">
-              <div className="text-sm font-medium mb-1">Recent activity</div>
-              {credits.transactions.map((t) => {
-                const isCredit = t.amountUsd >= 0
-                return (
-                  <div key={t.id} className="flex items-center gap-3 py-2">
-                    <div
-                      className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                        isCredit ? "bg-green-500/10" : "bg-muted"
-                      )}
-                    >
-                      {isCredit ? (
-                        <ArrowUpRight className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <ArrowDownRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-medium text-foreground">
-                        {TRANSACTION_LABEL[t.type] ?? t.type}
-                      </div>
-                      <div className="truncate text-[11px] text-muted-foreground">
-                        {t.description ? `${t.description} · ` : ""}
-                        {formatDistanceToNow(new Date(t.createdAt), { addSuffix: true })}
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "shrink-0 text-xs font-medium tabular-nums",
-                        isCredit ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
-                      )}
-                    >
-                      {fmtSigned(t.amountUsd)}
-                    </div>
-                  </div>
-                )
-              })}
             </div>
           )}
         </>
+      )}
+
+      {canBuy && (
+        <TopUpDialog
+          open={topUpOpen}
+          onClose={closeTopUp}
+          packs={packs!.packs}
+          balanceUsd={credits?.balanceUsd ?? null}
+          isMobile={isMobile}
+        />
       )}
     </div>
   )

@@ -91,6 +91,13 @@ export interface CreditPack {
   minUsd?: number
   maxUsd?: number
   presetUsd?: number
+  /**
+   * The price's product and currency. Needed only for a customer-chosen
+   * amount, where checkout bills an ad-hoc `price_data` line against this
+   * product rather than sending the user to Stripe to type the amount there.
+   */
+  productId: string
+  currency: string
 }
 
 interface PackCache {
@@ -137,6 +144,8 @@ export async function getCreditPacks(): Promise<CreditPack[]> {
       packs.push({
         id,
         priceId,
+        productId: typeof price.product === "string" ? price.product : price.product.id,
+        currency: price.currency,
         amountUsd: price.unit_amount != null ? price.unit_amount / 100 : null,
         ...(custom
           ? {
@@ -156,6 +165,11 @@ export async function getCreditPacks(): Promise<CreditPack[]> {
 
   packCache = { packs, at: Date.now() }
   return packs
+}
+
+/** One pack by id, or null when the id is not one this deployment sells. */
+export async function getCreditPack(packId: string): Promise<CreditPack | null> {
+  return (await getCreditPacks()).find((p) => p.id === packId) ?? null
 }
 
 /** Absolute URL for a path on this deployment, for Checkout's redirect URLs. */
