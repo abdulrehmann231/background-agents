@@ -177,8 +177,9 @@ export interface ModelOption {
    * Only set for models that don't require the user's own key — either the
    * server's shared credential pool (a real per-input-token $/M rate, e.g.
    * "$2/M" or "30¢/M") or "FREE" for models needing no key at all (requiresKey
-   * "none"). Omitted for BYOK models and for auto/default routers, whose
-   * resolved model — and so cost — is unknown ahead of time.
+   * "none"). May also be set on a BYOK model as an indicative list rate (e.g.
+   * Fable's "$10/M"). Omitted for auto/default routers, whose resolved model —
+   * and so cost — is unknown ahead of time.
    */
   priceLabel?: string
 }
@@ -236,8 +237,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opus", label: "Opus", requiresKey: "anthropic", priceLabel: "$5/M" },
     { value: "haiku", label: "Haiku", requiresKey: "anthropic", priceLabel: "$1/M" },
     // BYOK-only: excluded from the shared Claude pool (see
-    // SHARED_CLAUDE_POOL_EXCLUDED_MODELS) — no priceLabel since it never draws it.
-    { value: "fable", label: "Fable", requiresKey: "anthropic" },
+    // SHARED_CLAUDE_POOL_EXCLUDED_MODELS). priceLabel is shown as an indicative
+    // list rate even though the user runs it on their own key.
+    { value: "fable", label: "Fable", requiresKey: "anthropic", priceLabel: "$10/M" },
     { value: "default", label: "Auto", requiresKey: "anthropic" },
     { value: "best", label: "Best", requiresKey: "anthropic" },
   ],
