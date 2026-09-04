@@ -65,12 +65,7 @@ export interface SettingsResponse {
   settings: Settings
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
-  balanceResetAt?: string | null
-  balanceRemaining?: number | null
-  balanceUsed?: number | null
-  balanceTotal?: number | null
   planIsPro?: boolean
-  balanceWeekly?: boolean
 }
 
 // =============================================================================

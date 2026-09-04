@@ -28,6 +28,7 @@ import { useBranching } from "@/lib/hooks/useBranching"
 import { useChatNavigation } from "@/lib/hooks/useChatNavigation"
 import { useRepoSelectHandler } from "@/lib/hooks/useRepoSelectHandler"
 import { LocalSyncManager } from "@/lib/hooks/useLocalSync"
+import { useToastStore } from "@/lib/stores/toast-store"
 import {
   ChatProvider,
   ModalProvider,
@@ -110,9 +111,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     currentChatId,
     settings,
     credentialFlags,
-    balanceResetAt,
-    balanceUsed,
-    balanceTotal,
     isHydrated,
     isLoading,
     isLoadingMessages,
@@ -229,6 +227,33 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       sidebar.setMobileSidebarOpen(false)
     }
   }, [isMobile, sidebar])
+
+  // Stripe's Checkout success/cancel URLs redirect back to "/" with a `topup`
+  // query param. Surface it as a toast, jump to the Credits tab on success so
+  // the user lands where the (webhook-credited, so not instant) balance shows
+  // up, then scrub the param so a refresh doesn't re-trigger it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const topup = params.get("topup")
+    if (!topup) return
+
+    if (topup === "success") {
+      useToastStore.getState().addToast({
+        title: "Payment received",
+        body: "Your credits will show up in a few seconds.",
+      })
+      modals.openSettingsSection("credits")
+    } else if (topup === "cancelled") {
+      useToastStore.getState().addToast({ title: "Checkout cancelled" })
+    }
+
+    params.delete("topup")
+    params.delete("session_id")
+    const query = params.toString()
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`)
+    // Meant to run once, right after landing back from Stripe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Auto-select first chat on mobile when no chat is selected
   useEffect(() => {
@@ -638,13 +663,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   settings={settings}
                   credentialFlags={credentialFlags}
                   showClaudeLimitDialog={() => {
-                    setLimitReachedState({
-                      show: true,
-                      provider: "claude",
-                      used: balanceUsed,
-                      limit: balanceTotal,
-                      resetAt: balanceResetAt ? new Date(balanceResetAt) : undefined,
-                    })
+                    setLimitReachedState({ show: true, provider: "claude" })
                   }}
                   onSendMessage={handleSendMessage}
                   onReload={reloadChat}

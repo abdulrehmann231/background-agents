@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FolderDown, Bell, Gauge, Server, Wrench } from "lucide-react"
+import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FolderDown, Bell, CreditCard, Server, Wrench } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -19,7 +19,7 @@ import {
   GeneralSection,
   ApiKeysSection,
   CustomEndpointsSection,
-  UsageSection,
+  CreditsSection,
   GitSection,
   NotificationsSection,
   LocalSyncSection,
@@ -34,7 +34,7 @@ import {
 export type { HighlightKey }
 
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "usage" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
+export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "credits" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
 
 interface SettingsModalProps {
   open: boolean
@@ -61,7 +61,6 @@ const baseSections: SectionDef[] = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "api-keys", label: "API Keys", icon: Key },
   { key: "custom-endpoints", label: "Custom endpoints", icon: Server },
-  { key: "usage", label: "Usage", icon: Gauge },
   { key: "appearance", label: "Appearance", icon: Sun },
   { key: "git", label: "Git", icon: GitBranch },
   { key: "notifications", label: "Notifications", icon: Bell },
@@ -69,13 +68,23 @@ const baseSections: SectionDef[] = [
 ]
 
 const localSyncSection: SectionDef = { key: "local-sync", label: "Local Sync", icon: FolderDown }
+const creditsSection: SectionDef = { key: "credits", label: "Credits", icon: CreditCard }
 
-/** The "Local Sync" tab is desktop-only; the web app never shows it. */
-function getSections(isDesktopApp: boolean): SectionDef[] {
-  if (!isDesktopApp) return baseSections
+/**
+ * "Local Sync" is desktop-only; the web app never shows it. "Credits" appears
+ * only where billing is configured — a deployment with no Stripe keys 404s
+ * every billing route, so the tab would offer a balance nobody can top up.
+ */
+function getSections(isDesktopApp: boolean, billingEnabled: boolean): SectionDef[] {
   const out = [...baseSections]
-  const gitIndex = out.findIndex((s) => s.key === "git")
-  out.splice(gitIndex + 1, 0, localSyncSection)
+  if (billingEnabled) {
+    const endpointsIndex = out.findIndex((s) => s.key === "custom-endpoints")
+    out.splice(endpointsIndex + 1, 0, creditsSection)
+  }
+  if (isDesktopApp) {
+    const gitIndex = out.findIndex((s) => s.key === "git")
+    out.splice(gitIndex + 1, 0, localSyncSection)
+  }
   return out
 }
 
@@ -91,8 +100,29 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     [settingsData?.customEndpoints]
   )
 
-  // The "Local Sync" tab only exists in the desktop app.
-  const sections = useMemo(() => getSections(isDesktopApp), [isDesktopApp])
+  // Billing is a deployment-level switch, so ask once per opened modal rather
+  // than per render. Failure (or no Stripe config) simply hides the tab.
+  const [billingEnabled, setBillingEnabled] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch("/api/billing/packs")
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((d: { enabled?: boolean }) => {
+        if (!cancelled) setBillingEnabled(!!d.enabled)
+      })
+      .catch(() => {
+        if (!cancelled) setBillingEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
+  const sections = useMemo(
+    () => getSections(isDesktopApp, billingEnabled),
+    [isDesktopApp, billingEnabled]
+  )
 
   // License auto-detect state (desktop only)
   const [licenseAutoDetectEnabled, setLicenseAutoDetectEnabled] = useState(true)
@@ -396,8 +426,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             setEndpoints={setEndpoints}
           />
         )
-      case "usage":
-        return <UsageSection isMobile={isMobile} />
+      case "credits":
+        return <CreditsSection isMobile={isMobile} />
       case "git":
         return (
           <GitSection

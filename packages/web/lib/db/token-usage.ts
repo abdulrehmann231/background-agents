@@ -147,15 +147,37 @@ export async function getSessionCumulatives(
   return out
 }
 
+/** A persisted delta row, as far as the credit debit needs to know it. */
+export interface InsertedTokenUsageRow {
+  id: string
+  provider: string
+  pool: string
+  freeModel: boolean
+  costUsd: number
+}
+
 /**
- * Persist a batch of per-turn delta rows. No-op for an empty array.
+ * Persist a batch of per-turn delta rows, returning what was written. No-op for
+ * an empty array.
+ *
+ * Returns the rows (via `createManyAndReturn`) rather than just a count because
+ * the credit debit that follows in the same transaction keys on each row's id —
+ * that unique `CreditTransaction.tokenUsageId` is what makes a usage charge
+ * exactly-once and reconcilable row to row.
  */
 export async function insertTokenUsageRows(
   rows: TokenUsageInsert[],
   tx: UsageDb = prisma
-): Promise<void> {
-  if (rows.length === 0) return
-  await tx.tokenUsage.createMany({
+): Promise<InsertedTokenUsageRow[]> {
+  if (rows.length === 0) return []
+  return tx.tokenUsage.createManyAndReturn({
+    select: {
+      id: true,
+      provider: true,
+      pool: true,
+      freeModel: true,
+      costUsd: true,
+    },
     data: rows.map((r) => ({
       userId: r.userId,
       chatId: r.chatId ?? null,
@@ -296,12 +318,18 @@ export async function sumSharedUsage(params: {
  * stamped `pool: "shared"`; free models are excluded by `freeModel`, which is
  * what keeps them usable on a spent allowance.
  */
-export async function sumSharedSpend(params: {
-  userId: string
-  since: Date
-}): Promise<number> {
+export async function sumSharedSpend(
+  params: {
+    userId: string
+    since: Date
+  },
+  // The metering path needs this on its own transaction: it has to read the
+  // spend from *before* the turn it is about to insert, and a read outside the
+  // transaction could see another writer's rows land in between.
+  tx: UsageDb = prisma
+): Promise<number> {
   const { userId, since } = params
-  const agg = await prisma.tokenUsage.aggregate({
+  const agg = await tx.tokenUsage.aggregate({
     where: {
       userId,
       pool: "shared",
@@ -314,30 +342,3 @@ export async function sumSharedSpend(params: {
   return agg._sum.costUsd ?? 0
 }
 
-/**
- * The same sum, split by provider — for the breakdown under the usage bar.
- * Providers with no spend are omitted.
- */
-export async function sumSharedSpendByProvider(params: {
-  userId: string
-  since: Date
-}): Promise<Record<string, number>> {
-  const { userId, since } = params
-  const grouped = await prisma.tokenUsage.groupBy({
-    by: ["provider"],
-    where: {
-      userId,
-      pool: "shared",
-      freeModel: false,
-      provider: { in: [...BALANCE_POOL_PROVIDERS] },
-      createdAt: { gte: since },
-    },
-    _sum: { costUsd: true },
-  })
-  const out: Record<string, number> = {}
-  for (const g of grouped) {
-    const spend = g._sum.costUsd ?? 0
-    if (spend > 0) out[g.provider] = spend
-  }
-  return out
-}

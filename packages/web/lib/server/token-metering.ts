@@ -29,11 +29,13 @@ import {
   type TokenUsageInsert,
   type UsagePool,
 } from "@/lib/db/token-usage"
+import { chargeTurnToCredits } from "@/lib/db/credits"
+import { microToUsd } from "@/lib/server/credits"
+import { isFreeModel, type Plan } from "@/lib/server/usage-budgets"
 import {
   collapseEntriesByModel,
   cursorForModel,
 } from "@/lib/server/usage-cursor"
-import { isFreeModel } from "@/lib/server/usage-budgets"
 import { priceClaudeTurn } from "@/lib/server/claude-pricing"
 import { readUsageMeta } from "@/lib/server/shared-pool"
 import {
@@ -338,7 +340,38 @@ async function meterTurnUsage(
 
         if (rows.length === 0) return 0
 
-        await insertTokenUsageRows(rows, tx)
+        // There is no free daily tier any more: a chargeable turn is debited
+        // straight from purchased credits in full (dailyLeft: 0 makes
+        // splitTurnCost send the whole cost to credits — see
+        // lib/server/credits). The only carve-out is the `unlimited` plan,
+        // which never touches credits at all. Skipped entirely for baseline
+        // rows: they are backdated out of every budget window precisely so
+        // the pre-metering backlog charges nobody, and charging it to a real
+        // balance would drain a top-up on a chat's first metered turn.
+        let chargeCredits = false
+        if (!baselineAt) {
+          const user = await tx.user.findUnique({
+            where: { id: userId },
+            select: { plan: true },
+          })
+          chargeCredits = ((user?.plan as Plan) ?? "free") !== "unlimited"
+        }
+
+        const inserted = await insertTokenUsageRows(rows, tx)
+
+        if (chargeCredits) {
+          const debited = await chargeTurnToCredits(
+            { userId, chatId, rows: inserted, dailyLeft: 0 },
+            tx
+          )
+          if (debited > 0n) {
+            console.log(
+              `[token-metering] charged $${microToUsd(debited).toFixed(4)} of credits ` +
+                `for session ${sessionId}`
+            )
+          }
+        }
+
         return rows.length
       },
       { maxWait: METER_TX_MAX_WAIT_MS, timeout: METER_TX_TIMEOUT_MS }

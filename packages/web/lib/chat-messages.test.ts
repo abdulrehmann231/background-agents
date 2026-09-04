@@ -6,16 +6,12 @@ describe("sendMessageToApi", () => {
     vi.unstubAllGlobals()
   })
 
-  it("preserves the subscription plan from a daily-limit response", async () => {
+  it("preserves what the limit dialog needs from a 429", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
       Response.json({
         error: "DAILY_LIMIT_EXCEEDED",
-        plan: "pro",
         provider: "gemini",
-        unit: "messages",
-        used: 200,
-        limit: 200,
-        resetAt: "2026-08-02T00:00:00.000Z",
+        creditBalance: -1.5,
       }, { status: 429 })
     ))
 
@@ -30,9 +26,29 @@ describe("sendMessageToApi", () => {
     expect(result).toMatchObject({
       ok: false,
       isDailyLimit: true,
-      plan: "pro",
       provider: "gemini",
-      limit: 200,
+      creditBalance: -1.5,
     })
+  })
+
+  it("ignores a non-numeric creditBalance rather than passing it through", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      Response.json({
+        error: "DAILY_LIMIT_EXCEEDED",
+        provider: "claude",
+        creditBalance: "lots",
+      }, { status: 429 })
+    ))
+
+    const result = await sendMessageToApi("chat-1", {
+      message: "Continue",
+      agent: "claude",
+      model: "claude-opus-5",
+      userMessageId: "user-1",
+      assistantMessageId: "assistant-1",
+    })
+
+    expect(result).toMatchObject({ ok: false, isDailyLimit: true })
+    expect((result as { creditBalance?: unknown }).creditBalance).toBeUndefined()
   })
 })

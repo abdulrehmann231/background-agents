@@ -7,8 +7,6 @@
 // in chat-messages.test.ts instead of being buried inline in the hook.
 
 import type { Chat, Message } from "@/lib/types"
-import type { Plan } from "@/lib/server/usage-budgets"
-import { isPlan } from "@/lib/usage-limit-copy"
 import { generateBranchName } from "@/lib/utils"
 
 // =============================================================================
@@ -39,16 +37,14 @@ export type SendMessageResult =
       ok: false
       error: string
       isDailyLimit: boolean
-      resetAt?: string
-      /** Subscription plan used to select the correct limit upsell. */
-      plan?: Plan
       /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
       provider?: string
-      /** Unit the budget is measured in (tokens | cost | messages). */
-      unit?: "tokens" | "cost" | "messages"
-      /** Amount used / daily budget for that provider, in `unit`, from the 429 body. */
-      used?: number
-      limit?: number
+      /**
+       * Purchased credits in USD, from the 429 body. Negative when the turn
+       * that emptied them overshot. This is what gates a send — see
+       * lib/db/usage-limit — so it's what the dialog explains.
+       */
+      creditBalance?: number | null
     }
   | {
       ok: false
@@ -114,12 +110,8 @@ export async function sendMessageToApi(
       // collapsing into a bare "Failed to send message".
       error: err.error || `Failed to send message (HTTP ${response.status})`,
       isDailyLimit: err.error === "DAILY_LIMIT_EXCEEDED",
-      resetAt: err.resetAt,
-      plan: isPlan(err.plan) ? err.plan : undefined,
       provider: err.provider,
-      unit: err.unit,
-      used: err.used,
-      limit: err.limit,
+      creditBalance: typeof err.creditBalance === "number" ? err.creditBalance : undefined,
     }
   }
 
