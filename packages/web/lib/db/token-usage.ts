@@ -342,30 +342,3 @@ export async function sumSharedSpend(
   return agg._sum.costUsd ?? 0
 }
 
-/**
- * The same sum, split by provider — for the breakdown under the usage bar.
- * Providers with no spend are omitted.
- */
-export async function sumSharedSpendByProvider(params: {
-  userId: string
-  since: Date
-}): Promise<Record<string, number>> {
-  const { userId, since } = params
-  const grouped = await prisma.tokenUsage.groupBy({
-    by: ["provider"],
-    where: {
-      userId,
-      pool: "shared",
-      freeModel: false,
-      provider: { in: [...BALANCE_POOL_PROVIDERS] },
-      createdAt: { gte: since },
-    },
-    _sum: { costUsd: true },
-  })
-  const out: Record<string, number> = {}
-  for (const g of grouped) {
-    const spend = g._sum.costUsd ?? 0
-    if (spend > 0) out[g.provider] = spend
-  }
-  return out
-}

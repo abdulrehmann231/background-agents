@@ -20,7 +20,6 @@ import {
   ApiKeysSection,
   CustomEndpointsSection,
   CreditsSection,
-  UsageSection,
   GitSection,
   NotificationsSection,
   LocalSyncSection,
@@ -35,7 +34,7 @@ import {
 export type { HighlightKey }
 
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "credits" | "usage" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
+export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "credits" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
 
 interface SettingsModalProps {
   open: boolean
@@ -63,11 +62,6 @@ const baseSections: SectionDef[] = [
   { key: "api-keys", label: "API Keys", icon: Key },
   { key: "custom-endpoints", label: "Custom endpoints", icon: Server },
   { key: "credits", label: "Credits", icon: CreditCard },
-  // Usage tab disabled: gating is purely credit-based now (see
-  // lib/db/usage-limit), so these daily numbers are display-only and
-  // Credits is the tab that actually matters. Not deleted — UsageSection
-  // and its /api/user/usage backend still work, just unreached from here.
-  // { key: "usage", label: "Usage", icon: Gauge },
   { key: "appearance", label: "Appearance", icon: Sun },
   { key: "git", label: "Git", icon: GitBranch },
   { key: "notifications", label: "Notifications", icon: Bell },
@@ -404,10 +398,6 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
         )
       case "credits":
         return <CreditsSection isMobile={isMobile} />
-      case "usage":
-        // Disabled from the sidebar (see baseSections) but still a valid
-        // SectionKey, so this stays reachable rather than dead.
-        return <UsageSection isMobile={isMobile} />
       case "git":
         return (
           <GitSection
