@@ -55,6 +55,7 @@ import {
   hasCredentialsForModel,
   modelRequiresKey,
   getDefaultModelForAgent,
+  getFreeModelForAgent,
   getAgentModels,
   getModelLabel,
   getEnvForModel,
