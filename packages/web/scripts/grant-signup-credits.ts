@@ -40,12 +40,19 @@ import {
   usdToMicro,
 } from "../lib/server/credits"
 
-// Same precedence as prisma.config.ts and Next itself: .env.local wins. Without
-// this the script reads whatever happens to be exported in the shell, which is
-// how a backfill ends up pointed at the wrong database.
+// Same precedence as prisma.config.ts and Next itself: .env.local beats .env,
+// so running this with no arguments hits the same database the app does.
+//
+// An explicitly exported DATABASE_URL beats both, which is where this departs
+// from prisma.config.ts on purpose. Pointing at another database is the only
+// reason anyone exports one, and this script writes money: letting .env.local
+// silently win would send a `--apply` meant for production into whatever the
+// developer's checkout happens to be configured for.
+const exported = process.env.DATABASE_URL
 const packageDir = path.join(__dirname, "..")
 loadEnv({ path: path.join(packageDir, ".env") })
 loadEnv({ path: path.join(packageDir, ".env.local"), override: true })
+if (exported) process.env.DATABASE_URL = exported
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
 if (!connectionString) throw new Error("DATABASE_URL is not set")
