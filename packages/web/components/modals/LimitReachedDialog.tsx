@@ -21,12 +21,13 @@ interface LimitReachedDialogProps {
   onUpgradePlan: (targetPlan: LimitUpgradeTarget) => void
   /** Shared-pool provider the blocked run would have used (claude | gemini | opencode). */
   provider?: string
-  /** Spent today / the daily balance, in USD of API list value. */
-  used?: number | null
-  limit?: number | null
+  /**
+   * Purchased credits in USD — this is what actually gates a send (see
+   * lib/db/usage-limit). Negative when the turn that emptied them overshot.
+   */
+  creditBalance?: number | null
   /** Current subscription tier; defaults to Free for older responses. */
   plan?: Plan
-  resetAt?: Date
   isMobile?: boolean
 }
 
@@ -43,10 +44,8 @@ export function LimitReachedDialog({
   onAddApiKey,
   onUpgradePlan,
   provider,
-  used,
-  limit,
+  creditBalance,
   plan,
-  resetAt,
   isMobile = false,
 }: LimitReachedDialogProps) {
   const providerLabel = PROVIDER_LABEL[provider ?? ""] ?? "shared model"
@@ -83,16 +82,6 @@ export function LimitReachedDialog({
     onClose()
   }, [upgradeCopy, onUpgradePlan, onClose])
 
-  // Format reset time
-  const resetTimeString = resetAt
-    ? new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-        timeZoneName: "short",
-      }).format(resetAt)
-    : "midnight UTC"
-
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Portal>
@@ -118,23 +107,21 @@ export function LimitReachedDialog({
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-xl shadow-xl"
           )}
         >
-          <ModalHeader title="Daily Limit Reached" />
+          <ModalHeader title="Out of Credits" />
           <div className="px-4 pt-3 pb-4 space-y-4">
             <div className="text-sm text-muted-foreground">
-              You&apos;ve used your daily balance
-              {typeof limit === "number" ? (
+              {typeof creditBalance === "number" && creditBalance < 0 ? (
                 <>
-                  {" "}
-                  &mdash;{" "}
+                  Your last turn ran{" "}
                   <span className="font-medium text-foreground">
-                    {typeof used === "number" ? fmtBalance(used) : fmtBalance(limit)} of{" "}
-                    {fmtBalance(limit)}
-                  </span>
+                    {fmtBalance(Math.abs(creditBalance))}
+                  </span>{" "}
+                  past your credits.
                 </>
-              ) : null}
-              . It resets at{" "}
-              <span className="font-medium text-foreground">{resetTimeString}</span>.
-              Your balance is shared across Claude, OpenCode and Gemini.
+              ) : (
+                "You're out of credits."
+              )}{" "}
+              Top up to continue — your balance is shared across Claude, OpenCode and Gemini.
             </div>
 
             <div className="space-y-2">

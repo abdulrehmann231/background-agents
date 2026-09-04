@@ -49,6 +49,12 @@ export type SendMessageResult =
       /** Amount used / daily budget for that provider, in `unit`, from the 429 body. */
       used?: number
       limit?: number
+      /**
+       * Purchased credits in USD, from the 429 body. Negative when the turn
+       * that emptied them overshot. This is what actually gates a send now —
+       * see lib/db/usage-limit — so it's what the dialog should explain.
+       */
+      creditBalance?: number | null
     }
   | {
       ok: false
@@ -120,6 +126,7 @@ export async function sendMessageToApi(
       unit: err.unit,
       used: err.used,
       limit: err.limit,
+      creditBalance: typeof err.creditBalance === "number" ? err.creditBalance : undefined,
     }
   }
 
