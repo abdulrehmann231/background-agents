@@ -25,14 +25,22 @@ import { prisma } from "@/lib/db/prisma"
 import {
   getSessionCumulatives,
   insertTokenUsageRows,
-  ZERO_CUMULATIVE,
+  lockSessionForMetering,
   type TokenUsageInsert,
   type UsagePool,
 } from "@/lib/db/token-usage"
+import {
+  collapseEntriesByModel,
+  cursorForModel,
+} from "@/lib/server/usage-cursor"
 import { isFreeModel } from "@/lib/server/usage-budgets"
 import { priceClaudeTurn } from "@/lib/server/claude-pricing"
 import { readUsageMeta } from "@/lib/server/shared-pool"
-import { resolveTurnModel, floorCostUsd } from "@/lib/server/turn-pricing"
+import {
+  resolveTurnModel,
+  floorCostUsd,
+  snapCostResidue,
+} from "@/lib/server/turn-pricing"
 
 /** `tokscale models --json --group-by session,model` entry shape (subset). */
 interface TokscaleEntry {
@@ -56,6 +64,21 @@ interface TokscaleOutput {
 
 const TOKSCALE_CMD = "tokscale models --json --group-by session,model"
 const TOKSCALE_TIMEOUT_SEC = 60
+
+/**
+ * Bounds on the metering transaction. The work inside is three fast queries —
+ * the time that actually elapses is a loser waiting on the advisory lock while
+ * the winner finishes.
+ *
+ * Both are deliberately short. In production the Prisma pool is capped at one
+ * connection per instance, so a transaction that lingers blocks everything
+ * else on that instance; and because a missed row only understates one turn
+ * while a duplicate overcharges a real user, giving up early is the right
+ * trade. Exceeding either throws, which the caller logs and treats as
+ * "not metered".
+ */
+const METER_TX_MAX_WAIT_MS = 5_000
+const METER_TX_TIMEOUT_MS = 10_000
 
 export interface MeterTurnParams {
   userId: string
@@ -152,135 +175,185 @@ async function meterTurnUsage(
 
   // Only this turn's session. tokscale ids (UUIDs / "ses_…") are unique per
   // client, so matching on sessionId alone is safe.
-  const entries = parsed.entries.filter((e) => e.sessionId === sessionId)
-  if (entries.length === 0) {
+  const sessionEntries = parsed.entries.filter((e) => e.sessionId === sessionId)
+  if (sessionEntries.length === 0) {
     // Not necessarily an error: e.g. an Eliza turn (no token reporting), or the
     // CLI hadn't flushed its session file yet.
     return 0
   }
 
-  const prior = await getSessionCumulatives(sessionId)
-
-  // First-ever capture of a session. If the chat already has assistant turns
-  // that predate metering, tokscale's cumulative covers that whole backlog —
-  // charging it as this turn's delta would bill the entire history against
-  // today's budget and lock the user out. Detect that case and backdate the
-  // baseline rows: they still advance the diff cursor (getSessionCumulatives
-  // has no date filter) but fall outside every budget window (sumSharedUsage
-  // filters createdAt >= start of day). Only turns after the baseline charge.
-  let baselineAt: Date | undefined
-  if (prior.size === 0) {
-    const assistantTurns = await prisma.message.count({
-      where: { chatId, role: "assistant" },
-    })
-    // >1 ⇒ turns existed before this one (and before metering) ⇒ pre-existing
-    // chat. Exactly 1 ⇒ this is the chat's first turn ⇒ charge normally.
-    if (assistantTurns > 1) baselineAt = new Date(0)
+  // One entry per model, whatever tokscale reported — see collapseEntriesByModel.
+  const { entries, collapsed, conflicted } = collapseEntriesByModel(sessionEntries)
+  if (collapsed > 0) {
+    console.warn(
+      `[token-metering] tokscale reported ${collapsed} repeat entr${collapsed === 1 ? "y" : "ies"} ` +
+        `for session ${sessionId}; kept the highest cumulative per model` +
+        (conflicted.length > 0
+          ? `. Entries disagreed for: ${conflicted.join(", ")}`
+          : "")
+    )
   }
 
-  const rows: TokenUsageInsert[] = []
+  // Everything from here is the read-modify-write the ledger's delta depends
+  // on, and it runs inside one transaction holding this session's advisory
+  // lock. Without it, two finalizers reading the cursor before either inserts
+  // both compute the same delta and both persist it. Left at the default
+  // isolation level (read committed) on purpose: whoever loses the lock must
+  // see the winner's committed rows on its own read, which a snapshot level
+  // would hide, leaving it to write the very duplicate this prevents.
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await lockSessionForMetering(sessionId, tx)
 
-  for (const e of entries) {
-    const key = e.model ?? ""
-    const prev = prior.get(key) ?? ZERO_CUMULATIVE
+        const prior = await getSessionCumulatives(sessionId, tx)
 
-    // Recover a real model id when the CLI reported a placeholder. The diff
-    // cursor above still keys on tokscale's own id (`key`), so substituting
-    // here changes what we price and store without breaking the delta chain.
-    const model = resolveTurnModel(e.model, runModel)
+        // First-ever capture of a session. If the chat already has assistant
+        // turns that predate metering, tokscale's cumulative covers that whole
+        // backlog — charging it as this turn's delta would bill the entire
+        // history against today's budget and lock the user out. Detect that
+        // case and backdate the baseline rows: they still advance the diff
+        // cursor (getSessionCumulatives has no date filter) but fall outside
+        // every budget window (sumSharedUsage filters createdAt >= start of
+        // day). Only turns after the baseline charge.
+        let baselineAt: Date | undefined
+        if (prior.size === 0) {
+          const assistantTurns = await tx.message.count({
+            where: { chatId, role: "assistant" },
+          })
+          // >1 ⇒ turns existed before this one (and before metering) ⇒
+          // pre-existing chat. Exactly 1 ⇒ this is the chat's first turn ⇒
+          // charge normally.
+          if (assistantTurns > 1) baselineAt = new Date(0)
+        }
 
-    // Per-component delta = current tokscale cumulative − sum of prior deltas.
-    // Clamp at 0 to absorb any non-monotonic reporting (e.g. session reset).
-    const d = (cur: number, was: number) => Math.max(0, Math.round(cur - was))
+        const rows: TokenUsageInsert[] = []
 
-    const inputTokens = d(e.input, prev.inputTokens)
-    const outputTokens = d(e.output, prev.outputTokens)
-    const cacheReadTokens = d(e.cacheRead, prev.cacheReadTokens)
-    const cacheWriteTokens = d(e.cacheWrite, prev.cacheWriteTokens)
-    const reasoningTokens = d(e.reasoning, prev.reasoningTokens)
-    const totalTokens =
-      inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens + reasoningTokens
-    // Free models: tokscale misprices them, so force cost to 0. They're still
-    // recorded (counted in overall totals) but flagged out of shared budgets.
-    const free = isFreeModel(model)
-    // The Claude pool's budget is denominated in dollars, so price its deltas
-    // from Anthropic's own rates. Every other provider (and any model these
-    // rates don't cover) keeps tokscale's figure, diffed like the token
-    // components. Note this prices the *delta* directly rather than differencing
-    // two cumulative costs — same result, one less place to drift.
-    const ownPrice =
-      provider === "claude"
-        ? priceClaudeTurn(model, {
+        for (const e of entries) {
+          // Recover a real model id when the CLI reported a placeholder
+          // (Droid's `byok-0`, Claude Code's `<synthetic>`).
+          const model = resolveTurnModel(e.model, runModel)
+
+          // Look the diff cursor up under the id we STORE, not the one
+          // tokscale reported — getSessionCumulatives groups by the persisted
+          // `model` column. See cursorForModel for why both ids are summed.
+          const prev = cursorForModel(prior, e.model, model)
+
+          // Per-component delta = current tokscale cumulative − sum of prior
+          // deltas. Clamp at 0 to absorb any non-monotonic reporting (e.g. a
+          // session reset).
+          const d = (cur: number, was: number) => Math.max(0, Math.round(cur - was))
+
+          const inputTokens = d(e.input, prev.inputTokens)
+          const outputTokens = d(e.output, prev.outputTokens)
+          const cacheReadTokens = d(e.cacheRead, prev.cacheReadTokens)
+          const cacheWriteTokens = d(e.cacheWrite, prev.cacheWriteTokens)
+          const reasoningTokens = d(e.reasoning, prev.reasoningTokens)
+          const totalTokens =
+            inputTokens +
+            outputTokens +
+            cacheReadTokens +
+            cacheWriteTokens +
+            reasoningTokens
+          // Free models: tokscale misprices them, so force cost to 0. They're
+          // still recorded (counted in overall totals) but flagged out of
+          // shared budgets.
+          const free = isFreeModel(model)
+          // The Claude pool's budget is denominated in dollars, so price its
+          // deltas from Anthropic's own rates. Every other provider (and any
+          // model these rates don't cover) keeps tokscale's figure, diffed like
+          // the token components. Note this prices the *delta* directly rather
+          // than differencing two cumulative costs — same result, one less
+          // place to drift.
+          const ownPrice =
+            provider === "claude"
+              ? priceClaudeTurn(model, {
+                  inputTokens,
+                  outputTokens,
+                  cacheReadTokens,
+                  cacheWriteTokens,
+                  reasoningTokens,
+                })
+              : null
+          if (provider === "claude" && ownPrice === null && !free) {
+            // A model id our rate table doesn't cover — usually a release we
+            // haven't added yet. Worth a line in the logs: the fallback is only
+            // as good as whatever tokscale resolved, which may be $0.
+            console.warn(
+              `[token-metering] no first-party rate for Claude model "${model}" — using tokscale's cost`
+            )
+          }
+          // Snapped because that subtraction diffs a float against a *sum* of
+          // floats: a no-op turn lands on ~4e-16, not 0, which silently
+          // defeated both `costUsd === 0` tests below. See snapCostResidue.
+          let costUsd = snapCostResidue(
+            free ? 0 : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
+          )
+
+          // Nothing on a shared pool may cost zero while consuming real tokens:
+          // the daily balance is the only cap, so a $0 turn is a free route
+          // around it. This catches a model id neither our rates nor tokscale
+          // could resolve.
+          if (!free && pool === "shared" && totalTokens > 0 && costUsd === 0) {
+            costUsd = floorCostUsd(totalTokens)
+            console.warn(
+              `[token-metering] no price for "${model}" (${provider}) — ` +
+                `charging the floor rate for ${totalTokens} tokens`
+            )
+          }
+
+          // Skip no-op turns (nothing new since last capture). This is also
+          // what the loser of the advisory lock hits: its cursor already
+          // includes the winner's rows, so every component diffs to zero.
+          if (totalTokens === 0 && costUsd === 0) continue
+
+          const cumulativeTokens =
+            e.input + e.output + e.cacheRead + e.cacheWrite + e.reasoning
+
+          rows.push({
+            userId,
+            chatId,
+            messageId: messageId ?? null,
+            provider,
+            model: model ?? null,
+            pool,
+            keyId: keyId ?? null,
+            freeModel: free,
             inputTokens,
             outputTokens,
             cacheReadTokens,
             cacheWriteTokens,
             reasoningTokens,
+            totalTokens,
+            costUsd,
+            coverage: e.performance?.tokenCoverage ?? null,
+            sessionId,
+            cumulativeTotal: Math.round(cumulativeTokens),
+            // tokscale's own cumulative, kept verbatim as an audit trail — for
+            // Claude it won't match the sum of our repriced deltas.
+            cumulativeCost: e.cost,
+            createdAt: baselineAt,
           })
-        : null
-    if (provider === "claude" && ownPrice === null && !free) {
-      // A model id our rate table doesn't cover — usually a release we haven't
-      // added yet. Worth a line in the logs: the fallback is only as good as
-      // whatever tokscale resolved, which may be $0.
-      console.warn(
-        `[token-metering] no first-party rate for Claude model "${model}" — using tokscale's cost`
-      )
-    }
-    let costUsd = free ? 0 : (ownPrice ?? Math.max(0, e.cost - prev.costUsd))
+        }
 
-    // Nothing on a shared pool may cost zero while consuming real tokens: the
-    // daily balance is the only cap, so a $0 turn is a free route around it.
-    // This catches a model id neither our rates nor tokscale could resolve.
-    if (!free && pool === "shared" && totalTokens > 0 && costUsd === 0) {
-      costUsd = floorCostUsd(totalTokens)
-      console.warn(
-        `[token-metering] no price for "${model}" (${provider}) — ` +
-          `charging the floor rate for ${totalTokens} tokens`
-      )
-    }
+        if (rows.length === 0) return 0
 
-    // Skip no-op turns (nothing new since last capture).
-    if (totalTokens === 0 && costUsd === 0) continue
-
-    const cumulativeTokens =
-      e.input + e.output + e.cacheRead + e.cacheWrite + e.reasoning
-
-    rows.push({
-      userId,
-      chatId,
-      messageId: messageId ?? null,
-      provider,
-      model: model ?? null,
-      pool,
-      keyId: keyId ?? null,
-      freeModel: free,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      reasoningTokens,
-      totalTokens,
-      costUsd,
-      coverage: e.performance?.tokenCoverage ?? null,
-      sessionId,
-      cumulativeTotal: Math.round(cumulativeTokens),
-      // tokscale's own cumulative, kept verbatim as an audit trail — for Claude
-      // it won't match the sum of our repriced deltas.
-      cumulativeCost: e.cost,
-      createdAt: baselineAt,
-    })
-  }
-
-  if (rows.length === 0) return 0
-
-  try {
-    await insertTokenUsageRows(rows)
+        await insertTokenUsageRows(rows, tx)
+        return rows.length
+      },
+      { maxWait: METER_TX_MAX_WAIT_MS, timeout: METER_TX_TIMEOUT_MS }
+    )
   } catch (err) {
-    console.error(`[token-metering] failed to persist usage for session ${sessionId}:`, err)
+    // Covers a lock wait that outlived the timeout and an exhausted connection
+    // pool as well as a failed insert. All of them mean "this turn was not
+    // metered", which is the safe outcome: metering is best-effort, and a
+    // missed row only understates one turn, where a duplicate overcharges.
+    console.error(
+      `[token-metering] failed to persist usage for session ${sessionId}:`,
+      err
+    )
     return 0
   }
-
-  return rows.length
 }
 
 /**
