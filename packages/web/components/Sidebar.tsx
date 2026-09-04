@@ -2,31 +2,31 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
-import { signInWithGitHub } from "@/lib/auth-utils"
-import { Plus, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { PanelLeft } from "lucide-react"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useGitHubUserQuery } from "@/lib/query"
-import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH, COLLAPSE_THRESHOLD } from "@/lib/contexts"
-import { clearAllStorage } from "@/lib/storage"
+import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH } from "@/lib/contexts"
 import { isChatVisibleForFilter } from "@/lib/chat-tree"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
+import { signInWithGitHub } from "@/lib/auth-utils"
 import {
   UserMenu,
   RepoFilterDropdown,
   renderChatTree,
-  renderMobileChatTree,
   getChatRepos,
 } from "./sidebar"
+import { SidebarActions } from "./sidebar/SidebarActions"
+import { MobileSidebarDrawer } from "./sidebar/MobileSidebarDrawer"
+import { useSidebarResize } from "@/lib/hooks/useSidebarResize"
+import { useDragToMerge } from "@/lib/hooks/useDragToMerge"
 
-// Re-export from context for backward compatibility
 export { ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS } from "@/lib/contexts"
 
-// The docs site is deployed separately (packages/docs) at its own domain.
 const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || "https://docs.backgrounder.dev"
 
 interface SidebarProps {
@@ -37,42 +37,27 @@ interface SidebarProps {
   onSelectChat: (chatId: string) => void
   onNewChat: () => void
   onDeleteChat: (chatId: string) => void
-  /** Pin or unpin a chat, sorting it to the top of the list. */
   onPinChat?: (chatId: string, pinned: boolean) => void
-  /** Branch a new chat from an existing chat (creates a sibling and switches to it). */
   onBranchChat?: (chatId: string) => void
-  /** Archive an active chat (and its branches), moving it into the archived section. */
   onArchiveChat?: (chatId: string) => void
-  /** Restore an archived chat (and its branches) back to the active list. */
   onUnarchiveChat?: (chatId: string) => void
   onRenameChat: (chatId: string, newName: string) => void
   collapsed: boolean
   onToggleCollapse: () => void
   width: number
   onWidthChange: (width: number) => void
-  // Mobile drawer props
   isMobile?: boolean
   mobileOpen?: boolean
   onMobileClose?: () => void
-  // Repository filter (controlled from parent)
   repoFilter?: string
   onRepoFilterChange?: (filter: string) => void
-  // Collapsed chat-tree state (controlled from parent so keyboard navigation
-  // can expand branches programmatically).
   collapsedChatIds?: Set<string>
   onToggleChatCollapsed?: (id: string) => void
-  /** Drag a chat onto another (same repo) to kick off a merge, or pick Merge
-   *  from a chat's context menu (target left unspecified). */
   onRequestMergeChats?: (sourceId: string, targetId?: string) => void
-  /** Pick Rebase from a chat's context menu. */
   onRequestRebaseChat?: (sourceId: string) => void
-  /** Open scheduled jobs view */
   onOpenScheduledJobs?: () => void
-  /** Whether scheduled jobs view is active */
   scheduledJobsActive?: boolean
-  /** Currently selected scheduled job (shown as indented item) */
   selectedScheduledJob?: { id: string; name: string } | null
-  /** Whether chats are still being loaded from storage/server */
   isLoadingChats?: boolean
 }
 
@@ -110,19 +95,12 @@ export function Sidebar({
   const modals = useModals()
   const { data: session, status: sessionStatus } = useSession()
   const isSessionLoading = sessionStatus === "loading"
-  // Current user's GitHub login, used to drop the redundant `login/` prefix
-  // from their own repos in the filter menu.
   const { data: currentUserLogin } = useGitHubUserQuery()
   const router = useRouter()
   const { openSearch } = usePalette()
   const { isDesktopApp } = useElectron()
-  const isResizing = useRef(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
-
-  // Mobile user menu state
-  const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false)
-  const mobileUserMenuRef = useRef<HTMLDivElement>(null)
 
   // Repository filter state - supports controlled mode from parent
   const [internalRepoFilter, setInternalRepoFilter] = useState<string>(ALL_REPOSITORIES)
@@ -131,16 +109,13 @@ export function Sidebar({
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false)
   const repoDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Get unique repositories from chats (shared with the command palette).
+  // Get unique repositories from chats
   const uniqueRepos = useMemo(
     () => getChatRepos(chats, currentUserLogin),
     [chats, currentUserLogin]
   )
 
-  // Filter chats by selected repository. Pinned chats sort to the top; within
-  // each group, newest-first by last activity. Visibility is delegated to the
-  // shared isChatVisibleForFilter predicate so the rendered list can never drift
-  // from what keyboard navigation reaches.
+  // Filter chats by selected repository
   const filteredChats = useMemo(() => {
     return chats
       .filter((chat) => isChatVisibleForFilter(chat, repoFilter))
@@ -150,13 +125,9 @@ export function Sidebar({
       })
   }, [chats, repoFilter])
 
-  // Whether the archived view is currently active — archived rows expose
-  // Unarchive (instead of Archive) and omit drag-to-merge.
   const showingArchived = repoFilter === ARCHIVED_CHATS
 
-  // Build a parent → children lookup + root list for a chat set, preserving the
-  // incoming sort order. A chat is a root when it has no parent within the same
-  // set, so each subtree renders self-contained.
+  // Build tree structure
   const buildTree = (list: Chat[]) => {
     const ids = new Set(list.map((c) => c.id))
     const childrenByParent = new Map<string, Chat[]>()
@@ -174,27 +145,10 @@ export function Sidebar({
 
   const { childrenByParent, roots: rootChats } = useMemo(() => buildTree(filteredChats), [filteredChats])
 
-  // Drag-to-merge state: which chat is being dragged, and which chat the
-  // pointer is currently over (valid target only).
-  const [dragSourceId, setDragSourceId] = useState<string | null>(null)
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
-  const chatById = useMemo(() => {
-    const m = new Map<string, Chat>()
-    for (const c of chats) m.set(c.id, c)
-    return m
-  }, [chats])
-  const canDrop = useCallback((sourceId: string | null, targetId: string): boolean => {
-    if (!sourceId || sourceId === targetId) return false
-    const source = chatById.get(sourceId)
-    const target = chatById.get(targetId)
-    if (!source || !target) return false
-    if (!source.branch || !target.branch) return false
-    if (source.repo === NEW_REPOSITORY || source.repo !== target.repo) return false
-    return true
-  }, [chatById])
+  // Drag-to-merge
+  const { dragSourceId, dragOverId, setDragSourceId, setDragOverId, canDrop } = useDragToMerge(chats)
 
-  // Track which parent chats are collapsed. Default: expanded. Can be
-  // overridden by the parent to keep state in sync with keyboard navigation.
+  // Collapsed chat state
   const [internalCollapsedChatIds, setInternalCollapsedChatIds] = useState<Set<string>>(new Set())
   const collapsedChatIds = controlledCollapsedChatIds ?? internalCollapsedChatIds
   const defaultToggleChatCollapsed = useCallback((id: string) => {
@@ -206,7 +160,7 @@ export function Sidebar({
   }, [])
   const toggleChatCollapsed = controlledToggleChatCollapsed ?? defaultToggleChatCollapsed
 
-  // Count chats per repository (for dropdown display)
+  // Count chats per repository
   const repoCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     let total = 0
@@ -229,9 +183,7 @@ export function Sidebar({
     return { counts, total, noRepoCount, archivedCount }
   }, [chats])
 
-  // Get display name for repository. Repos owned by the current user are shown
-  // without their `login/` prefix (e.g. "jamesmurdza/foo" → "foo"); repos owned
-  // by anyone else keep the full "owner/name" form.
+  // Get display name for repository
   const getRepoDisplayName = (repo: string) => {
     if (repo === NEW_REPOSITORY) return "No repository"
     if (repo === ALL_REPOSITORIES) return "Active chats"
@@ -246,64 +198,23 @@ export function Sidebar({
     return repo
   }
 
-  // Close repo dropdown when clicking outside
   useClickOutside(repoDropdownRef, () => setRepoDropdownOpen(false), repoDropdownOpen)
 
-  // Close mobile user menu when clicking outside
-  useClickOutside(mobileUserMenuRef, () => setMobileUserMenuOpen(false), mobileUserMenuOpen)
-
-  // Animate collapse/expand when toggled via button
+  // Animate collapse/expand
   const handleToggleCollapse = useCallback(() => {
     setIsAnimating(true)
     onToggleCollapse()
-    // Remove transition after animation completes
     const timer = setTimeout(() => setIsAnimating(false), 200)
     return () => clearTimeout(timer)
   }, [onToggleCollapse])
 
-  // Handle drag resize (desktop only)
-  const startResizing = useCallback((e: React.MouseEvent) => {
-    if (isMobile) return
-    e.preventDefault()
-    isResizing.current = true
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-  }, [isMobile])
-
-  const stopResizing = useCallback(() => {
-    isResizing.current = false
-    document.body.style.cursor = ""
-    document.body.style.userSelect = ""
-  }, [])
-
-  const resize = useCallback((e: MouseEvent) => {
-    if (!isResizing.current || isMobile) return
-    // If dragged below threshold, collapse the sidebar
-    if (e.clientX < COLLAPSE_THRESHOLD) {
-      if (!collapsed) {
-        onToggleCollapse()
-      }
-      return
-    }
-    // If collapsed and dragged beyond threshold, expand
-    if (collapsed && e.clientX >= COLLAPSE_THRESHOLD) {
-      onToggleCollapse()
-      onWidthChange(MIN_WIDTH)
-      return
-    }
-    const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX))
-    onWidthChange(newWidth)
-  }, [onWidthChange, collapsed, onToggleCollapse, isMobile])
-
-  useEffect(() => {
-    if (isMobile) return
-    window.addEventListener("mousemove", resize)
-    window.addEventListener("mouseup", stopResizing)
-    return () => {
-      window.removeEventListener("mousemove", resize)
-      window.removeEventListener("mouseup", stopResizing)
-    }
-  }, [resize, stopResizing, isMobile])
+  // Sidebar resize
+  const { startResizing } = useSidebarResize({
+    isMobile,
+    collapsed,
+    onToggleCollapse,
+    onWidthChange,
+  })
 
   // Close mobile drawer when selecting a chat
   const handleSelectChat = (chatId: string) => {
@@ -321,256 +232,44 @@ export function Sidebar({
     }
   }
 
-  // Prevent body scroll when drawer is open
-  useEffect(() => {
-    if (isMobile && mobileOpen) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = ""
-    }
-    return () => {
-      document.body.style.overflow = ""
-    }
-  }, [isMobile, mobileOpen])
-
-  // Mobile drawer rendering
+  // Mobile drawer
   if (isMobile) {
     return (
-      <>
-        {/* Backdrop overlay */}
-        <div
-          className={cn(
-            "fixed inset-0 z-40 mobile-overlay transition-opacity duration-300",
-            mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          )}
-          onClick={onMobileClose}
-          aria-hidden="true"
-        />
-
-        {/* Mobile drawer */}
-        <div
-          ref={sidebarRef}
-          className="fixed inset-y-0 left-0 z-50 w-[280px] flex flex-col bg-background border-r border-sidebar-border transition-transform duration-300 ease-out"
-          style={{
-            transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
-          }}
-        >
-          {/* Header with close button */}
-          <div className="flex items-center justify-between px-4 pt-safe">
-            <h1 className="text-base font-semibold text-foreground">
-              Background Agents
-            </h1>
-            <button
-              onClick={onMobileClose}
-              className="p-2 -mr-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors touch-target"
-              aria-label="Close menu"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Action Buttons - grouped together */}
-          <div className="px-3 py-2 space-y-1">
-            {/* New Chat Button - larger touch target */}
-            <button
-              onClick={handleNewChat}
-              className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
-            >
-              <Plus className="h-5 w-5 text-muted-foreground" />
-              <span className="text-base text-foreground">New Chat</span>
-            </button>
-
-            {/* Search Chats Button */}
-            <button
-              onClick={() => {
-                openSearch()
-                if (onMobileClose) onMobileClose()
-              }}
-              className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
-            >
-              <Search className="h-5 w-5 text-muted-foreground" />
-              <span className="text-base text-foreground">Search Chats</span>
-            </button>
-
-            {/* Scheduled Jobs Button */}
-            <button
-              onClick={() => {
-                if (onOpenScheduledJobs) {
-                  onOpenScheduledJobs()
-                } else {
-                  router.push("/scheduled-jobs")
-                }
-              }}
-              className={cn(
-                "flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target",
-                scheduledJobsActive && !selectedScheduledJob
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent/50 active:bg-accent"
-              )}
-            >
-              <Clock className={cn("h-5 w-5", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
-              <span className="text-base text-foreground">Scheduled Agents</span>
-            </button>
-
-            {/* Docs Link */}
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => {
-                if (onMobileClose) onMobileClose()
-              }}
-              className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
-            >
-              <BookOpen className="h-5 w-5 text-muted-foreground" />
-              <span className="text-base text-foreground">Docs</span>
-            </a>
-          </div>
-
-          {/* Repository Filter */}
-          <div className="px-3 pb-2 relative" ref={repoDropdownRef}>
-            <RepoFilterDropdown
-              repoFilter={repoFilter}
-              setRepoFilter={setRepoFilter}
-              repoDropdownOpen={repoDropdownOpen}
-              setRepoDropdownOpen={setRepoDropdownOpen}
-              uniqueRepos={uniqueRepos}
-              repoCounts={repoCounts}
-              getRepoDisplayName={getRepoDisplayName}
-              variant="mobile"
-            />
-          </div>
-
-          {/* Chat List */}
-          <div className="flex-1 overflow-y-auto mobile-scroll scrollbar-auto-hide px-3 py-2">
-            <div className="space-y-0.5">
-              {isLoadingChats ? (
-                /* Chat list skeleton while loading */
-                <div className="space-y-0.5 animate-pulse">
-                  {[75, 55, 85, 60, 70].map((width, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-md">
-                      <div className="h-5 flex-1 rounded bg-muted" style={{ width: `${width}%` }} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                renderMobileChatTree({
-                  roots: rootChats,
-                  childrenByParent,
-                  collapsedChatIds,
-                  currentChatId,
-                  deletingChatIds,
-                  unseenChatIds,
-                  onToggleCollapsed: toggleChatCollapsed,
-                  onSelectChat: handleSelectChat,
-                  onDeleteChat,
-                  onPin: showingArchived ? undefined : onPinChat,
-                  onBranch: showingArchived ? undefined : onBranchChat,
-                  onArchive: showingArchived ? undefined : onArchiveChat,
-                  onUnarchive: showingArchived ? onUnarchiveChat : undefined,
-                  onRequestRename: (id, name) => modals.setMobileRenameChat({ id, name }),
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Footer - User & Settings */}
-          <div className="p-4 pb-safe border-t border-sidebar-border">
-            {isSessionLoading ? (
-              /* User skeleton while session is loading */
-              <div className="flex items-center gap-3 animate-pulse">
-                <div className="h-10 w-10 rounded-full bg-muted flex-shrink-0" />
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="h-4 w-24 rounded bg-muted" />
-                  <div className="h-3 w-32 rounded bg-muted" />
-                </div>
-              </div>
-            ) : session?.user ? (
-              <div className="relative" ref={mobileUserMenuRef}>
-                <button
-                  onClick={() => setMobileUserMenuOpen((v) => !v)}
-                  className="flex items-center gap-3 w-full rounded-lg hover:bg-accent active:bg-accent transition-colors p-2 -m-2"
-                >
-                  {session.user.image && (
-                    <img
-                      src={session.user.image}
-                      alt={session.user.name || "User"}
-                      className="h-10 w-10 rounded-full"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-base font-medium truncate">
-                      {session.user.name}
-                    </div>
-                    <div className="text-sm text-muted-foreground truncate">
-                      {session.user.email}
-                    </div>
-                  </div>
-                </button>
-
-                {/* User Menu Popup */}
-                {mobileUserMenuOpen && (
-                  <div className="absolute bottom-full left-0 right-0 mb-2 rounded-md border border-border bg-popover shadow-md py-1 z-50">
-                    {session.user.isAdmin && (
-                      <a
-                        href="/admin"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setMobileUserMenuOpen(false)}
-                        className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                      >
-                        <BarChart3 className="h-5 w-5" />
-                        Admin Dashboard
-                      </a>
-                    )}
-                    <button
-                      onClick={() => {
-                        modals.openSettings()
-                        setMobileUserMenuOpen(false)
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <Settings className="h-5 w-5" />
-                      Settings
-                    </button>
-                    <button
-                      onClick={() => {
-                        modals.setHelpOpen(true)
-                        setMobileUserMenuOpen(false)
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                      Help
-                    </button>
-                    <button
-                      onClick={() => {
-                        clearAllStorage()
-                        signOut()
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <LogOut className="h-5 w-5" />
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                onClick={() => signInWithGitHub()}
-                className="flex items-center justify-center gap-2 w-full rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70 transition-colors px-4 py-3 touch-target"
-              >
-                <span className="text-base">Sign in with GitHub</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </>
+      <MobileSidebarDrawer
+        chats={chats}
+        currentChatId={currentChatId}
+        deletingChatIds={deletingChatIds}
+        unseenChatIds={unseenChatIds}
+        mobileOpen={mobileOpen}
+        onMobileClose={onMobileClose!}
+        onSelectChat={onSelectChat}
+        onNewChat={onNewChat}
+        onDeleteChat={onDeleteChat}
+        onPinChat={onPinChat}
+        onBranchChat={onBranchChat}
+        onArchiveChat={onArchiveChat}
+        onUnarchiveChat={onUnarchiveChat}
+        repoFilter={repoFilter}
+        setRepoFilter={setRepoFilter}
+        uniqueRepos={uniqueRepos}
+        repoCounts={repoCounts}
+        getRepoDisplayName={getRepoDisplayName}
+        showingArchived={showingArchived}
+        collapsedChatIds={collapsedChatIds}
+        toggleChatCollapsed={toggleChatCollapsed}
+        childrenByParent={childrenByParent}
+        rootChats={rootChats}
+        isLoadingChats={isLoadingChats}
+        scheduledJobsActive={scheduledJobsActive}
+        selectedScheduledJob={selectedScheduledJob}
+        onOpenScheduledJobs={onOpenScheduledJobs ? () => onOpenScheduledJobs() : () => router.push("/scheduled-jobs")}
+        docsUrl={DOCS_URL}
+        modals={modals}
+      />
     )
   }
 
-  // Desktop sidebar rendering (original behavior)
+  // Desktop sidebar
   return (
     <div
       ref={sidebarRef}
@@ -585,8 +284,6 @@ export function Sidebar({
         className={cn(
           "flex items-center p-3",
           collapsed ? "justify-center" : "justify-between",
-          // On desktop, when collapsed, push the icons down so they don't sit
-          // under the macOS traffic-light / window control buttons.
           isDesktopApp && collapsed && "mt-[30px]"
         )}
         style={isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
@@ -594,7 +291,7 @@ export function Sidebar({
         {!collapsed && (
           <h1 className={cn(
             "text-sm font-semibold text-foreground truncate",
-            isDesktopApp && "invisible" // Hide text but keep space for window controls
+            isDesktopApp && "invisible"
           )}>
             Background Agents
           </h1>
@@ -608,68 +305,16 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* Action Buttons - grouped together */}
-      <div className={cn(collapsed ? "px-0 flex flex-col items-center gap-1.5" : "px-2")}>
-        {/* New Chat Button */}
-        <button
-          onClick={onNewChat}
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors hover:bg-accent/50 cursor-pointer",
-            collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
-          )}
-        >
-          <Plus className="h-4 w-4 text-muted-foreground" />
-          {!collapsed && <span className="text-sm text-foreground">New Chat</span>}
-        </button>
-
-        {/* Search Chats Button */}
-        <button
-          onClick={openSearch}
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors hover:bg-accent/50 cursor-pointer",
-            collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
-          )}
-        >
-          <Search className="h-4 w-4 text-muted-foreground" />
-          {!collapsed && <span className="text-sm text-foreground">Search Chats</span>}
-        </button>
-
-        {/* Scheduled Jobs Button */}
-        <button
-          onClick={() => {
-            if (onOpenScheduledJobs) {
-              onOpenScheduledJobs()
-            } else {
-              router.push("/scheduled-jobs")
-            }
-          }}
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors cursor-pointer",
-            collapsed ? "p-1.5" : "w-full px-2 py-[7px]",
-            scheduledJobsActive && !selectedScheduledJob
-              ? "bg-accent text-accent-foreground"
-              : "hover:bg-accent/50"
-          )}
-        >
-          <Clock className={cn("h-4 w-4", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
-          {!collapsed && <span className="text-sm text-foreground">Scheduled Agents</span>}
-        </button>
-
-        {/* Docs Link */}
-        <a
-          href={DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Docs"
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors hover:bg-accent/50 cursor-pointer",
-            collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
-          )}
-        >
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          {!collapsed && <span className="text-sm text-foreground">Docs</span>}
-        </a>
-      </div>
+      {/* Action Buttons */}
+      <SidebarActions
+        collapsed={collapsed}
+        scheduledJobsActive={scheduledJobsActive}
+        selectedScheduledJob={selectedScheduledJob}
+        docsUrl={DOCS_URL}
+        onNewChat={onNewChat}
+        onOpenSearch={openSearch}
+        onOpenScheduledJobs={onOpenScheduledJobs ? onOpenScheduledJobs : () => router.push("/scheduled-jobs")}
+      />
 
       <div className="pb-2" />
 
@@ -694,11 +339,10 @@ export function Sidebar({
           <div className="flex-1 overflow-y-auto scrollbar-auto-hide p-2 pt-0">
             <div className="space-y-0">
               {isLoadingChats ? (
-                /* Chat list skeleton while loading */
                 <div className="space-y-0 animate-pulse">
-                  {[70, 50, 85, 55, 75, 60].map((width, i) => (
+                  {[70, 50, 85, 55, 75, 60].map((w, i) => (
                     <div key={i} className="flex items-center gap-2 px-2 py-[5px] rounded-md">
-                      <div className="h-5 flex-1 rounded bg-muted" style={{ width: `${width}%` }} />
+                      <div className="h-5 flex-1 rounded bg-muted" style={{ width: `${w}%` }} />
                     </div>
                   ))}
                 </div>
@@ -719,7 +363,6 @@ export function Sidebar({
                   onArchive: showingArchived ? undefined : onArchiveChat,
                   onUnarchive: showingArchived ? onUnarchiveChat : undefined,
                   onRenameChat,
-                  // Merge/rebase and drag-to-merge apply to active chats only.
                   onMerge: showingArchived || !onRequestMergeChats ? undefined : (id) => onRequestMergeChats(id),
                   onRebase: showingArchived || !onRequestRebaseChat ? undefined : (id) => onRequestRebaseChat(id),
                   dragSourceId: showingArchived ? null : dragSourceId,
@@ -749,7 +392,6 @@ export function Sidebar({
       {/* Footer - User & Settings */}
       <div className={cn("p-1.5", !collapsed && "border-t border-sidebar-border")}>
         {isSessionLoading ? (
-          /* User skeleton while session is loading */
           <div className={cn("flex items-center gap-2 animate-pulse", collapsed ? "justify-center" : "px-2 py-1.5")}>
             <div className="h-8 w-8 rounded-full bg-muted flex-shrink-0" />
             {!collapsed && (
@@ -787,4 +429,3 @@ export function Sidebar({
     </div>
   )
 }
-
