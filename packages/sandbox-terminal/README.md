@@ -9,7 +9,7 @@ WebSocket-based PTY terminal for Daytona sandboxes. Provides a full interactive 
 - **Terminal emulation**: Full ANSI color support, cursor positioning, scrollback
 - **Resize handling**: Terminal automatically resizes to fit container
 - **Web links**: Clickable URLs in terminal output
-- **Theme support**: Light and dark mode
+- **Theming**: Pass a custom color theme (e.g. light or dark)
 - **Zero-friction setup**: Server auto-installed in sandbox
 
 ## Installation
