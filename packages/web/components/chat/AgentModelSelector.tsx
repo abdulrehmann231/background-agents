@@ -283,6 +283,7 @@ export function AgentModelSelector({
       value: model.value,
       label: model.label,
       description: needsKey ? "Requires API key" : undefined,
+      priceLabel: model.priceLabel,
       icon: needsKey ? <Lock className="h-5 w-5 text-muted-foreground" /> : undefined,
     }
   })
@@ -444,10 +445,15 @@ export function AgentModelSelector({
                           model.value === currentModel && "bg-accent"
                         )}
                       >
-                        <span>{model.label}</span>
-                        {needsKey && (
-                          <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        )}
+                        <span className="truncate">{model.label}</span>
+                        <span className="flex items-center gap-1.5 ml-auto shrink-0">
+                          {model.priceLabel && (
+                            <span className="text-xs text-muted-foreground">{model.priceLabel}</span>
+                          )}
+                          {needsKey && (
+                            <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          )}
+                        </span>
                       </CommandItem>
                     )
                   })}

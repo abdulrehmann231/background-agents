@@ -122,6 +122,8 @@ interface MobileSelectOption {
   label: string
   icon?: React.ReactNode
   description?: string
+  /** Gray price text shown on the right, e.g. "$2/M", "30¢/M", or "FREE". */
+  priceLabel?: string
   disabled?: boolean
 }
 
@@ -177,6 +179,9 @@ export function MobileSelect({
                 <div className="text-sm text-muted-foreground">{option.description}</div>
               )}
             </div>
+            {option.priceLabel && (
+              <div className="text-sm text-muted-foreground shrink-0">{option.priceLabel}</div>
+            )}
             {option.value === value && (
               <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
             )}
