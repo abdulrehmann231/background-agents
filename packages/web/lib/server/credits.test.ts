@@ -3,7 +3,33 @@
  */
 import { describe, it, expect } from "vitest"
 
-import { MICRO_PER_USD, microToUsd, splitTurnCost, usdToMicro } from "./credits"
+import {
+  MICRO_PER_USD,
+  microToUsd,
+  splitTurnCost,
+  stripeAmountToMicro,
+  usdToMicro,
+} from "./credits"
+
+describe("stripeAmountToMicro", () => {
+  it("converts Stripe's integer cents exactly", () => {
+    expect(stripeAmountToMicro(1000)).toBe(10_000_000n) // $10.00
+    expect(stripeAmountToMicro(1)).toBe(10_000n) // $0.01
+  })
+
+  it("keeps an amount a float round-trip would spoil", () => {
+    // $10.07 via dollars is 10.07 * 1e6 = 10069999.999999998 before rounding.
+    // Straight from cents there is no float in the path at all.
+    expect(stripeAmountToMicro(1007)).toBe(10_070_000n)
+    expect(stripeAmountToMicro(1007)).toBe(usdToMicro(10.07))
+  })
+
+  it("refuses a non-integer amount rather than rounding money", () => {
+    // Stripe only ever sends integer minor units; anything else means we are
+    // reading the wrong field, and guessing would mis-credit a real payment.
+    expect(stripeAmountToMicro(10.5)).toBe(0n)
+  })
+})
 
 describe("usdToMicro", () => {
   it("round-trips a dollar amount", () => {
