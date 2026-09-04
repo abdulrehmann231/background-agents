@@ -1,35 +1,8 @@
 import type { Plan } from "@/lib/server/usage-budgets"
 import { fmtBalance } from "@/lib/format"
 
-export type LimitUpgradeTarget = "pro" | "unlimited"
-
-export interface LimitUpgradeCopy {
-  targetPlan: LimitUpgradeTarget
-  title: string
-  description: string
-}
-
-const UNLIMITED_UPGRADE_COPY: LimitUpgradeCopy = {
-  targetPlan: "unlimited",
-  title: "Upgrade to Unlimited",
-  description: "Unlimited usage on all shared pools and priority support",
-}
-
 export function isPlan(value: unknown): value is Plan {
   return value === "free" || value === "pro" || value === "unlimited"
-}
-
-/**
- * The upgrade to offer from the out-of-credits dialog.
- *
- * Free and Pro are gated identically on credits now (see lib/db/usage-limit),
- * so a Pro upgrade would not actually clear this block — only `unlimited`
- * bypasses the credit gate entirely, so it's the only upgrade worth offering
- * here, for either plan.
- */
-export function getLimitUpgradeCopy(plan: Plan | undefined): LimitUpgradeCopy | null {
-  if (plan === "unlimited") return null
-  return UNLIMITED_UPGRADE_COPY
 }
 
 /**

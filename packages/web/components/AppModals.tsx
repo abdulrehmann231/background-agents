@@ -252,7 +252,6 @@ export function AppModals({
         onClose={onDismissLimitReached}
         provider={limitReachedState.provider}
         creditBalance={limitReachedState.creditBalance}
-        plan={limitReachedState.plan}
         onContinueWithOpenCode={onContinueWithOpenCode}
         onAddApiKey={() => {
           onDismissLimitReached()
@@ -264,13 +263,9 @@ export function AppModals({
                 : "anthropic"
           modals.openSettings(key)
         }}
-        onUpgradePlan={(targetPlan) => {
+        onBuyCredits={() => {
           onDismissLimitReached()
-          const planLabel = targetPlan === "pro" ? "Pro" : "Unlimited"
-          window.open(
-            `mailto:james@jamesmurdza.com?subject=${encodeURIComponent(`Upgrade to ${planLabel}`)}`,
-            "_blank"
-          )
+          modals.openSettingsSection("credits")
         }}
         isMobile={isMobile}
       />

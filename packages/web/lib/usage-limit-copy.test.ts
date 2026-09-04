@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  formatUsageLimitMessage,
-  getLimitUpgradeCopy,
-} from "./usage-limit-copy"
+import { formatUsageLimitMessage } from "./usage-limit-copy"
 
 describe("formatUsageLimitMessage", () => {
   it("leads with topping up when there is no deficit", () => {
@@ -31,33 +28,5 @@ describe("formatUsageLimitMessage", () => {
     for (const provider of ["Claude", "Gemini", "OpenCode"]) {
       expect(msg).not.toContain(provider)
     }
-  })
-})
-
-describe("getLimitUpgradeCopy", () => {
-  // Free and Pro are gated identically on credits, so only Unlimited (which
-  // bypasses the credit gate entirely) is worth offering to either.
-  it("offers Unlimited to free users", () => {
-    expect(getLimitUpgradeCopy("free")).toEqual({
-      targetPlan: "unlimited",
-      title: "Upgrade to Unlimited",
-      description: "Unlimited usage on all shared pools and priority support",
-    })
-  })
-
-  it("offers Unlimited to existing Pro users too", () => {
-    expect(getLimitUpgradeCopy("pro")).toEqual({
-      targetPlan: "unlimited",
-      title: "Upgrade to Unlimited",
-      description: "Unlimited usage on all shared pools and priority support",
-    })
-  })
-
-  it("defaults older responses without a plan to the Unlimited upsell", () => {
-    expect(getLimitUpgradeCopy(undefined)?.targetPlan).toBe("unlimited")
-  })
-
-  it("does not offer a redundant upgrade to Unlimited users", () => {
-    expect(getLimitUpgradeCopy("unlimited")).toBeNull()
   })
 })
