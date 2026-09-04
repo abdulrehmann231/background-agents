@@ -8,6 +8,8 @@ import { getUserEndpoints } from "@/lib/server/custom-endpoints"
 
 import { prisma } from "@/lib/db/prisma"
 import { decryptUserCredentials, getUserCredentials } from "@/lib/db/api-helpers"
+import { logActivityAsync } from "@/lib/db/activity-log"
+import { checkSharedPoolUsage, UsageLimitError } from "@/lib/db/usage-limit"
 import { getClaudeCredentials } from "@/lib/claude-credentials"
 import { meterAssistantTurn } from "@/lib/server/token-metering"
 import { buildUsageMeta } from "@/lib/server/shared-pool"
@@ -35,6 +37,34 @@ export async function startJobExecution(
   daytona: Daytona
 ) {
   const isRepoLess = job.repo === NEW_REPOSITORY
+
+  // 0. Enforce the daily balance before spending anything.
+  //
+  // Scheduled runs draw on the same shared pools as interactive turns and are
+  // metered the same way (step 9 below stamps the pool; the run finalizer
+  // reports the tokens), so without this a job left enabled on a spent balance
+  // keeps spending — every tick — while the chat UI refuses to send. Checked
+  // here rather than in the trigger routes so cron dispatch, "Run now" and
+  // webhooks are all covered by the one gate. Own-key, custom-endpoint,
+  // free-model and Unlimited-plan runs are uncapped and pass straight through.
+  const usage = await checkSharedPoolUsage(
+    job.userId,
+    job.agent as Agent,
+    job.model ?? undefined
+  )
+  if (!usage.allowed) {
+    logActivityAsync(job.userId, "daily_limit_reached", {
+      provider: usage.provider,
+      agent: job.agent,
+      model: job.model ?? undefined,
+      used: usage.used,
+      limit: usage.limit,
+      resetAt: usage.resetAt.toISOString(),
+      source: "scheduled-job",
+      jobRunId: run.id,
+    })
+    throw new UsageLimitError(usage)
+  }
 
   // 1. Get GitHub token for the user — required for cloned repos, optional
   //    for repo-less jobs (the sandbox never reaches out to GitHub, though
@@ -547,7 +577,14 @@ export async function finalizeScheduledRun(
 export async function failScheduledRun(
   run: ScheduledJobRunWithJob | Prisma.ScheduledJobRunGetPayload<{ include: { job: true } }>,
   error: string,
-  daytona?: Daytona
+  daytona?: Daytona,
+  /**
+   * Whether this failure counts toward the job's consecutive-failure budget
+   * (3 strikes auto-disables the job). Pass false for failures that say nothing
+   * about the job itself — a spent daily balance, which clears at UTC midnight
+   * — so a couple of capped days can't silently disable it.
+   */
+  { countFailure = true }: { countFailure?: boolean } = {}
 ) {
   // Update run status
   await prisma.scheduledJobRun.update({
@@ -567,15 +604,17 @@ export async function failScheduledRun(
   }
 
   // Track consecutive failures, auto-disable after 3
-  const job = run.job
-  const failures = job.consecutiveFailures + 1
-  await prisma.scheduledJob.update({
-    where: { id: run.jobId },
-    data: {
-      consecutiveFailures: failures,
-      enabled: failures < 3,
-    },
-  })
+  if (countFailure) {
+    const job = run.job
+    const failures = job.consecutiveFailures + 1
+    await prisma.scheduledJob.update({
+      where: { id: run.jobId },
+      data: {
+        consecutiveFailures: failures,
+        enabled: failures < 3,
+      },
+    })
+  }
 
   // Delete sandbox now that run is complete
   if (run.sandboxId && daytona) {

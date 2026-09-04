@@ -122,3 +122,21 @@ export async function checkSharedPoolUsage(
     error: allowed ? undefined : formatUsageLimitMessage({ plan, limit: allowance }),
   }
 }
+
+/**
+ * Thrown when a run is refused because the daily balance is spent.
+ *
+ * Used by the scheduled-job path, which has no request to answer with a 429:
+ * the starter throws this and the cron turns it into a failed run record
+ * without counting it against the job's consecutive-failure budget (a spent
+ * balance is not the job misbehaving, and it clears at UTC midnight).
+ */
+export class UsageLimitError extends Error {
+  readonly usage: UsageLimitResult
+
+  constructor(usage: UsageLimitResult) {
+    super(usage.error ?? "Daily limit reached")
+    this.name = "UsageLimitError"
+    this.usage = usage
+  }
+}
