@@ -1,11 +1,12 @@
 /**
- * Purchased credits: units, and the daily-then-credits spend split.
+ * Credits: units, the signup grant, and the daily-then-credits spend split.
  *
- * Credits are a second balance sitting *behind* the plan's daily allowance.
- * They are bought through Stripe, denominated in exactly the same US dollars of
- * API list value the ledger already stores in `TokenUsage.costUsd` — one credit
- * is one dollar, priced by tokscale (and by lib/server/claude-pricing for
- * Claude) with no conversion of any kind in between. That is deliberate: the
+ * Credits are the only balance that gates a send (see lib/db/usage-limit).
+ * They arrive as a one-time grant on signup and are otherwise bought through
+ * Stripe, denominated in exactly the same US dollars of API list value the
+ * ledger already stores in `TokenUsage.costUsd` — one credit is one dollar,
+ * priced by tokscale (and by lib/server/claude-pricing for Claude) with no
+ * conversion of any kind in between. That is deliberate: the
  * number a user buys and the number the meter spends are the same number, so
  * the balance needs no explaining.
  *

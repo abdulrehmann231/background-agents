@@ -25,7 +25,7 @@ import { prisma } from "./prisma"
 /** Why a balance moved. */
 export type CreditTransactionType =
   | "purchase" // Stripe payment
-  | "debit" // usage charged past the daily allowance
+  | "debit" // metered usage charged to the balance
   | "refund" // Stripe refund reversed the purchase
   | "grant" // manual credit from an admin
   | "chargeback" // dispute opened against the payment
@@ -163,18 +163,23 @@ export interface ChargeableUsageRow {
 }
 
 /**
- * Charge the part of a finished turn that fell past the daily allowance to the
- * user's purchased credits. Returns the total debited, in micro-dollars.
+ * Charge a finished turn to the user's credit balance. Returns the total
+ * debited, in micro-dollars.
  *
  * Runs inside the metering transaction, under the advisory lock that already
  * serialises this session's usage writes — so the same turn cannot be charged
  * twice even if two finalizers race, and `tokenUsageId` being unique catches it
  * a second time if the lock ever fails to hold.
  *
- * Rows are charged in order, running `dailyLeft` down as they go: a turn that
- * reported two models spends the allowance on the first before the second
- * reaches credits. Most turns produce exactly one row, but the loop costs
- * nothing and keeps each debit traceable to the usage row that caused it.
+ * `dailyLeft` is how much of a daily allowance to spend before credits. Every
+ * caller passes 0 today — there is no daily tier — so the whole cost reaches
+ * credits. The parameter and the split behind it are kept because they are the
+ * only part of a daily allowance that is hard to get right, and re-deriving it
+ * later is worse than carrying it: see splitTurnCost in lib/server/credits.
+ *
+ * Rows are charged in order, running `dailyLeft` down as they go. Most turns
+ * produce exactly one row, but the loop costs nothing and keeps each debit
+ * traceable to the usage row that caused it.
  *
  * Only shared-pool, non-free, budget-pool rows can draw the balance — the same
  * three conditions sumSharedSpend filters on, so what is charged and what is
@@ -224,7 +229,7 @@ export async function chargeTurnToCredits(
         type: "debit",
         tokenUsageId: row.id,
         chatId: chatId ?? null,
-        description: `${row.provider} usage past the daily allowance`,
+        description: `${row.provider} usage`,
       },
       tx
     )
