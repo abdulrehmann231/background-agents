@@ -54,9 +54,21 @@ function maintenanceResponse(request: NextRequest) {
   return res
 }
 
+// Paths that must stay reachable even during maintenance.
+//
+// The Stripe webhook is the only writer of purchased credits, and a 503 would
+// make Stripe queue a payment we have already taken behind the retry schedule.
+// Letting it through costs nothing in the case where maintenance is a database
+// migration — the handler then fails, returns 500, and Stripe retries exactly
+// as it would have — and delivers the credits promptly in every other case.
+const MAINTENANCE_EXEMPT_PATHS = ["/api/stripe/webhook"]
+
 export function middleware(request: NextRequest) {
   // Maintenance gate runs first so nothing slips through.
-  if (isMaintenanceMode()) {
+  if (
+    isMaintenanceMode() &&
+    !MAINTENANCE_EXEMPT_PATHS.includes(request.nextUrl.pathname)
+  ) {
     if (hasBypass(request)) {
       const res = NextResponse.next()
       // Persist the bypass so the operator can navigate freely.
