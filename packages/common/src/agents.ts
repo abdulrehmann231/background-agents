@@ -781,6 +781,34 @@ export function resolveModelForAgent(
 }
 
 /**
+ * Resolve the model a chat should actually run on.
+ *
+ * Normally the chat's own stored model, but it downgrades to the agent's default
+ * usable model (via resolveModelForAgent) when the stored model isn't runnable
+ * for this user — either it's locked (no credentials, e.g. a BYOK-only model like
+ * Fable on a keyless account) or it's no longer offered by the agent (removed from
+ * the picker). This keeps an existing chat sending instead of stranding it on a
+ * model it can never use — the composer would otherwise just block with a lock.
+ *
+ * A stored model the user *can* run is always kept, so a chat on Fable with the
+ * user's own Anthropic key stays on Fable.
+ */
+export function resolveChatModel(
+  agent: Agent,
+  storedModel: string | null | undefined,
+  flags: CredentialFlags | null | undefined,
+  preferredModel?: string | null | undefined,
+  endpoints?: CustomEndpoint[]
+): string {
+  if (storedModel) {
+    const models = getAgentModels(agent, endpoints)
+    const config = models.find((m) => m.value === storedModel)
+    if (config && hasCredentialsForModel(config, flags, agent)) return storedModel
+  }
+  return resolveModelForAgent(agent, flags, preferredModel, endpoints)
+}
+
+/**
  * Resolve which agent to use, following the precedence:
  * caller-preferred → user's saved default → the hardcoded default agent.
  * Centralizes the `as Agent` cast so call sites don't each repeat it.
