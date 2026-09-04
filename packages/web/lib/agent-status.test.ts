@@ -15,6 +15,7 @@ import {
   getFreeModelForAgent,
   modelRequiresKey,
   getAgentModels,
+  resolveChatModel,
   type CredentialFlags,
 } from "@background-agents/common"
 
@@ -131,6 +132,55 @@ describe("shared Gemini pool unlocks Flash but not Pro", () => {
   it("unlocks Pro once the user brings their own Gemini key", () => {
     expect(hasCredentialsForModel(pro, geminiOwnKey, "gemini")).toBe(true)
     expect(hasCredentialsForModel(piPro, geminiOwnKey, "pi")).toBe(true)
+  })
+})
+
+describe("shared Claude pool does not unlock BYOK-only models (Fable)", () => {
+  // Fable is back in the claude-code picker but excluded from the shared pool
+  // (SHARED_CLAUDE_POOL_EXCLUDED_MODELS): it runs only on the user's own key or
+  // subscription. The other claude-code models stay available on the shared pool.
+  const fable = { value: "fable", label: "Fable", requiresKey: "anthropic" as const }
+  const sonnet = { value: "sonnet", label: "Sonnet", requiresKey: "anthropic" as const }
+
+  it("blocks Fable on the shared pool alone", () => {
+    expect(hasCredentialsForModel(fable, sharedPoolFresh, "claude-code")).toBe(false)
+  })
+
+  it("still allows the regular Sonnet model on the shared pool", () => {
+    expect(hasCredentialsForModel(sonnet, sharedPoolFresh, "claude-code")).toBe(true)
+  })
+
+  it("unlocks Fable with the user's own Anthropic key", () => {
+    expect(hasCredentialsForModel(fable, { ANTHROPIC_API_KEY: true }, "claude-code")).toBe(true)
+  })
+
+  it("unlocks Fable with the user's pasted subscription token", () => {
+    expect(hasCredentialsForModel(fable, { CLAUDE_CODE_CREDENTIALS: true }, "claude-code")).toBe(true)
+  })
+})
+
+describe("resolveChatModel downgrades locked/removed stored models", () => {
+  // An existing chat carries its own stored model. If the user can't run it
+  // (locked BYOK-only model, or a model since removed from the picker), the chat
+  // should fall back to a usable default instead of stranding on a lock.
+  it("downgrades an existing Fable chat to Sonnet when there's no key", () => {
+    expect(resolveChatModel("claude-code", "fable", sharedPoolFresh)).toBe("sonnet")
+  })
+
+  it("keeps Fable when the user has their own Anthropic key", () => {
+    expect(resolveChatModel("claude-code", "fable", { ANTHROPIC_API_KEY: true })).toBe("fable")
+  })
+
+  it("keeps a normal, usable stored model as-is", () => {
+    expect(resolveChatModel("claude-code", "sonnet", sharedPoolFresh)).toBe("sonnet")
+  })
+
+  it("downgrades a model no longer offered by the agent", () => {
+    expect(resolveChatModel("claude-code", "some-removed-model", sharedPoolFresh)).toBe("sonnet")
+  })
+
+  it("falls back to the default when the chat has no stored model", () => {
+    expect(resolveChatModel("claude-code", null, sharedPoolFresh)).toBe("sonnet")
   })
 })
 

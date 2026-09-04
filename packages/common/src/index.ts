@@ -51,6 +51,7 @@ export {
   getDefaultModelForAgent,
   getFreeModelForAgent,
   resolveModelForAgent,
+  resolveChatModel,
   resolveAgent,
   resolveAgentAndModel,
   getAgentModels,

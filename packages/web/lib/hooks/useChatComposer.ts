@@ -22,7 +22,7 @@ import {
   agentModels,
   hasCredentialsForModel,
   resolveAgent,
-  resolveModelForAgent,
+  resolveChatModel,
   agentSupportsPlanMode,
 } from "@/lib/types"
 import { filterSlashCommandsWithConflict, filterSingleCommand, CREATE_REPO_COMMAND } from "@background-agents/common"
@@ -125,7 +125,10 @@ export function useChatComposer({
   }, [])
 
   // Resolve the model for the current agent (honoring the saved default).
-  const currentModel = chat?.model ?? resolveModelForAgent(currentAgent, credentialFlags, settings.defaultModel)
+  // Use the chat's stored model, but downgrade to a usable default when that model
+  // is locked (no credentials, e.g. an existing Fable chat on a keyless account) or
+  // no longer offered — so the chat keeps sending instead of stranding on a lock.
+  const currentModel = resolveChatModel(currentAgent, chat?.model, credentialFlags, settings.defaultModel)
 
   // Check if the selected model has required credentials
   const availableModels = agentModels[currentAgent] ?? []

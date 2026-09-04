@@ -177,8 +177,9 @@ export interface ModelOption {
    * Only set for models that don't require the user's own key — either the
    * server's shared credential pool (a real per-input-token $/M rate, e.g.
    * "$2/M" or "30¢/M") or "FREE" for models needing no key at all (requiresKey
-   * "none"). Omitted for BYOK models and for auto/default routers, whose
-   * resolved model — and so cost — is unknown ahead of time.
+   * "none"). May also be set on a BYOK model as an indicative list rate (e.g.
+   * Fable's "$10/M"). Omitted for auto/default routers, whose resolved model —
+   * and so cost — is unknown ahead of time.
    */
   priceLabel?: string
 }
@@ -220,11 +221,25 @@ const SHARED_GEMINI_POOL_PRO_MODELS = new Set<string>([
   "google/gemini-3.1-pro-preview",
 ])
 
+/**
+ * Claude Code models the server-shared Claude pool must NOT unlock. Unlike every
+ * other anthropic model on claude-code, these run only on the user's OWN key or
+ * subscription token — never the free shared pool. Fable ($10/M) is too costly to
+ * serve for free, so it's BYOK-only. This also retroactively gates existing chats
+ * still pointed at such a model: with no personal Anthropic credential the picker
+ * shows a lock and the send path (hasRequiredCredentials) blocks the turn.
+ */
+const SHARED_CLAUDE_POOL_EXCLUDED_MODELS = new Set<string>(["fable"])
+
 export const agentModels: Record<Agent, ModelOption[]> = {
   "claude-code": [
     { value: "sonnet", label: "Sonnet", requiresKey: "anthropic", priceLabel: "$2/M" },
     { value: "opus", label: "Opus", requiresKey: "anthropic", priceLabel: "$5/M" },
     { value: "haiku", label: "Haiku", requiresKey: "anthropic", priceLabel: "$1/M" },
+    // BYOK-only: excluded from the shared Claude pool (see
+    // SHARED_CLAUDE_POOL_EXCLUDED_MODELS). priceLabel is shown as an indicative
+    // list rate even though the user runs it on their own key.
+    { value: "fable", label: "Fable", requiresKey: "anthropic", priceLabel: "$10/M" },
     { value: "default", label: "Auto", requiresKey: "anthropic" },
     { value: "best", label: "Best", requiresKey: "anthropic" },
   ],
@@ -646,6 +661,12 @@ export function hasCredentialsForModel(
     // (see resolveSendCredentials). Every other agent (OpenCode, Pi, Goose, …)
     // needs a real API key.
     if (agent !== "claude-code") return !!flags?.ANTHROPIC_API_KEY
+    // BYOK-only Claude models (e.g. Fable) never run on the shared pool — they
+    // require the user's own API key or subscription, regardless of balance. This
+    // is what gates existing chats still pointed at such a model.
+    if (SHARED_CLAUDE_POOL_EXCLUDED_MODELS.has(model.value)) {
+      return !!flags?.ANTHROPIC_API_KEY || !!flags?.CLAUDE_CODE_CREDENTIALS
+    }
     // Claude Code can use either API key, the user's pasted subscription, or the shared pool.
     // With the credit allowance spent, only the user's own credentials remain.
     if (flags?.SHARED_BALANCE_EXHAUSTED) {
@@ -759,6 +780,34 @@ export function resolveModelForAgent(
     }
   }
   return getDefaultModelForAgent(agent, flags)
+}
+
+/**
+ * Resolve the model a chat should actually run on.
+ *
+ * Normally the chat's own stored model, but it downgrades to the agent's default
+ * usable model (via resolveModelForAgent) when the stored model isn't runnable
+ * for this user — either it's locked (no credentials, e.g. a BYOK-only model like
+ * Fable on a keyless account) or it's no longer offered by the agent (removed from
+ * the picker). This keeps an existing chat sending instead of stranding it on a
+ * model it can never use — the composer would otherwise just block with a lock.
+ *
+ * A stored model the user *can* run is always kept, so a chat on Fable with the
+ * user's own Anthropic key stays on Fable.
+ */
+export function resolveChatModel(
+  agent: Agent,
+  storedModel: string | null | undefined,
+  flags: CredentialFlags | null | undefined,
+  preferredModel?: string | null | undefined,
+  endpoints?: CustomEndpoint[]
+): string {
+  if (storedModel) {
+    const models = getAgentModels(agent, endpoints)
+    const config = models.find((m) => m.value === storedModel)
+    if (config && hasCredentialsForModel(config, flags, agent)) return storedModel
+  }
+  return resolveModelForAgent(agent, flags, preferredModel, endpoints)
 }
 
 /**
