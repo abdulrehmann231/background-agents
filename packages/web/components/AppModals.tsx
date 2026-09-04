@@ -252,6 +252,7 @@ export function AppModals({
         onClose={onDismissLimitReached}
         provider={limitReachedState.provider}
         creditBalance={limitReachedState.creditBalance}
+        limit={limitReachedState.limit}
         onContinueWithOpenCode={onContinueWithOpenCode}
         onAddApiKey={() => {
           onDismissLimitReached()

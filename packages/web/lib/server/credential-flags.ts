@@ -152,16 +152,17 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
       limitResetAt = getNextUtcWeekReset()
       // limitTotal / limitRemaining stay null (unlimited)
     } else {
-      // Free and Pro, identically: `used`/`limitTotal`/`limitRemaining` below
-      // are still computed for the Settings usage bar, but readiness
-      // (SHARED_BALANCE_EXHAUSTED) reflects the purchased-credit balance —
-      // the actual thing that gates a send now — not the daily numbers.
+      // Free and Pro: daily allowance (Pro = PRO_BUDGET_MULTIPLIER× free),
+      // with purchased credits behind it. Readiness must be the exact negation
+      // of the send gate in lib/db/usage-limit — `used < allowance ||
+      // credits > 0n` — or the agent picker offers a model the server then
+      // refuses. Both pots have to be empty before anything is exhausted.
       const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
       limitUsed = used
       limitResetAt = getNextUtcDayReset()
       limitTotal = allowance
       limitRemaining = Math.max(0, allowance - used)
-      flags.SHARED_BALANCE_EXHAUSTED = credits <= 0n
+      flags.SHARED_BALANCE_EXHAUSTED = used >= allowance && credits <= 0n
     }
   }
 
