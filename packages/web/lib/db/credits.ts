@@ -229,7 +229,9 @@ export async function chargeTurnToCredits(
         type: "debit",
         tokenUsageId: row.id,
         chatId: chatId ?? null,
-        description: `${row.provider} usage`,
+        // Just the provider: the Credits tab already renders the type ("Usage")
+        // beside it, so anything more here reads as "Usage · claude usage".
+        description: row.provider,
       },
       tx
     )
