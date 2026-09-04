@@ -46,7 +46,7 @@ jobs:
         run: npm run build:electron
 
       - name: Package and publish
-        working-directory: packages/electron
+        working-directory: packages/desktop
         env:
           # electron-builder reads this to create the GitHub Release and
           # upload artifacts. GITHUB_TOKEN is provided automatically.
