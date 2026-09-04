@@ -54,6 +54,8 @@ export interface LimitReachedState {
   used?: number | null
   limit?: number | null
   resetAt?: Date
+  /** Purchased credits in USD — what actually gates a send now. */
+  creditBalance?: number | null
 }
 
 type PreviewUpdate = Pick<Partial<Chat>, "previewItems" | "activePreviewIndex" | "previewPaneHidden">

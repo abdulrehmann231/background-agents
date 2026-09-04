@@ -229,6 +229,7 @@ export function useMessageDispatch({
               used: result.used,
               limit: result.limit,
               resetAt: result.resetAt ? new Date(result.resetAt) : undefined,
+              creditBalance: result.creditBalance,
             })
             return
           }

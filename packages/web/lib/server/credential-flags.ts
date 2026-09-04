@@ -81,7 +81,7 @@ export async function getSharedPoolFlags(): Promise<CredentialFlags> {
 export async function getEffectiveCredentialFlags(userId: string): Promise<EffectiveFlags> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { credentials: true, plan: true },
+    select: { credentials: true, plan: true, creditBalanceMicroUsd: true },
   })
 
   // Decrypt stored credentials (only those the user has saved)
@@ -133,6 +133,7 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   )
   const plan: Plan = user?.plan ?? "free"
   const isPro = plan !== "free"
+  const credits = user?.creditBalanceMicroUsd ?? 0n
 
   let limitResetAt: Date | null = null
   let limitRemaining: number | null = null
@@ -144,19 +145,23 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
     const allowance = getDailyBalance(plan)
 
     if (allowance == null) {
-      // Unlimited plan: weekly spend for display only — no cap.
+      // Unlimited plan: weekly spend for display only — no cap, and it never
+      // touches credits, so SHARED_BALANCE_EXHAUSTED is never set here.
       isWeekly = true
       limitUsed = await sumSharedSpend({ userId, since: getStartOfUtcWeek() })
       limitResetAt = getNextUtcWeekReset()
       // limitTotal / limitRemaining stay null (unlimited)
     } else {
-      // Free and Pro: daily allowance (Pro = PRO_BUDGET_MULTIPLIER× free).
+      // Free and Pro, identically: `used`/`limitTotal`/`limitRemaining` below
+      // are still computed for the Settings usage bar, but readiness
+      // (SHARED_BALANCE_EXHAUSTED) reflects the purchased-credit balance —
+      // the actual thing that gates a send now — not the daily numbers.
       const used = await sumSharedSpend({ userId, since: getStartOfUtcDay() })
       limitUsed = used
       limitResetAt = getNextUtcDayReset()
       limitTotal = allowance
       limitRemaining = Math.max(0, allowance - used)
-      flags.SHARED_BALANCE_EXHAUSTED = used >= allowance
+      flags.SHARED_BALANCE_EXHAUSTED = credits <= 0n
     }
   }
 

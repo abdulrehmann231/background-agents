@@ -246,13 +246,12 @@ export function AppModals({
         placeholder="Chat name"
       />
 
-      {/* Daily Limit Reached Dialog */}
+      {/* Out of Credits Dialog */}
       <LimitReachedDialog
         open={limitReachedState.show}
         onClose={onDismissLimitReached}
         provider={limitReachedState.provider}
-        used={limitReachedState.used}
-        limit={limitReachedState.limit}
+        creditBalance={limitReachedState.creditBalance}
         plan={limitReachedState.plan}
         onContinueWithOpenCode={onContinueWithOpenCode}
         onAddApiKey={() => {
@@ -273,7 +272,6 @@ export function AppModals({
             "_blank"
           )
         }}
-        resetAt={limitReachedState.resetAt}
         isMobile={isMobile}
       />
 
