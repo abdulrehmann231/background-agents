@@ -1,11 +1,17 @@
 /**
- * One-off backfill: give existing accounts the signup credit.
+ * Backfill: give existing accounts the signup credit.
  *
  * `events.createUser` grants SIGNUP_CREDIT_USD to every account created from
  * the deploy onwards, but it cannot reach the accounts that already existed —
  * and with gating purely on purchased credits (see lib/db/usage-limit), those
- * users land on a zero balance and cannot run a shared-pool turn at all. This
- * closes that gap once.
+ * users land on a zero balance and cannot run a shared-pool turn at all.
+ *
+ * Not a required deploy step any more: migration
+ * 20260905120000_backfill_signup_credits does the same grant in SQL, on the
+ * same selection, so the gap closes as the schema lands rather than whenever
+ * someone remembers to run this. What is left here is the manual handle —
+ * chiefly `--include-funded`, which the migration deliberately does not do —
+ * plus a dry run for checking what a given database is holding.
  *
  * Read-only by default: prints who would be granted and what it would cost.
  *

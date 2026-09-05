@@ -34,6 +34,9 @@ export const MICRO_PER_USD = 1_000_000
  * tops up or runs on their own key. Kept here, next to the unit it is
  * denominated in, so changing the figure is a one-line change rather than a
  * hunt through the auth callbacks and the backfill script that both apply it.
+ * The one copy that does not follow it is the literal in migration
+ * 20260905120000_backfill_signup_credits, frozen on purpose: a migration
+ * records what was actually granted on the day it ran.
  *
  * Worth sizing deliberately: these are dollars of API list value, and a single
  * agentic run on a real repo can spend several of them.
