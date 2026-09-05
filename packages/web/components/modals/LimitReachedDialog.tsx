@@ -4,29 +4,24 @@ import { useCallback, useRef, useEffect } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
-import { Crown, Key, Zap } from "lucide-react"
+import { Key, Wallet } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { fmtBalance } from "@/lib/format"
-import {
-  getLimitUpgradeCopy,
-  type LimitUpgradeTarget,
-} from "@/lib/usage-limit-copy"
-import type { Plan } from "@/lib/server/usage-budgets"
 
 interface LimitReachedDialogProps {
   open: boolean
   onClose: () => void
   onContinueWithOpenCode: () => void
   onAddApiKey: () => void
-  onUpgradePlan: (targetPlan: LimitUpgradeTarget) => void
+  /** Takes the user to the Credits tab, where they can top up. */
+  onBuyCredits: () => void
   /** Shared-pool provider the blocked run would have used (claude | gemini | opencode). */
   provider?: string
-  /** Spent today / the daily balance, in USD of API list value. */
-  used?: number | null
-  limit?: number | null
-  /** Current subscription tier; defaults to Free for older responses. */
-  plan?: Plan
-  resetAt?: Date
+  /**
+   * Purchased credits in USD — this is what actually gates a send (see
+   * lib/db/usage-limit). Negative when the turn that emptied them overshot.
+   */
+  creditBalance?: number | null
   isMobile?: boolean
 }
 
@@ -41,12 +36,9 @@ export function LimitReachedDialog({
   onClose,
   onContinueWithOpenCode,
   onAddApiKey,
-  onUpgradePlan,
+  onBuyCredits,
   provider,
-  used,
-  limit,
-  plan,
-  resetAt,
+  creditBalance,
   isMobile = false,
 }: LimitReachedDialogProps) {
   const providerLabel = PROVIDER_LABEL[provider ?? ""] ?? "shared model"
@@ -55,7 +47,6 @@ export function LimitReachedDialog({
   // draw it down and so stay available at zero.
   const canSwitchToOpenCode = true
   const primaryButtonRef = useRef<HTMLButtonElement>(null)
-  const upgradeCopy = getLimitUpgradeCopy(plan)
 
   // Focus the primary button when modal opens
   useEffect(() => {
@@ -77,21 +68,10 @@ export function LimitReachedDialog({
     onClose()
   }, [onAddApiKey, onClose])
 
-  const handleUpgradePlan = useCallback(() => {
-    if (!upgradeCopy) return
-    onUpgradePlan(upgradeCopy.targetPlan)
+  const handleBuyCredits = useCallback(() => {
+    onBuyCredits()
     onClose()
-  }, [upgradeCopy, onUpgradePlan, onClose])
-
-  // Format reset time
-  const resetTimeString = resetAt
-    ? new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-        timeZoneName: "short",
-      }).format(resetAt)
-    : "midnight UTC"
+  }, [onBuyCredits, onClose])
 
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -118,37 +98,61 @@ export function LimitReachedDialog({
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-xl shadow-xl"
           )}
         >
-          <ModalHeader title="Daily Limit Reached" />
+          <ModalHeader title="Out of Credits" />
           <div className="px-4 pt-3 pb-4 space-y-4">
             <div className="text-sm text-muted-foreground">
-              You&apos;ve used your daily balance
-              {typeof limit === "number" ? (
+              {typeof creditBalance === "number" && creditBalance < 0 ? (
                 <>
-                  {" "}
-                  &mdash;{" "}
+                  Your last turn ran{" "}
                   <span className="font-medium text-foreground">
-                    {typeof used === "number" ? fmtBalance(used) : fmtBalance(limit)} of{" "}
-                    {fmtBalance(limit)}
-                  </span>
+                    {fmtBalance(Math.abs(creditBalance))}
+                  </span>{" "}
+                  past your credits.
                 </>
-              ) : null}
-              . It resets at{" "}
-              <span className="font-medium text-foreground">{resetTimeString}</span>.
-              Your balance is shared across Claude, OpenCode and Gemini.
+              ) : (
+                "You're out of credits."
+              )}{" "}
+              Top up to continue — your balance is shared across Claude, OpenCode and Gemini.
             </div>
 
             <div className="space-y-2">
-              {/* Primary option: OpenCode's free models, which never draw the balance. */}
+              {/* Primary option: top up. It leads and takes the focus because it
+                  is the only one that clears the block itself — the other two
+                  route around it, onto a different model or a different
+                  credential, and leave the balance where it is. */}
+              <button
+                ref={primaryButtonRef}
+                onClick={handleBuyCredits}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors p-3 text-left cursor-pointer",
+                  "focus:outline-none focus:ring-2 focus:ring-primary/50"
+                )}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Wallet className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground">
+                    Buy more credits
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {typeof creditBalance === "number" && creditBalance < 0
+                      ? "Clear the deficit and pick up where you left off"
+                      : "Top up your balance and pick up where you left off"}
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: OpenCode's free models, which never draw the balance. */}
               {canSwitchToOpenCode && (
                 <button
-                  ref={primaryButtonRef}
                   onClick={handleContinueWithOpenCode}
                   className={cn(
-                    "w-full flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors p-3 text-left cursor-pointer",
-                    "focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    "w-full flex items-center gap-3 rounded-lg border border-border hover:bg-accent/50 transition-colors p-3 text-left cursor-pointer",
+                    "focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
                     <AgentIcon agent="opencode" className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -165,7 +169,7 @@ export function LimitReachedDialog({
                 </button>
               )}
 
-              {/* Option 2: Add API Key for the limited provider */}
+              {/* Option 3: Add API Key for the limited provider */}
               <button
                 onClick={handleAddApiKey}
                 className={cn(
@@ -185,32 +189,6 @@ export function LimitReachedDialog({
                   </div>
                 </div>
               </button>
-
-              {/* Option 3: plan-aware upgrade (hidden for Unlimited). */}
-              {upgradeCopy && (
-                <button
-                  onClick={handleUpgradePlan}
-                  className={cn(
-                    "w-full flex items-center gap-3 rounded-lg border border-amber-500/30 hover:bg-amber-500/5 transition-colors p-3 text-left cursor-pointer",
-                    "focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                  )}
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                    <Crown className="h-5 w-5 text-amber-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground">
-                      {upgradeCopy.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {upgradeCopy.description}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded bg-amber-500/10">
-                    {upgradeCopy.targetPlan === "pro" ? "Pro" : "Unlimited"}
-                  </div>
-                </button>
-              )}
             </div>
 
             {/* Dismiss */}

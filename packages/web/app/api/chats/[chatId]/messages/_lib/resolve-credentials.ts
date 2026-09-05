@@ -44,6 +44,7 @@ export async function resolveSendCredentials(
       provider: usageCheck.provider,
       used: usageCheck.used,
       limit: usageCheck.limit,
+      creditBalance: usageCheck.creditBalance,
       resetAt: usageCheck.resetAt.toISOString(),
     })
 
@@ -51,11 +52,13 @@ export async function resolveSendCredentials(
       {
         error: "DAILY_LIMIT_EXCEEDED",
         message: usageCheck.error,
-        plan: usageCheck.plan,
         provider: usageCheck.provider,
         used: usageCheck.used,
         remaining: usageCheck.remaining,
         limit: usageCheck.limit,
+        // Negative when the last turn overshot: the client shows "top up to
+        // clear it" rather than "come back tomorrow", which would be a lie.
+        creditBalance: usageCheck.creditBalance,
         resetAt: usageCheck.resetAt.toISOString(),
       },
       { status: 429 }

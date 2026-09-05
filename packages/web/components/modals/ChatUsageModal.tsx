@@ -8,7 +8,7 @@ import { useModals } from "@/lib/contexts"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { ALL_AGENTS, agentToProvider, type Agent } from "@background-agents/common"
 import type { ChatUsageResponse } from "@/app/api/chats/[chatId]/usage/route"
-import { fmtTokens, fmtBalance } from "@/lib/format"
+import { fmtTokens, fmtBalance, fmtCreditAmount } from "@/lib/format"
 
 /** Reverse map: SDK provider id → agent (for the provider's icon). */
 const PROVIDER_TO_AGENT: Record<string, Agent> = Object.fromEntries(
@@ -30,7 +30,10 @@ function fmtUsage(totalTokens: number) {
  * a chat that switched agents mid-way splits across several rows, and the useful
  * number is what the whole conversation came to.
  */
-function sum(rows: ChatUsageResponse["providers"], key: "totalTokens" | "costUsd") {
+function sum(
+  rows: ChatUsageResponse["providers"],
+  key: "totalTokens" | "costUsd" | "creditsChargedUsd"
+) {
   return rows.reduce((acc, r) => acc + r[key], 0)
 }
 
@@ -123,7 +126,8 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
                           {fmtUsage(p.totalTokens)}
                         </span>
                         <span className="block text-xs text-muted-foreground tabular-nums">
-                          {fmtBalance(p.costUsd)}
+                          {fmtCreditAmount(p.creditsChargedUsd)} credits ·{" "}
+                          {fmtBalance(p.costUsd)} list
                         </span>
                       </span>
                     </div>
@@ -138,7 +142,8 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
                         {fmtUsage(sum(data.providers, "totalTokens"))}
                       </span>
                       <span className="block text-xs text-muted-foreground tabular-nums">
-                        {fmtBalance(sum(data.providers, "costUsd"))}
+                        {fmtCreditAmount(sum(data.providers, "creditsChargedUsd"))} credits ·{" "}
+                        {fmtBalance(sum(data.providers, "costUsd"))} list
                       </span>
                     </span>
                   </div>
@@ -146,8 +151,9 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Cost is what these tokens would bill at API list prices — including
-                turns run on your own key, which cost the platform nothing.
+                Credits are what actually came off your balance. List is what the same
+                tokens would bill at API prices — higher, because shared pools are
+                subsidised, and charged to nobody at all on your own key or a free model.
               </p>
               </>
             )}
@@ -155,11 +161,11 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
             <button
               onClick={() => {
                 onClose()
-                modals.openSettingsSection("usage")
+                modals.openSettingsSection("credits")
               }}
               className="text-xs text-primary hover:underline cursor-pointer"
             >
-              See shared pool usage →
+              See credits →
             </button>
           </div>
         </Dialog.Content>

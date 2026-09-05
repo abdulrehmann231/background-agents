@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FolderDown, Bell, Gauge, Server, Wrench } from "lucide-react"
+import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FolderDown, Bell, CreditCard, Server, Wrench } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -19,7 +19,7 @@ import {
   GeneralSection,
   ApiKeysSection,
   CustomEndpointsSection,
-  UsageSection,
+  CreditsSection,
   GitSection,
   NotificationsSection,
   LocalSyncSection,
@@ -34,7 +34,7 @@ import {
 export type { HighlightKey }
 
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "usage" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
+export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "credits" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
 
 interface SettingsModalProps {
   open: boolean
@@ -61,7 +61,7 @@ const baseSections: SectionDef[] = [
   { key: "general", label: "General", icon: SettingsIcon },
   { key: "api-keys", label: "API Keys", icon: Key },
   { key: "custom-endpoints", label: "Custom endpoints", icon: Server },
-  { key: "usage", label: "Usage", icon: Gauge },
+  { key: "credits", label: "Credits", icon: CreditCard },
   { key: "appearance", label: "Appearance", icon: Sun },
   { key: "git", label: "Git", icon: GitBranch },
   { key: "notifications", label: "Notifications", icon: Bell },
@@ -396,8 +396,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             setEndpoints={setEndpoints}
           />
         )
-      case "usage":
-        return <UsageSection isMobile={isMobile} />
+      case "credits":
+        return <CreditsSection isMobile={isMobile} />
       case "git":
         return (
           <GitSection

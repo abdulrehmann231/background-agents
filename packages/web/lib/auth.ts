@@ -1,6 +1,7 @@
 import { NextAuthOptions } from "next-auth"
 import GitHubProvider from "next-auth/providers/github"
 import { PrismaAdapter } from "@auth/prisma-adapter"
+import { grantSignupCredit } from "@/lib/db/credits"
 import { prisma } from "@/lib/db/prisma"
 import { logActivityAsync } from "@/lib/db/activity-log"
 
@@ -113,6 +114,14 @@ export const authOptions: NextAuthOptions = {
           data: { githubId: account.providerAccountId },
         })
       }
+
+      // The starting balance, and the only free credits there are — nothing
+      // refills it (see lib/db/usage-limit). Deliberately in `createUser` and
+      // not `signIn`: this fires once, when the adapter first writes the row,
+      // whereas signIn fires on every login and would re-grant on each one.
+      // grantSignupCredit is idempotent and never throws, so a repeat here
+      // cannot double-credit and a failure cannot block the signup.
+      await grantSignupCredit(user.id)
     },
   },
   pages: {

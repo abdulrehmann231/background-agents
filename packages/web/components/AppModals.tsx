@@ -246,14 +246,12 @@ export function AppModals({
         placeholder="Chat name"
       />
 
-      {/* Daily Limit Reached Dialog */}
+      {/* Out of Credits Dialog */}
       <LimitReachedDialog
         open={limitReachedState.show}
         onClose={onDismissLimitReached}
         provider={limitReachedState.provider}
-        used={limitReachedState.used}
-        limit={limitReachedState.limit}
-        plan={limitReachedState.plan}
+        creditBalance={limitReachedState.creditBalance}
         onContinueWithOpenCode={onContinueWithOpenCode}
         onAddApiKey={() => {
           onDismissLimitReached()
@@ -265,15 +263,10 @@ export function AppModals({
                 : "anthropic"
           modals.openSettings(key)
         }}
-        onUpgradePlan={(targetPlan) => {
+        onBuyCredits={() => {
           onDismissLimitReached()
-          const planLabel = targetPlan === "pro" ? "Pro" : "Unlimited"
-          window.open(
-            `mailto:james@jamesmurdza.com?subject=${encodeURIComponent(`Upgrade to ${planLabel}`)}`,
-            "_blank"
-          )
+          modals.openSettingsSection("credits")
         }}
-        resetAt={limitReachedState.resetAt}
         isMobile={isMobile}
       />
 

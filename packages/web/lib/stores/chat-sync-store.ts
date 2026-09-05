@@ -17,7 +17,6 @@
 import { create } from "zustand"
 import { nanoid } from "nanoid"
 import type { Chat } from "@/lib/types"
-import type { Plan } from "@/lib/server/usage-budgets"
 import {
   loadLocalState,
   setCurrentChatId as persistCurrentChatId,
@@ -48,12 +47,8 @@ export interface LimitReachedState {
   }
   /** Shared-pool provider the blocked run would have used. */
   provider?: string
-  /** Subscription tier used to select a non-redundant upgrade path. */
-  plan?: Plan
-  /** Spent today / the daily balance, in USD. */
-  used?: number | null
-  limit?: number | null
-  resetAt?: Date
+  /** Purchased credits in USD — what gates a send. */
+  creditBalance?: number | null
 }
 
 type PreviewUpdate = Pick<Partial<Chat>, "previewItems" | "activePreviewIndex" | "previewPaneHidden">

@@ -12,12 +12,7 @@ export interface SettingsData {
   settings: Settings
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
-  balanceResetAt?: string | null
-  balanceRemaining?: number | null
-  balanceUsed?: number | null
-  balanceTotal?: number | null
   planIsPro?: boolean
-  balanceWeekly?: boolean
 }
 
 /**
@@ -57,12 +52,7 @@ export function useSettingsQuery() {
         settings: response.settings,
         credentialFlags: response.credentialFlags,
         customEndpoints: response.customEndpoints,
-        balanceResetAt: response.balanceResetAt,
-        balanceRemaining: response.balanceRemaining,
-        balanceUsed: response.balanceUsed,
-        balanceTotal: response.balanceTotal,
         planIsPro: response.planIsPro,
-        balanceWeekly: response.balanceWeekly,
       }
     },
     // Wait until NextAuth resolves so we don't fetch the anon endpoint for a

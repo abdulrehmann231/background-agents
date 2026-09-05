@@ -20,6 +20,10 @@ export type ActivityAction =
   // An LLM provider/model call failed for a turn (auth, balance, rate limit,
   // model unavailable, network, or an otherwise-unclassified model error).
   | "llm_provider_error"
+  // An admin moved a user's purchased credit balance by hand — a grant, or a
+  // correction. Stripe purchases are not logged here; they live in the
+  // CreditTransaction ledger with their Stripe ids attached.
+  | "credits_adjusted"
 
 /**
  * Metadata types for different actions

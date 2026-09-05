@@ -159,21 +159,3 @@ export function getStartOfUtcDay(now: Date = new Date()): Date {
 export function getNextUtcDayReset(now: Date = new Date()): Date {
   return new Date(getStartOfUtcDay(now).getTime() + 24 * 60 * 60 * 1000)
 }
-
-/** Start of the current ISO week (Monday 00:00 UTC) — unlimited-plan window. */
-export function getStartOfUtcWeek(now: Date = new Date()): Date {
-  const dayOfWeek = now.getUTCDay() // 0=Sun, 1=Mon, …
-  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-  return new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate() - daysSinceMonday
-    )
-  )
-}
-
-/** Next Monday 00:00 UTC. */
-export function getNextUtcWeekReset(now: Date = new Date()): Date {
-  return new Date(getStartOfUtcWeek(now).getTime() + 7 * 24 * 60 * 60 * 1000)
-}
