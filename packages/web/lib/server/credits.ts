@@ -25,6 +25,8 @@
  * mirroring lib/server/usage-cursor. The database side lives in lib/db/credits.
  */
 
+import type { Plan } from "@/lib/server/usage-budgets"
+
 /**
  * Micro-dollars per US dollar — the stored unit for balances and ledger rows.
  *
@@ -109,31 +111,83 @@ export function chargeableUsd(provider: string, listUsd: number): number {
 export const SIGNUP_CREDIT_USD = 0.25
 
 /**
- * Added to every eligible balance once per UTC day, in credits.
+ * The balance the daily cron tops an account up *to*, per plan, in credits.
+ *
+ * A refill to a fixed level, not a repeated addition: once a day, any balance
+ * below the plan's target is raised to exactly it, and anything at or above is
+ * left alone. So the grant is `target - balance`, never a flat amount, and a
+ * user who buys credits is never also handed change on top.
+ *
+ * Setting a level rather than adding to one also makes the write naturally
+ * idempotent: applying it twice lands on the same number, so a double fire can
+ * only ever be a no-op, on top of the exactly-once guard the cron already has.
  *
  * Applied by the daily-credits cron, not by anything on the request path, so a
  * user who never returns costs nothing to keep topped up.
+ *
+ * This is what finally makes `pro` mean something — it and `free` have been
+ * identical since gating moved to credits.
+ *
+ * `unlimited` has no target and is never refilled. It is ungated: the send check
+ * short-circuits ahead of the balance and token-metering skips the charge
+ * entirely, so an unlimited account neither spends credits nor needs any. A
+ * target there would fund a balance nothing draws down and put a nightly row in
+ * the ledger that means nothing. `null` says "not refilled" — distinct from a
+ * plan this table has simply never heard of, which falls back to `free`.
+ *
+ * A negative balance is refilled like any other, and that is the sharp edge
+ * here. The deficit left by a turn that overshot zero is cleared *in full*
+ * overnight — a user at -$20 is back to their target tomorrow — which makes
+ * "run one expensive turn, wait a day, repeat" free and unbounded. It is the
+ * same hazard that removed the old daily allowance (a reset re-opened the gate
+ * on a deficit), reintroduced deliberately and in a stronger form: the old rule
+ * at least made a large deficit take many days to clear. The judgement is that
+ * a permanent lockout on a free account is worse than the abuse case, and the
+ * abuse case is bounded by whatever per-turn ceiling eventually lands. Flooring
+ * the starting balance at zero in {@link dailyTopUpMicro} and in the cron's SQL
+ * is the change that removes it.
  */
-export const DAILY_CREDIT_USD = 0.25
+export const DAILY_CREDIT_TARGET_USD: Readonly<Record<Plan, number | null>> = {
+  free: 0.25,
+  pro: 0.5,
+  unlimited: null,
+}
 
 /**
- * The daily top-up only applies to a balance strictly below this, in credits.
+ * The daily target for a plan in credits, or null when the plan is not refilled
+ * at all.
  *
- * Two jobs. It stops a dormant account accruing without bound — the standing
- * liability across all users is bounded at roughly `DAILY_CREDIT_CAP +
- * DAILY_CREDIT_USD` each, not a year's worth. And it makes the top-up a floor
- * rather than an income: a user who tops up properly is not also handed change
- * every night.
- *
- * Deliberately no lower bound. A negative balance — the deficit left by the turn
- * that overshot zero — is topped up like any other, so an account digs itself
- * out at `DAILY_CREDIT_USD` a day instead of being bricked until it pays. That
- * is a reversal of the reasoning that removed the old daily allowance (a reset
- * re-opened the gate on a deficit and let it be re-incurred nightly), and it is
- * a deliberate one: at this size the worst case is a slow drip, and a permanent
- * lockout on a free account is worse.
+ * A plan this table has never heard of falls back to `free`'s target rather than
+ * to null: one added to the schema without a target here should under-grant a
+ * single user, not silently stop refilling them. That is why membership is
+ * tested with `in` — an explicit null and a missing key mean opposite things.
  */
-export const DAILY_CREDIT_CAP = 1
+export function dailyCreditTargetUsd(plan: string | null | undefined): number | null {
+  if (plan != null && plan in DAILY_CREDIT_TARGET_USD) {
+    const target = DAILY_CREDIT_TARGET_USD[plan as Plan]
+    return typeof target === "number" && Number.isFinite(target) ? target : null
+  }
+  return DAILY_CREDIT_TARGET_USD.free
+}
+
+/**
+ * What the daily cron would add to `balanceMicro` to reach the plan's target:
+ * the shortfall, or zero when the balance is already at or above it — or when
+ * the plan is not refilled.
+ *
+ * The cron applies this in SQL over every user at once rather than calling this
+ * per row — this is here so the rule itself is testable, and so the route and
+ * the tests cannot drift on what "top up to the target" means.
+ */
+export function dailyTopUpMicro(
+  balanceMicro: bigint,
+  plan: string | null | undefined
+): bigint {
+  const targetUsd = dailyCreditTargetUsd(plan)
+  if (targetUsd === null) return 0n
+  const target = usdToMicro(targetUsd)
+  return balanceMicro < target ? target - balanceMicro : 0n
+}
 
 /**
  * The `externalId` a signup grant is keyed on.
