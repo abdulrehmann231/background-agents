@@ -116,17 +116,43 @@ export function LimitReachedDialog({
             </div>
 
             <div className="space-y-2">
-              {/* Primary option: OpenCode's free models, which never draw the balance. */}
+              {/* Primary option: top up. It leads and takes the focus because it
+                  is the only one that clears the block itself — the other two
+                  route around it, onto a different model or a different
+                  credential, and leave the balance where it is. */}
+              <button
+                ref={primaryButtonRef}
+                onClick={handleBuyCredits}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors p-3 text-left cursor-pointer",
+                  "focus:outline-none focus:ring-2 focus:ring-primary/50"
+                )}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Wallet className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground">
+                    Buy more credits
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {typeof creditBalance === "number" && creditBalance < 0
+                      ? "Clear the deficit and pick up where you left off"
+                      : "Top up your balance and pick up where you left off"}
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: OpenCode's free models, which never draw the balance. */}
               {canSwitchToOpenCode && (
                 <button
-                  ref={primaryButtonRef}
                   onClick={handleContinueWithOpenCode}
                   className={cn(
-                    "w-full flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors p-3 text-left cursor-pointer",
-                    "focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    "w-full flex items-center gap-3 rounded-lg border border-border hover:bg-accent/50 transition-colors p-3 text-left cursor-pointer",
+                    "focus:outline-none focus:ring-2 focus:ring-ring"
                   )}
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
                     <AgentIcon agent="opencode" className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -143,7 +169,7 @@ export function LimitReachedDialog({
                 </button>
               )}
 
-              {/* Option 2: Add API Key for the limited provider */}
+              {/* Option 3: Add API Key for the limited provider */}
               <button
                 onClick={handleAddApiKey}
                 className={cn(
@@ -160,31 +186,6 @@ export function LimitReachedDialog({
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Use your own {providerLabel} key for unlimited usage
-                  </div>
-                </div>
-              </button>
-
-              {/* Option 3: top up. The only one that clears the block itself
-                  rather than routing around it, so it keeps the emphasised
-                  slot the plan upsell used to hold. */}
-              <button
-                onClick={handleBuyCredits}
-                className={cn(
-                  "w-full flex items-center gap-3 rounded-lg border border-amber-500/30 hover:bg-amber-500/5 transition-colors p-3 text-left cursor-pointer",
-                  "focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                )}
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                  <Wallet className="h-5 w-5 text-amber-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground">
-                    Buy more credits
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {typeof creditBalance === "number" && creditBalance < 0
-                      ? "Clear the deficit and pick up where you left off"
-                      : "Top up your balance and pick up where you left off"}
                   </div>
                 </div>
               </button>
