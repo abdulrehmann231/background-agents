@@ -11,7 +11,7 @@ import type { CreditPack } from "@/lib/server/stripe"
 interface TopUpDialogProps {
   open: boolean
   onClose: () => void
-  /** Packs as /api/billing/packs returned them: fixed amounts, then custom. */
+  /** Packs as /api/billing/packs returned them. Only the custom one is used. */
   packs: CreditPack[]
   /** Current balance, shown so the user can see what they're topping up. */
   balanceUsd: number | null
@@ -26,24 +26,43 @@ function sliderStep(maxUsd: number): number {
 }
 
 /**
+ * The shortcut amounts offered as chips, in USD.
+ *
+ * Presentation only. A chip sets the same amount the slider and the field set,
+ * and the purchase goes through the customer-chosen price like any other — so
+ * these are ours to pick and reorder without touching Stripe, and they cost no
+ * price objects and no API calls to load.
+ *
+ * Anything outside the custom price's own bounds is dropped rather than shown
+ * disabled: a chip that sets an amount the buy button then refuses is worse
+ * than no chip.
+ */
+const PRESET_USD = [5, 10, 25, 50] as const
+
+/**
  * Choose an amount, then go to Stripe.
  *
- * One amount drives everything — presets, slider and the field are three ways
- * of setting the same number, so there is never a selected chip disagreeing
- * with a typed value. Which price it buys is decided at submit: an amount that
- * lands exactly on a fixed pack buys that pack, anything else goes through the
- * custom-amount price (re-validated server-side against Stripe's bounds).
+ * One amount drives everything — chips, slider and the field are three ways of
+ * setting the same number, so there is never a selected chip disagreeing with a
+ * typed value. Every purchase bills the customer-chosen price for that amount,
+ * re-validated server-side against Stripe's own minimum and maximum.
+ *
+ * That single price is all this deployment needs in `STRIPE_PRICE_MAP`. Fixed
+ * per-pack prices used to back the chips and were bought directly when an amount
+ * landed on one; they bought exactly what the custom price buys, so they were
+ * five Stripe objects and four `prices.retrieve` calls to express four integers.
  */
 export function TopUpDialog({ open, onClose, packs, balanceUsd, isMobile = false }: TopUpDialogProps) {
-  const fixed = useMemo(
-    () => packs.filter((p) => p.amountUsd != null).sort((a, b) => a.amountUsd! - b.amountUsd!),
-    [packs]
-  )
   const custom = useMemo(() => packs.find((p) => p.amountUsd == null) ?? null, [packs])
 
-  const minUsd = custom?.minUsd ?? fixed[0]?.amountUsd ?? 5
-  const maxUsd = custom?.maxUsd ?? fixed[fixed.length - 1]?.amountUsd ?? 100
-  const defaultUsd = custom?.presetUsd ?? fixed[Math.floor(fixed.length / 2)]?.amountUsd ?? minUsd
+  const minUsd = custom?.minUsd ?? 5
+  const maxUsd = custom?.maxUsd ?? 100
+  const defaultUsd = custom?.presetUsd ?? minUsd
+
+  const chips = useMemo(
+    () => PRESET_USD.filter((usd) => usd >= minUsd && usd <= maxUsd),
+    [minUsd, maxUsd]
+  )
 
   const [amount, setAmount] = useState(defaultUsd)
   const [text, setText] = useState(defaultUsd.toFixed(0))
@@ -78,26 +97,22 @@ export function TopUpDialog({ open, onClose, packs, balanceUsd, isMobile = false
     setError(null)
   }, [])
 
-  const matchedFixed = fixed.find((p) => Math.abs(p.amountUsd! - amount) < 0.005) ?? null
-  const canBuy = custom
-    ? Number.isFinite(amount) && amount >= minUsd && amount <= maxUsd
-    : matchedFixed !== null
+  const canBuy =
+    custom != null && Number.isFinite(amount) && amount >= minUsd && amount <= maxUsd
   const outOfRange = custom != null && text !== "" && !canBuy
 
   const buy = useCallback(async () => {
-    const pack = matchedFixed ?? custom
-    if (!pack || !canBuy) return
+    if (!custom || !canBuy) return
     setError(null)
     setSubmitting(true)
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          matchedFixed
-            ? { packId: matchedFixed.id }
-            : { packId: pack.id, amountUsd: Math.round(amount * 100) / 100 }
-        ),
+        body: JSON.stringify({
+          packId: custom.id,
+          amountUsd: Math.round(amount * 100) / 100,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || typeof data.url !== "string") {
@@ -110,7 +125,7 @@ export function TopUpDialog({ open, onClose, packs, balanceUsd, isMobile = false
       setError(e instanceof Error ? e.message : "Could not start checkout")
       setSubmitting(false)
     }
-  }, [matchedFixed, custom, canBuy, amount])
+  }, [custom, canBuy, amount])
 
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -152,16 +167,17 @@ export function TopUpDialog({ open, onClose, packs, balanceUsd, isMobile = false
               )}
             </div>
 
-            {/* Presets */}
-            {fixed.length > 0 && (
+            {/* Presets — shortcuts onto the same amount, not separate products.
+                Highlighted purely by whether the current amount sits on one. */}
+            {chips.length > 0 && (
               <div className="grid grid-cols-4 gap-1.5">
-                {fixed.map((pack) => {
-                  const selected = matchedFixed?.id === pack.id
+                {chips.map((usd) => {
+                  const selected = Math.abs(amount - usd) < 0.005
                   return (
                     <button
-                      key={pack.id}
+                      key={usd}
                       type="button"
-                      onClick={() => setBoth(pack.amountUsd!)}
+                      onClick={() => setBoth(usd)}
                       disabled={submitting}
                       className={cn(
                         "rounded-lg border py-2 text-sm font-medium tabular-nums transition-colors cursor-pointer",
@@ -171,7 +187,7 @@ export function TopUpDialog({ open, onClose, packs, balanceUsd, isMobile = false
                           : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
-                      {fmtBalance(pack.amountUsd!)}
+                      {fmtBalance(usd)}
                     </button>
                   )
                 })}

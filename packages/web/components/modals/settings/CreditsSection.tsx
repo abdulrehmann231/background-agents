@@ -87,7 +87,12 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
 
   const isNegative = !!credits && credits.balanceUsd < 0
   const isEmpty = !!credits && credits.balanceUsd === 0
-  const canBuy = !!packs?.enabled && packs.packs.length > 0
+  // Specifically a customer-chosen-amount price: it is the only thing
+  // TopUpDialog can bill against now that the preset chips are local amounts
+  // rather than products. Without one the dialog would open with a permanently
+  // disabled buy button, so fail closed here instead and say top-ups are
+  // unavailable.
+  const canBuy = !!packs?.enabled && packs.packs.some((p) => p.amountUsd == null)
 
   return (
     <div>
