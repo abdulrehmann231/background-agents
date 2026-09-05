@@ -10,11 +10,18 @@
 -- part of the deploy so there is no window in which the whole existing user
 -- base is locked out waiting for someone to remember the command.
 --
--- Amount and key are duplicated from lib/server/credits (SIGNUP_CREDIT_USD = 5,
+-- Amount and key are duplicated from lib/server/credits (SIGNUP_CREDIT_USD = 0.25,
 -- signupGrantKey) because SQL cannot import them. A migration is a historical
--- record of what was actually applied, so this figure is deliberately frozen at
--- what the grant was worth on this date and must not be edited to follow later
+-- record of what was actually applied, so this figure is frozen at what the
+-- grant was worth on the day it ran and must not be edited to follow later
 -- changes to the constant.
+--
+-- It was edited once, from 5000000 to 250000, when credits stopped being
+-- denominated in API list value and became discounted dollars. That was safe
+-- only because this migration had never been applied anywhere at the time —
+-- neither database's _prisma_migrations contained it, so there was no history
+-- to misrepresent and no checksum to invalidate. Once deployed, the figure
+-- above is history and the rule stands.
 --
 -- Selection mirrors the script's default (no --include-funded): skip anyone who
 -- already has a signup grant, and skip anyone already funded — a non-zero
@@ -24,7 +31,7 @@
 
 WITH granted AS (
     UPDATE "User" u
-    SET "creditBalanceMicroUsd" = u."creditBalanceMicroUsd" + 5000000
+    SET "creditBalanceMicroUsd" = u."creditBalanceMicroUsd" + 250000
     WHERE u."creditBalanceMicroUsd" = 0
       AND NOT EXISTS (
           SELECT 1
@@ -53,7 +60,7 @@ SELECT
     -- NOT EXISTS above, and so this needs no uuid function.
     'signup_backfill_' || g."id",
     g."id",
-    5000000,
+    250000,
     g."creditBalanceMicroUsd",
     'grant',
     'signup:' || g."id",

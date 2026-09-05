@@ -7,6 +7,7 @@ import {
   internalError,
 } from "@/lib/db/api-helpers"
 import { sumChatUsageByProvider } from "@/lib/db/token-usage"
+import { sumChatCreditsByProvider } from "@/lib/db/credits"
 import { ALL_AGENTS, agentLabels, agentToProvider } from "@background-agents/common"
 
 /** Reverse map: SDK provider id → human label (via its agent). */
@@ -19,13 +20,16 @@ function providerLabel(provider: string): string {
 }
 
 /**
- * Per-provider usage for a single chat: tokens and their API list-price value.
+ * Per-provider usage for a single chat: tokens, their API list-price value, and
+ * the credits actually charged for them.
  *
- * Note this is NOT the daily balance. It spans every provider the chat touched,
- * including ones with no shared pool, and it counts own-key runs — which cost
- * the platform nothing. So it answers "what was this conversation worth", not
- * "what did it take off my allowance". The balance lives in the Usage settings
- * tab, which is scoped to the shared pools.
+ * The two money columns are different questions and both are worth answering.
+ * `costUsd` spans every provider the chat touched, including ones with no shared
+ * pool, and counts own-key runs — which cost the platform nothing — so it says
+ * what the conversation was worth. `creditsChargedUsd` is what came off the
+ * balance: list value divided by the provider's discount, and zero for own-key
+ * runs, free models and `unlimited` accounts. Showing only the first would
+ * overstate what the chat cost the user by up to 20×.
  */
 export interface ChatProviderUsageView {
   provider: string
@@ -34,6 +38,8 @@ export interface ChatProviderUsageView {
   totalTokens: number
   /** Those tokens priced at API list rates, in USD. Zero for free models. */
   costUsd: number
+  /** Credits actually debited for this provider in this chat. */
+  creditsChargedUsd: number
 }
 
 export interface ChatUsageResponse {
@@ -57,12 +63,19 @@ export async function GET(
     const chat = await getChatWithAuth(chatId, userId)
     if (!chat) return notFound("Chat not found")
 
-    const rows = await sumChatUsageByProvider(chatId)
+    const [rows, credits] = await Promise.all([
+      sumChatUsageByProvider(chatId),
+      sumChatCreditsByProvider(chatId),
+    ])
+    // A provider with usage but no debit is the normal case for own-key runs and
+    // free models, so a miss here is 0 rather than an omission.
+    const chargedByProvider = new Map(credits.map((c) => [c.provider, c.chargedUsd]))
     const providers: ChatProviderUsageView[] = rows.map((r) => ({
       provider: r.provider,
       label: providerLabel(r.provider),
       totalTokens: r.totalTokens,
       costUsd: r.costUsd,
+      creditsChargedUsd: chargedByProvider.get(r.provider) ?? 0,
     }))
 
     const response: ChatUsageResponse = { providers }

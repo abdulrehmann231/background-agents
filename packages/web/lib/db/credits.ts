@@ -13,6 +13,8 @@
 import { Prisma } from "@prisma/client"
 
 import {
+  discountDivisorFor,
+  microToUsd,
   SIGNUP_CREDIT_USD,
   signupGrantKey,
   splitTurnCost,
@@ -27,7 +29,8 @@ export type CreditTransactionType =
   | "purchase" // Stripe payment
   | "debit" // metered usage charged to the balance
   | "refund" // Stripe refund reversed the purchase
-  | "grant" // manual credit from an admin
+  | "grant" // signup credit, or a manual credit from an admin
+  | "daily" // automatic daily top-up (app/api/cron/daily-credits)
   | "chargeback" // dispute opened against the payment
   | "adjustment" // manual correction
 
@@ -159,12 +162,17 @@ export interface ChargeableUsageRow {
   provider: string
   pool: string
   freeModel: boolean
+  /** API list value, as stored. The discount is applied here, not upstream. */
   costUsd: number
 }
 
 /**
  * Charge a finished turn to the user's credit balance. Returns the total
  * debited, in micro-dollars.
+ *
+ * The amount debited is the row's list value divided by its provider's
+ * {@link discountDivisorFor} — a credit is not a dollar of list value. Both
+ * numbers, and the divisor between them, are recorded on the ledger row.
  *
  * Runs inside the metering transaction, under the advisory lock that already
  * serialises this session's usage writes — so the same turn cannot be charged
@@ -209,8 +217,15 @@ export async function chargeTurnToCredits(
       continue
     }
 
+    // The ledger row holds list value; the balance is charged that divided by
+    // the provider's subsidy. Applied here rather than at write time in
+    // token-metering so `TokenUsage.costUsd` keeps meaning one thing — see the
+    // header of lib/server/credits.
+    const divisor = discountDivisorFor(row.provider)
+    const chargeable = row.costUsd / divisor
+
     const { fromDaily, fromCredits } = splitTurnCost({
-      cost: row.costUsd,
+      cost: chargeable,
       dailyLeft,
     })
     dailyLeft -= fromDaily
@@ -219,7 +234,9 @@ export async function chargeTurnToCredits(
     const micro = usdToMicro(fromCredits)
     // A charge smaller than a micro-dollar rounds to nothing. Skipping it beats
     // writing a zero-amount ledger row that burns the row's one unique
-    // tokenUsageId slot for no movement.
+    // tokenUsageId slot for no movement. The divisor widens this a little — at
+    // 20× it takes $0.00001 of list value to register — which is still far below
+    // the cheapest genuine turn on the ledger.
     if (micro === 0n) continue
 
     await applyCreditTransaction(
@@ -232,6 +249,15 @@ export async function chargeTurnToCredits(
         // Just the provider: the Credits tab already renders the type ("Usage")
         // beside it, so anything more here reads as "Usage · claude usage".
         description: row.provider,
+        // The provenance of the number above. `divisor` is stamped per row
+        // because it is the only thing that keeps this charge reproducible once
+        // the constants move — without it an old debit cannot be tied back to
+        // the list value it came from.
+        metadata: {
+          listUsd: row.costUsd,
+          divisor,
+          provider: row.provider,
+        },
       },
       tx
     )
@@ -249,7 +275,73 @@ export interface CreditTransactionRecord {
   type: string
   description: string | null
   chatId: string | null
+  /** Provenance: `{ listUsd, divisor, provider }` on a debit, else null. */
+  metadata: Prisma.JsonValue | null
   createdAt: Date
+}
+
+/** The provenance blob a `debit` row carries, once narrowed from JSON. */
+export interface DebitProvenance {
+  /** API list value of the turn, before the provider's discount. */
+  listUsd: number
+  /** The divisor in force when this row was written. */
+  divisor: number
+  provider: string
+}
+
+/**
+ * Narrow a ledger row's `metadata` to {@link DebitProvenance}, or null.
+ *
+ * Rows written before the discount existed, and every non-debit row, have no
+ * provenance — so every caller has to handle its absence anyway, and returning
+ * null beats making them each re-derive the shape.
+ */
+export function readDebitProvenance(
+  metadata: Prisma.JsonValue | null | undefined
+): DebitProvenance | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null
+  const { listUsd, divisor, provider } = metadata as Record<string, unknown>
+  if (typeof listUsd !== "number" || !Number.isFinite(listUsd)) return null
+  if (typeof divisor !== "number" || !Number.isFinite(divisor)) return null
+  return { listUsd, divisor, provider: typeof provider === "string" ? provider : "" }
+}
+
+/** What one provider actually cost the user, in credits, within one chat. */
+export interface ChatProviderCredits {
+  provider: string
+  /** Credits debited for this provider in this chat, positive. */
+  chargedUsd: number
+}
+
+/**
+ * Credits actually debited for a chat, grouped by provider.
+ *
+ * The companion to `sumChatUsageByProvider` in lib/db/token-usage, which
+ * answers the same question in list value. Both are worth showing: one is what
+ * the conversation was worth, the other what it cost the user.
+ *
+ * Raw SQL because `CreditTransaction.tokenUsageId` is a plain column with no
+ * Prisma relation behind it, so the join to the usage row's provider cannot be
+ * expressed through the client. Grouping on the usage row rather than on the
+ * debit's `description` keeps this correct even though the two happen to agree
+ * today — a description is display text, not a key.
+ */
+export async function sumChatCreditsByProvider(
+  chatId: string
+): Promise<ChatProviderCredits[]> {
+  const rows = await prisma.$queryRaw<Array<{ provider: string; micro: bigint }>>`
+    SELECT tu."provider" AS provider,
+           SUM(-t."amountMicroUsd")::bigint AS micro
+      FROM "CreditTransaction" t
+      JOIN "TokenUsage" tu ON tu."id" = t."tokenUsageId"
+     WHERE t."chatId" = ${chatId}
+       AND t."type" = 'debit'
+     GROUP BY tu."provider"
+  `
+  return rows.map((r) => ({
+    provider: r.provider,
+    chargedUsd: microToUsd(r.micro),
+  }))
 }
 
 /** A user's most recent balance movements, newest first. */
@@ -269,6 +361,7 @@ export async function listCreditTransactions(params: {
       type: true,
       description: true,
       chatId: true,
+      metadata: true,
       createdAt: true,
     },
   })

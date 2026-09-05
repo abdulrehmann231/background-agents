@@ -5,7 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog"
 import { Loader2, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModalHeader } from "@/components/ui/modal-header"
-import { fmtBalance } from "@/lib/format"
+import { fmtBalance, fmtCreditAmount } from "@/lib/format"
 import type { CreditPack } from "@/lib/server/stripe"
 
 interface TopUpDialogProps {
@@ -147,7 +147,7 @@ export function TopUpDialog({ open, onClose, packs, balanceUsd, isMobile = false
               </div>
               {balanceUsd != null && canBuy && (
                 <div className="mt-1 text-xs text-muted-foreground tabular-nums">
-                  New balance {fmtBalance(balanceUsd + amount)}
+                  New balance {fmtCreditAmount(balanceUsd + amount)}
                 </div>
               )}
             </div>

@@ -31,12 +31,13 @@ export function formatUsageLimitMessage({
   if (creditBalance < 0) {
     return (
       `Your last turn ran ${fmtBalance(Math.abs(creditBalance))} past your credits. ` +
-      `Top up to clear it, add your own API key, or switch to a free model.`
+      `Top up to clear it, add your own API key, or switch to a free model — ` +
+      `your daily credits will also chip away at it.`
     )
   }
 
   return (
     "You're out of credits. Top up to continue, add your own API key, " +
-    "or switch to a free model."
+    "switch to a free model, or come back tomorrow for your daily credit."
   )
 }

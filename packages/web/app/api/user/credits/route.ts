@@ -1,5 +1,9 @@
 import { requireAuth, isAuthError, internalError } from "@/lib/db/api-helpers"
-import { getCreditBalance, listCreditTransactions } from "@/lib/db/credits"
+import {
+  getCreditBalance,
+  listCreditTransactions,
+  readDebitProvenance,
+} from "@/lib/db/credits"
 import { microToUsd } from "@/lib/server/credits"
 
 /** One row of the user's own credit history, as the Credits tab renders it. */
@@ -10,6 +14,14 @@ export interface UserCreditTransaction {
   balanceAfterUsd: number
   type: string
   description: string | null
+  /**
+   * What the turn behind a `debit` was worth at API list rates, before the
+   * provider's discount. Null for every other row type, and for debits written
+   * before the discount existed.
+   */
+  listUsd: number | null
+  /** The divisor applied to `listUsd` to reach `amountUsd`. Null as above. */
+  divisor: number | null
   createdAt: string
 }
 
@@ -41,14 +53,19 @@ export async function GET(): Promise<Response> {
 
     const response: UserCreditsResponse = {
       balanceUsd: microToUsd(balance),
-      transactions: transactions.map((t) => ({
-        id: t.id,
-        amountUsd: microToUsd(t.amountMicroUsd),
-        balanceAfterUsd: microToUsd(t.balanceAfterMicroUsd),
-        type: t.type,
-        description: t.description,
-        createdAt: t.createdAt.toISOString(),
-      })),
+      transactions: transactions.map((t) => {
+        const provenance = readDebitProvenance(t.metadata)
+        return {
+          id: t.id,
+          amountUsd: microToUsd(t.amountMicroUsd),
+          balanceAfterUsd: microToUsd(t.balanceAfterMicroUsd),
+          type: t.type,
+          description: t.description,
+          listUsd: provenance?.listUsd ?? null,
+          divisor: provenance?.divisor ?? null,
+          createdAt: t.createdAt.toISOString(),
+        }
+      }),
     }
     return Response.json(response)
   } catch (error) {

@@ -5,7 +5,7 @@ describe("formatUsageLimitMessage", () => {
   it("leads with topping up when there is no deficit", () => {
     expect(formatUsageLimitMessage({})).toBe(
       "You're out of credits. Top up to continue, add your own API key, " +
-      "or switch to a free model."
+      "switch to a free model, or come back tomorrow for your daily credit."
     )
   })
 
@@ -19,7 +19,8 @@ describe("formatUsageLimitMessage", () => {
     const msg = formatUsageLimitMessage({ creditBalance: -12.5 })
     expect(msg).toBe(
       "Your last turn ran $12.50 past your credits. " +
-      "Top up to clear it, add your own API key, or switch to a free model."
+      "Top up to clear it, add your own API key, or switch to a free model — " +
+      "your daily credits will also chip away at it."
     )
   })
 

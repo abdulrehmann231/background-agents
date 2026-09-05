@@ -46,7 +46,7 @@ import { cn } from "@/lib/utils"
 
 const METRIC_OPTIONS: { key: StatsMetric; label: string }[] = [
   { key: "tokens", label: "Tokens" },
-  { key: "cost", label: "Cost" },
+  { key: "cost", label: "List value" },
   { key: "messages", label: "Messages" },
 ]
 
@@ -60,7 +60,7 @@ const POOL_OPTIONS: { key: StatsPool; label: string; hint: string }[] = [
 ]
 
 const POOL_DISABLED_HINT =
-  "Message counts come from the activity log, which has no credential-pool dimension. Switch to Tokens or Cost to filter by pool."
+  "Message counts come from the activity log, which has no credential-pool dimension. Switch to Tokens or List value to filter by pool."
 
 // Providers backed by a shared credential pool. Scoped one at a time so token
 // counts and costs stay comparable within a view. Claude first — it's the
@@ -71,12 +71,13 @@ const USAGE_PROVIDERS: { key: UsageProvider; label: string }[] = [
   { key: "gemini", label: "Gemini" },
 ]
 
-// Tokens vs cost for the usage section. Cost first and selected by default —
-// it's the figure that answers "what is this costing us," which is usually
-// the first question. Independent of a provider's budget unit — OpenCode is
-// budgeted in USD, but its token volume is still worth seeing.
+// Tokens vs list value for the usage section. List value first and selected by
+// default — it's the figure that answers "what is this worth," which is usually
+// the first question. Note it is NOT what users are charged: credits are that
+// figure divided by the provider's discount (see lib/server/credits), so this
+// runs up to 20× higher than the balance a user actually spent.
 const USAGE_METRICS: { key: UsageMetric; label: string }[] = [
-  { key: "cost", label: "Cost" },
+  { key: "cost", label: "List value" },
   { key: "tokens", label: "Tokens" },
 ]
 
@@ -514,9 +515,9 @@ export default function AdminDashboard() {
               </section>
 
               {/* ── Shared pool & usage ─────────────────────────────────────
-                  Scoped to one provider at a time so token counts and costs stay
-                  comparable. Has its own Tokens/Cost toggle: a provider's budget
-                  unit (USD for OpenCode) shouldn't dictate what you can look at. */}
+                  Scoped to one provider at a time so token counts and values stay
+                  comparable. Has its own Tokens/List value toggle: a provider's
+                  budget unit (USD for OpenCode) shouldn't dictate what you look at. */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <div>
                   <h2 className="text-lg font-semibold md:text-xl">Shared pool &amp; usage</h2>
@@ -623,7 +624,7 @@ export default function AdminDashboard() {
                       <BarChart3 className="h-4 w-4 text-rose-500" />
                     </div>
                     <h3 className="font-medium">
-                      {effectiveUsageMetric === "cost" ? "Cost" : "Tokens"} per message
+                      {effectiveUsageMetric === "cost" ? "List value" : "Tokens"} per message
                     </h3>
                   </div>
                   {usageQuery.isLoading ? (

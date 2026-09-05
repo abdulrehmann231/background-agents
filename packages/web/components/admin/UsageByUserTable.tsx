@@ -13,7 +13,7 @@ interface UsageByUserTableProps {
    * Whether a dollar figure says anything useful for this provider. True for
    * OpenCode (billed per token) and Claude (shared pool budgeted in dollars, so
    * per-model cost is what explains a user hitting their cap). False for Gemini,
-   * capped by message count — the Cost column is dropped from the per-model
+   * capped by message count — the List value column is dropped from the per-model
    * detail rather than shown as a number nobody can act on. Whether those
    * dollars are an actual invoice line is a separate question, labelled at the
    * section header.
@@ -87,7 +87,7 @@ export function UsageByUserTable({
           <tr className="border-b bg-muted/50 text-xs">
             <th className="px-2 py-2 text-left font-medium sm:px-3">User</th>
             <th className="px-2 py-2 text-right font-medium sm:px-3">
-              {metric === "cost" ? "Cost" : "Tokens"}
+              {metric === "cost" ? "List value" : "Tokens"}
             </th>
             <th className="hidden px-2 py-2 text-right font-medium sm:table-cell sm:px-3">
               On our pool
@@ -158,7 +158,7 @@ export function UsageByUserTable({
                           <th className="py-1 text-left font-medium">Model</th>
                           <th className="py-1 text-left font-medium">Pool</th>
                           <th className="py-1 text-right font-medium">Tokens</th>
-                          {showCost && <th className="py-1 text-right font-medium">Cost</th>}
+                          {showCost && <th className="py-1 text-right font-medium">List value</th>}
                         </tr>
                       </thead>
                       <tbody>

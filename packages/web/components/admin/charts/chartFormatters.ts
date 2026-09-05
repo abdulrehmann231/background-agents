@@ -32,7 +32,7 @@ export type StatsMetric = "tokens" | "cost" | "messages"
 export function metricLabel(metric: StatsMetric): string {
   switch (metric) {
     case "cost":
-      return "Cost"
+      return "List value"
     case "messages":
       return "Messages"
     default:

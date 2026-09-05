@@ -1,9 +1,13 @@
 /**
- * Unit tests for credit units and the daily-then-credits split.
+ * Unit tests for credit units, the shared-pool discount, and the
+ * daily-then-credits split.
  */
 import { describe, it, expect } from "vitest"
 
 import {
+  chargeableUsd,
+  DISCOUNT_DIVISOR,
+  discountDivisorFor,
   MICRO_PER_USD,
   microToUsd,
   splitTurnCost,
@@ -113,5 +117,65 @@ describe("splitTurnCost", () => {
       fromDaily: 0,
       fromCredits: 0,
     })
+  })
+})
+
+describe("discountDivisorFor", () => {
+  it("returns the configured divisor for each subsidised pool", () => {
+    expect(discountDivisorFor("claude")).toBe(20)
+    expect(discountDivisorFor("opencode")).toBe(2)
+    expect(discountDivisorFor("gemini")).toBe(2)
+  })
+
+  it("charges list value for a provider we do not subsidise", () => {
+    // Pi, Droid, Kilo and Kimi are always own-key, so they never reach the
+    // charging path — but an unknown id must never be cheaper by accident.
+    expect(discountDivisorFor("pi")).toBe(1)
+    expect(discountDivisorFor("droid")).toBe(1)
+    expect(discountDivisorFor("")).toBe(1)
+  })
+
+  it("falls back to list value when the constant itself is nonsense", () => {
+    // A mistyped divisor must not make a turn free or pay the user to run one.
+    const bad = DISCOUNT_DIVISOR as Record<string, number>
+    for (const value of [0, -20, Number.NaN, Number.POSITIVE_INFINITY]) {
+      bad.__test__ = value
+      expect(discountDivisorFor("__test__")).toBe(1)
+    }
+    delete bad.__test__
+  })
+})
+
+describe("chargeableUsd", () => {
+  it("divides list value by the provider's divisor", () => {
+    // The ledger's own per-turn averages, so these are the real figures.
+    expect(chargeableUsd("claude", 2.4458)).toBeCloseTo(0.12229, 6)
+    expect(chargeableUsd("opencode", 0.0887)).toBeCloseTo(0.04435, 6)
+    expect(chargeableUsd("gemini", 0.0563)).toBeCloseTo(0.02815, 6)
+  })
+
+  it("leaves an unsubsidised provider at list value", () => {
+    expect(chargeableUsd("kimi", 0.1089)).toBe(0.1089)
+  })
+
+  it("round-trips back to list value through the divisor", () => {
+    // The inverse is what makes an old ledger row reproducible after the
+    // constants move, so it has to actually hold.
+    const listUsd = 2.4458
+    const charged = chargeableUsd("claude", listUsd)
+    expect(charged * discountDivisorFor("claude")).toBeCloseTo(listUsd, 10)
+  })
+
+  it("charges nothing for a zero, negative or unpriced turn", () => {
+    expect(chargeableUsd("claude", 0)).toBe(0)
+    expect(chargeableUsd("claude", -1)).toBe(0)
+    expect(chargeableUsd("claude", Number.NaN)).toBe(0)
+  })
+
+  it("stays above a micro-dollar for the cheapest genuine charge", () => {
+    // $2.2e-4 is the cheapest real charge on the production ledger. Even at the
+    // steepest divisor it must survive usdToMicro rather than rounding to a
+    // free turn.
+    expect(usdToMicro(chargeableUsd("claude", 2.2e-4))).toBeGreaterThan(0n)
   })
 })

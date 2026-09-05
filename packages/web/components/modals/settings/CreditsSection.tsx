@@ -6,7 +6,7 @@ import { CreditCard, Plus, TriangleAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MobileSectionHeader } from "./shared"
 import { TopUpDialog } from "./TopUpDialog"
-import { fmtBalance } from "@/lib/format"
+import { fmtCreditAmount } from "@/lib/format"
 import type { UserCreditsResponse } from "@/app/api/user/credits/route"
 import type { PacksResponse } from "@/app/api/billing/packs/route"
 
@@ -19,13 +19,18 @@ const TRANSACTION_LABEL: Record<string, string> = {
   debit: "Usage",
   refund: "Refund",
   grant: "Credit grant",
+  daily: "Daily credit",
   chargeback: "Chargeback",
   adjustment: "Adjustment",
 }
 
-/** `fmtBalance` doesn't sign negatives (toFixed(2) on -12.5 reads "$-12.50"). */
+/**
+ * Sign a ledger amount. Four decimals, like the balance above it — a charge is
+ * discounted before it reaches the balance, so at two the rows would not visibly
+ * add up to the number they moved.
+ */
 function fmtSigned(usd: number): string {
-  return usd < 0 ? `-${fmtBalance(Math.abs(usd))}` : `+${fmtBalance(usd)}`
+  return `${usd < 0 ? "-" : "+"}${fmtCreditAmount(usd)}`
 }
 
 /**
@@ -116,9 +121,8 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
                     isNegative ? "text-destructive" : "text-foreground"
                   )}
                 >
-                  {isNegative
-                    ? `-${fmtBalance(Math.abs(credits.balanceUsd))}`
-                    : fmtBalance(credits.balanceUsd)}
+                  {isNegative ? "-" : ""}
+                  {fmtCreditAmount(credits.balanceUsd)}
                 </div>
                 <div className="mt-1.5 text-[11px] text-muted-foreground">
                   Never expires · shared across Claude, OpenCode and Gemini
@@ -154,8 +158,8 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
                 {isNegative && <TriangleAlert className="h-3.5 w-3.5 shrink-0 mt-px" />}
                 <span>
                   {isNegative
-                    ? "Your last turn ran past your balance — top up to clear it and keep going."
-                    : "Top up to keep going, or switch to a free model."}
+                    ? "Your last turn ran past your balance — top up to clear it, or wait for your daily credits to catch up."
+                    : "Top up to keep going, switch to a free model, or wait for tomorrow's daily credit."}
                 </span>
               </div>
             )}
@@ -192,7 +196,7 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
                       </div>
                       <div
                         className={cn(
-                          "w-16 shrink-0 text-right text-xs font-medium tabular-nums",
+                          "w-24 shrink-0 text-right text-xs font-medium tabular-nums",
                           isCredit ? "text-foreground" : "text-muted-foreground"
                         )}
                       >
