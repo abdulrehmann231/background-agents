@@ -10,7 +10,7 @@ import { NEW_REPOSITORY, isRealRepo, type Chat } from "@/lib/types"
 import type { useModals, useSidebar } from "@/lib/contexts"
 import type { usePreview } from "@/lib/hooks/usePreview"
 import { useGitHubUserQuery } from "@/lib/query"
-import { getChatRepos } from "@/components/sidebar"
+import { getChatRepos } from "@/components/sidebar/index"
 import { isDraftChatId } from "@/lib/chat-state"
 
 /** All props the PaletteProvider takes, minus `children` (supplied by JSX). */

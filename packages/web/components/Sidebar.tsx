@@ -21,7 +21,7 @@ import {
   renderChatTree,
   renderMobileChatTree,
   getChatRepos,
-} from "./sidebar"
+} from "./sidebar/index"
 
 // Re-export from context for backward compatibility
 export { ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS } from "@/lib/contexts"
