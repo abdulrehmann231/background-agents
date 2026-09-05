@@ -43,6 +43,8 @@ export {
   hasOwnAnthropicCredentials,
   sharedClaudePoolEligible,
   agentUsesSharedPool,
+  sharedPoolProviderForModel,
+  formatTokenRate,
   agentHasFreeUsage,
   agentSharedPoolExhausted,
   agentIsReady,

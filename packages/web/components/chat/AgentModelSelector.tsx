@@ -5,7 +5,8 @@ import { ChevronDown, Cpu, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
-import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, resolveModelForAgent, ALL_AGENTS } from "@/lib/types"
+import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, resolveModelForAgent, sharedPoolProviderForModel, formatTokenRate, ALL_AGENTS } from "@/lib/types"
+import { discountDivisorFor } from "@/lib/server/credits"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
@@ -67,6 +68,25 @@ function getAgentStatus(
     }
   }
   return null
+}
+
+/**
+ * The price to show beside a model, or null when it has no published rate.
+ *
+ * A shared-pool run is charged its list rate divided by the provider's divisor
+ * (see DISCOUNT_DIVISOR in lib/server/credits), so the picker divides too and
+ * shows what the user actually pays. A BYOK run never touches the balance, so
+ * it keeps the list rate the provider quotes.
+ */
+function getModelPrice(
+  agent: Agent,
+  model: ModelOption,
+  flags: CredentialFlags
+): string | null {
+  if (model.priceUsdPerM === undefined) return null
+  const provider = sharedPoolProviderForModel(agent, model.value, flags)
+  const divisor = provider ? discountDivisorFor(provider) : 1
+  return formatTokenRate(model.priceUsdPerM / divisor)
 }
 
 export function AgentModelSelector({
@@ -283,7 +303,7 @@ export function AgentModelSelector({
       value: model.value,
       label: model.label,
       description: needsKey ? "Requires API key" : undefined,
-      priceLabel: model.priceLabel,
+      priceLabel: getModelPrice(currentAgent, model, credentialFlags) ?? undefined,
       icon: needsKey ? <Lock className="h-5 w-5 text-muted-foreground" /> : undefined,
     }
   })
@@ -435,6 +455,7 @@ export function AgentModelSelector({
                   {section.models.map((model) => {
                     const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
                     const needsKey = model.requiresKey !== "none" && !modelHasCredentials
+                    const priceLabel = getModelPrice(currentAgent, model, credentialFlags)
                     return (
                       <CommandItem
                         key={model.value}
@@ -447,8 +468,8 @@ export function AgentModelSelector({
                       >
                         <span className="truncate">{model.label}</span>
                         <span className="flex items-center gap-1.5 ml-auto shrink-0">
-                          {model.priceLabel && (
-                            <span className="text-xs text-muted-foreground">{model.priceLabel}</span>
+                          {priceLabel && (
+                            <span className="text-xs text-muted-foreground">{priceLabel}</span>
                           )}
                           {needsKey && (
                             <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

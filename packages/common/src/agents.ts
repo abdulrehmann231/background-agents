@@ -173,15 +173,12 @@ export interface ModelOption {
    */
   requiresKey?: ProviderId | "none"
   /**
-   * Cost shown to the right of the model's label in the picker, gray text.
-   * Only set for models that don't require the user's own key — either the
-   * server's shared credential pool (a real per-input-token $/M rate, e.g.
-   * "$2/M" or "30¢/M") or "FREE" for models needing no key at all (requiresKey
-   * "none"). May also be set on a BYOK model as an indicative list rate (e.g.
-   * Fable's "$10/M"). Omitted for auto/default routers, whose resolved model —
-   * and so cost — is unknown ahead of time.
+   * Published input rate in USD per million tokens; 0 means free. A *list* rate —
+   * the picker divides it by the shared pool's discount before showing it.
+   * Omitted for custom endpoints and auto routers, whose cost isn't known ahead
+   * of time.
    */
-  priceLabel?: string
+  priceUsdPerM?: number
 }
 
 /**
@@ -233,42 +230,42 @@ const SHARED_CLAUDE_POOL_EXCLUDED_MODELS = new Set<string>(["fable"])
 
 export const agentModels: Record<Agent, ModelOption[]> = {
   "claude-code": [
-    { value: "sonnet", label: "Sonnet", requiresKey: "anthropic", priceLabel: "$2/M" },
-    { value: "opus", label: "Opus", requiresKey: "anthropic", priceLabel: "$5/M" },
-    { value: "haiku", label: "Haiku", requiresKey: "anthropic", priceLabel: "$1/M" },
+    { value: "sonnet", label: "Sonnet", requiresKey: "anthropic", priceUsdPerM: 2 },
+    { value: "opus", label: "Opus", requiresKey: "anthropic", priceUsdPerM: 5 },
+    { value: "haiku", label: "Haiku", requiresKey: "anthropic", priceUsdPerM: 1 },
     // BYOK-only: excluded from the shared Claude pool (see
-    // SHARED_CLAUDE_POOL_EXCLUDED_MODELS). priceLabel is shown as an indicative
+    // SHARED_CLAUDE_POOL_EXCLUDED_MODELS). priceUsdPerM is shown as an indicative
     // list rate even though the user runs it on their own key.
-    { value: "fable", label: "Fable", requiresKey: "anthropic", priceLabel: "$10/M" },
+    { value: "fable", label: "Fable", requiresKey: "anthropic", priceUsdPerM: 10 },
     { value: "default", label: "Auto", requiresKey: "anthropic" },
     { value: "best", label: "Best", requiresKey: "anthropic" },
   ],
   "eliza": [
-    { value: "eliza-classic-1.0", label: "Eliza Classic", requiresKey: "none", priceLabel: "FREE" },
+    { value: "eliza-classic-1.0", label: "Eliza Classic", requiresKey: "none", priceUsdPerM: 0 },
   ],
   "opencode": [
     // Free models (opencode/) - no API key needed
-    { value: "opencode/big-pickle", label: "Big Pickle", requiresKey: "none", priceLabel: "FREE" },
-    { value: "opencode/nemotron-3-ultra-free", label: "Nemotron 3 Ultra", requiresKey: "none", priceLabel: "FREE" },
-    { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5", requiresKey: "none", priceLabel: "FREE" },
+    { value: "opencode/big-pickle", label: "Big Pickle", requiresKey: "none", priceUsdPerM: 0 },
+    { value: "opencode/nemotron-3-ultra-free", label: "Nemotron 3 Ultra", requiresKey: "none", priceUsdPerM: 0 },
+    { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5", requiresKey: "none", priceUsdPerM: 0 },
     // Curated OpenCode Go models (opencode-go/ prefix), runnable on the
     // server-shared Go subscription key. Shown first when OPENCODE_API_KEY is
     // available. These route through Go, not Zen — see SHARED_OPENCODE_ALLOWED.
-    // priceLabel is the input $/M-token rate from OpenCode's published Go rate card.
-    { value: "opencode-go/glm-5.1", label: "GLM-5.1", requiresKey: "opencode", priceLabel: "$1.40/M" },
-    { value: "opencode-go/glm-5.2", label: "GLM-5.2", requiresKey: "opencode", priceLabel: "$1.40/M" },
-    { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6", requiresKey: "opencode", priceLabel: "95¢/M" },
-    { value: "opencode-go/kimi-k2.7-code", label: "Kimi K2.7 Code", requiresKey: "opencode", priceLabel: "95¢/M" },
-    { value: "opencode-go/mimo-v2.5", label: "MiMo v2.5", requiresKey: "opencode", priceLabel: "14¢/M" },
-    { value: "opencode-go/mimo-v2.5-pro", label: "MiMo v2.5 Pro", requiresKey: "opencode", priceLabel: "44¢/M" },
-    { value: "opencode-go/minimax-m2.5", label: "MiniMax M2.5", requiresKey: "opencode", priceLabel: "30¢/M" },
-    { value: "opencode-go/minimax-m2.7", label: "MiniMax M2.7", requiresKey: "opencode", priceLabel: "30¢/M" },
-    { value: "opencode-go/minimax-m3", label: "MiniMax M3", requiresKey: "opencode", priceLabel: "30¢/M" },
-    { value: "opencode-go/qwen3.6-plus", label: "Qwen3.6 Plus", requiresKey: "opencode", priceLabel: "50¢/M" },
-    { value: "opencode-go/qwen3.7-max", label: "Qwen3.7 Max", requiresKey: "opencode", priceLabel: "$2.50/M" },
-    { value: "opencode-go/qwen3.7-plus", label: "Qwen3.7 Plus", requiresKey: "opencode", priceLabel: "40¢/M" },
-    { value: "opencode-go/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "opencode", priceLabel: "66¢/M" },
-    { value: "opencode-go/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "opencode", priceLabel: "22¢/M" },
+    // priceUsdPerM is the input $/M-token rate from OpenCode's published Go rate card.
+    { value: "opencode-go/glm-5.1", label: "GLM-5.1", requiresKey: "opencode", priceUsdPerM: 1.4 },
+    { value: "opencode-go/glm-5.2", label: "GLM-5.2", requiresKey: "opencode", priceUsdPerM: 1.4 },
+    { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6", requiresKey: "opencode", priceUsdPerM: 0.95 },
+    { value: "opencode-go/kimi-k2.7-code", label: "Kimi K2.7 Code", requiresKey: "opencode", priceUsdPerM: 0.95 },
+    { value: "opencode-go/mimo-v2.5", label: "MiMo v2.5", requiresKey: "opencode", priceUsdPerM: 0.14 },
+    { value: "opencode-go/mimo-v2.5-pro", label: "MiMo v2.5 Pro", requiresKey: "opencode", priceUsdPerM: 0.44 },
+    { value: "opencode-go/minimax-m2.5", label: "MiniMax M2.5", requiresKey: "opencode", priceUsdPerM: 0.3 },
+    { value: "opencode-go/minimax-m2.7", label: "MiniMax M2.7", requiresKey: "opencode", priceUsdPerM: 0.3 },
+    { value: "opencode-go/minimax-m3", label: "MiniMax M3", requiresKey: "opencode", priceUsdPerM: 0.3 },
+    { value: "opencode-go/qwen3.6-plus", label: "Qwen3.6 Plus", requiresKey: "opencode", priceUsdPerM: 0.5 },
+    { value: "opencode-go/qwen3.7-max", label: "Qwen3.7 Max", requiresKey: "opencode", priceUsdPerM: 2.5 },
+    { value: "opencode-go/qwen3.7-plus", label: "Qwen3.7 Plus", requiresKey: "opencode", priceUsdPerM: 0.4 },
+    { value: "opencode-go/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "opencode", priceUsdPerM: 0.66 },
+    { value: "opencode-go/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "opencode", priceUsdPerM: 0.22 },
 
     // Remaining paid models — route through OpenCode Zen (pay-as-you-go credits).
     // Preserve original order, excluding duplicates.
@@ -361,13 +358,13 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   ],
   "gemini": [
     // Default first, then Flash tier (newest → oldest), then Pro.
-    // Flash-tier priceLabel is the input $/M rate — these run on the shared
+    // Flash-tier priceUsdPerM is the input $/M rate — these run on the shared
     // Gemini pool (see SHARED_GEMINI_POOL_PRO_MODELS). Pro is BYOK-only, so it
     // gets no label — its cost isn't drawn from our shared key.
-    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "gemini", priceLabel: "30¢/M" },
-    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini", priceLabel: "$1.50/M" },
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini", priceLabel: "50¢/M" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini", priceLabel: "30¢/M" },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "gemini", priceUsdPerM: 0.3 },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini", priceUsdPerM: 1.5 },
+    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini", priceUsdPerM: 0.5 },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini", priceUsdPerM: 0.3 },
     { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
   ],
   "goose": [
@@ -379,14 +376,14 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   ],
   "kilo": [
     // Auto-routers
-    { value: "kilo/kilo-auto/free", label: "Auto Free", requiresKey: "none", priceLabel: "FREE" },
+    { value: "kilo/kilo-auto/free", label: "Auto Free", requiresKey: "none", priceUsdPerM: 0 },
     { value: "kilo/kilo-auto/frontier", label: "Auto Frontier", requiresKey: "kilo" },
     { value: "kilo/kilo-auto/efficient", label: "Auto Efficient", requiresKey: "kilo" },
     { value: "kilo/kilo-auto/small", label: "Auto Small", requiresKey: "kilo" },
     // Free models
-    { value: "kilo/deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", requiresKey: "none", priceLabel: "FREE" },
-    { value: "kilo/nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra", requiresKey: "none", priceLabel: "FREE" },
-    { value: "kilo/stepfun/step-3.7-flash:free", label: "Step 3.7 Flash", requiresKey: "none", priceLabel: "FREE" },
+    { value: "kilo/deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", requiresKey: "none", priceUsdPerM: 0 },
+    { value: "kilo/nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra", requiresKey: "none", priceUsdPerM: 0 },
+    { value: "kilo/stepfun/step-3.7-flash:free", label: "Step 3.7 Flash", requiresKey: "none", priceUsdPerM: 0 },
     // Anthropic via Kilo gateway
     { value: "kilo/anthropic/claude-fable-5", label: "Claude Fable 5", requiresKey: "kilo" },
     { value: "kilo/anthropic/claude-opus-4.8", label: "Claude Opus 4.8", requiresKey: "kilo" },
@@ -448,12 +445,12 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "o4-mini", label: "o4 Mini", requiresKey: "openai" },
     // ── BYOK: Gemini (Google's OpenAI-compatible endpoint) ──
     // Flash tier also runs on the shared Gemini pool (see
-    // SHARED_GEMINI_POOL_PRO_MODELS), hence the priceLabel; Pro is BYOK-only.
+    // SHARED_GEMINI_POOL_PRO_MODELS), hence the priceUsdPerM; Pro is BYOK-only.
     { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini", priceLabel: "30¢/M" },
-    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "gemini", priceLabel: "30¢/M" },
-    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini", priceLabel: "$1.50/M" },
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini", priceLabel: "50¢/M" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini", priceUsdPerM: 0.3 },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "gemini", priceUsdPerM: 0.3 },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", requiresKey: "gemini", priceUsdPerM: 1.5 },
+    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash", requiresKey: "gemini", priceUsdPerM: 0.5 },
     // ── Factory-hosted (FACTORY_API_KEY; droid's built-in catalog). There is NO
     // free/no-key tier — verified: every built-in model 401s without a Factory key.
     { value: "factory/claude-fable-5", label: "Claude Fable 5 (Factory)", requiresKey: "factory" },
@@ -479,7 +476,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "openai/gpt-5", label: "GPT-5", requiresKey: "openai" },
     // Google models — Flash also runs on the shared Gemini pool; Pro is BYOK-only.
     { value: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "gemini" },
-    { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini", priceLabel: "30¢/M" },
+    { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", requiresKey: "gemini", priceUsdPerM: 0.3 },
   ],
 }
 
@@ -591,6 +588,60 @@ export function agentUsesSharedPool(
       return !!flags?.GEMINI_API_KEY_SHARED
     default:
       return false
+  }
+}
+
+/**
+ * A $/M rate as the picker shows it: "$2/M", "$1.40/M", "30¢/M", or "FREE".
+ * Cents below a dollar, where the rates land once the discount is applied.
+ */
+export function formatTokenRate(usdPerM: number): string {
+  if (!Number.isFinite(usdPerM) || usdPerM <= 0) return "FREE"
+  if (usdPerM >= 1) {
+    const dollars = Number.isInteger(usdPerM) ? String(usdPerM) : usdPerM.toFixed(2)
+    return `$${dollars}/M`
+  }
+  const cents = usdPerM * 100
+  const rounded = cents >= 1 ? Math.round(cents * 10) / 10 : Math.round(cents * 100) / 100
+  return `${rounded}¢/M`
+}
+
+/**
+ * The shared pool a run with this agent+model would meter against, or null when
+ * it runs on the user's own key (or is free). Client mirror of `providerForRun` +
+ * `resolvePool` in web's lib/server/shared-pool, but per model rather than per
+ * agent: the allow/deny sets above decide which models a shared key can serve.
+ *
+ * The picker uses it to discount the displayed price — only pool runs get one.
+ */
+export function sharedPoolProviderForModel(
+  agent: Agent,
+  model: string | undefined,
+  flags: CredentialFlags | null | undefined
+): ProviderName | null {
+  // A custom endpoint is the user's own connection, never a pool; free models
+  // are never charged, so neither has a discount.
+  if (!model || model.startsWith(ENDPOINT_MODEL_PREFIX)) return null
+  const requiresKey = modelRequiresKey(agent, model)
+  if (!requiresKey || requiresKey === "none") return null
+
+  // A Gemini model runs on the shared Gemini key under any agent (Pi, Droid, …).
+  if (requiresKey === "gemini") {
+    if (!flags?.GEMINI_API_KEY_SHARED || flags?.GEMINI_API_KEY_USER) return null
+    return SHARED_GEMINI_POOL_PRO_MODELS.has(model) ? null : "gemini"
+  }
+
+  switch (agent) {
+    case "claude-code":
+      if (requiresKey !== "anthropic") return null
+      if (SHARED_CLAUDE_POOL_EXCLUDED_MODELS.has(model)) return null
+      return sharedClaudePoolEligible(flags) ? "claude" : null
+    case "opencode":
+      if (requiresKey !== "opencode") return null
+      if (!flags?.OPENCODE_API_KEY_SHARED || flags?.OPENCODE_API_KEY_USER) return null
+      return SHARED_OPENCODE_ALLOWED.has(model) ? "opencode" : null
+    default:
+      return null
   }
 }
 

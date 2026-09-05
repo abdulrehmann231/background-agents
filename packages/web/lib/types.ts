@@ -28,6 +28,8 @@ export {
   getModelLabel,
   hasCredentialsForModel,
   sharedClaudePoolEligible,
+  sharedPoolProviderForModel,
+  formatTokenRate,
   agentHasFreeUsage,
   agentSharedPoolExhausted,
   agentIsReady,
