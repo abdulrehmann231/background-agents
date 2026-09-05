@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma"
 import { isSharedPoolAvailable } from "@/lib/claude-credentials"
 import { decryptUserCredentials } from "@/lib/db/api-helpers"
 import { getDailyBalance, type Plan } from "@/lib/server/usage-budgets"
+import { microToUsd } from "@/lib/server/credits"
 import { flagsFromCredentials, CREDENTIAL_KEYS, type CredentialFlags } from "@/lib/credentials"
 import { hasSharedOpencodeKey } from "@/lib/server/opencode-pool"
 import { SHARED_POOL_AGENTS } from "@/lib/server/shared-pool"
@@ -18,6 +19,16 @@ export interface EffectiveFlags {
   isPro: boolean
   /** The user's subscription tier. */
   plan: Plan
+  /**
+   * Purchased credits in USD, or null when the balance does not gate this user
+   * at all — the `unlimited` plan, or an account running entirely on its own
+   * keys. Null is the "do not warn about this" signal the UI reads, and is
+   * deliberately distinct from `0`: see creditTier in lib/server/credits.
+   *
+   * Set under exactly the same condition as `SHARED_BALANCE_EXHAUSTED` below,
+   * so the number and the boolean can never describe different users.
+   */
+  creditBalanceUsd: number | null
 }
 
 /**
@@ -121,9 +132,15 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
   // Readiness for the agent picker: the exact negation of the send gate in
   // lib/db/usage-limit, so the picker never offers a model the server refuses.
   // Unlimited is uncapped there and so is never marked exhausted here.
-  if (usesSharedPool && getDailyBalance(plan) != null) {
+  const gatedOnCredits = usesSharedPool && getDailyBalance(plan) != null
+  if (gatedOnCredits) {
     flags.SHARED_BALANCE_EXHAUSTED = credits <= 0n
   }
 
-  return { flags, isPro, plan }
+  return {
+    flags,
+    isPro,
+    plan,
+    creditBalanceUsd: gatedOnCredits ? microToUsd(credits) : null,
+  }
 }

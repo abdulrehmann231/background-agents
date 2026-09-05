@@ -276,3 +276,51 @@ export function splitTurnCost({
   const fromDaily = Math.min(cost, Math.max(0, dailyLeft))
   return { fromDaily, fromCredits: cost - fromDaily }
 }
+
+/**
+ * The balance at or below which the UI starts warning, in credits.
+ *
+ * Sized against what a turn actually costs rather than as a fraction of any
+ * balance: on the ledger's own per-turn averages (the same ones
+ * {@link SIGNUP_CREDIT_USD} is measured in) a Claude turn is ~$0.125, an
+ * OpenCode one ~$0.042 and a Gemini one ~$0.028. So $0.10 is the point where
+ * the next Claude turn probably will not finish inside the balance — the first
+ * moment a warning is something the user can act on rather than noise.
+ *
+ * The hard constraint is the one above it: this MUST stay below every entry in
+ * {@link DAILY_CREDIT_TARGET_USD} ($0.25 free, $0.50 pro). A threshold at or
+ * over the refill target would leave a freshly topped-up free user permanently
+ * in the warning state, and a warning that is always on is a warning nobody
+ * reads. Raise the daily targets and this is fine; raise this past $0.25 and
+ * the whole free tier lives in amber.
+ */
+export const LOW_CREDIT_USD = 0.1
+
+/**
+ * How the UI describes a balance: healthy, worth warning about, or spent.
+ *
+ * `empty` is the UI's name for the send gate's own condition — `balance <= 0`,
+ * matching `checkSharedPoolUsage` exactly (see lib/db/usage-limit), so the red
+ * dot and the server's refusal can never disagree. `low` is advisory only and
+ * has no counterpart on the server.
+ */
+export type CreditTier = "ok" | "low" | "empty"
+
+/**
+ * Classify a credit balance for display.
+ *
+ * `null` in, `null` out: a balance the caller could not determine, or one that
+ * does not gate the user at all (the `unlimited` plan, or an account running
+ * entirely on its own keys), must not be rendered as any tier — least of all
+ * as `empty`, which a naive `<= 0` on a missing balance would produce.
+ *
+ * A non-finite balance is treated the same way, for the same reason: a NaN that
+ * arrived through a JSON boundary should not tell a paying user they are out of
+ * money.
+ */
+export function creditTier(balanceUsd: number | null | undefined): CreditTier | null {
+  if (typeof balanceUsd !== "number" || !Number.isFinite(balanceUsd)) return null
+  if (balanceUsd <= 0) return "empty"
+  if (balanceUsd <= LOW_CREDIT_USD) return "low"
+  return "ok"
+}

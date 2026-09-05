@@ -66,6 +66,12 @@ export interface SettingsResponse {
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
   planIsPro?: boolean
+  /**
+   * Purchased credits in USD, or null when the balance doesn't gate this user.
+   * Optional so an older deployment's response still parses; a missing value
+   * reads the same as null (no tier, no warning) through creditTier.
+   */
+  creditBalanceUsd?: number | null
 }
 
 // =============================================================================

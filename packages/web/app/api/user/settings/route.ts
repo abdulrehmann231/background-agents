@@ -31,6 +31,15 @@ interface SettingsResponse {
   customEndpoints: CustomEndpoint[]
   /** Whether user is a pro subscriber */
   planIsPro: boolean
+  /**
+   * Purchased credits in USD, or null when the balance doesn't gate this user
+   * (unlimited plan, or own keys everywhere). Carried on this response rather
+   * than fetched separately because getEffectiveCredentialFlags already reads
+   * the balance to set SHARED_BALANCE_EXHAUSTED — the composer's low-credit
+   * warning costs no extra query and can never disagree with the picker's dot.
+   * The Credits tab still uses /api/user/credits, which also returns history.
+   */
+  creditBalanceUsd: number | null
 }
 
 function readSettings(raw: unknown): Settings {
@@ -69,6 +78,7 @@ export async function GET(): Promise<Response> {
       credentialFlags: effective.flags,
       customEndpoints: decryptUserEndpoints(user?.customEndpoints),
       planIsPro: effective.isPro,
+      creditBalanceUsd: effective.creditBalanceUsd,
     }
     return Response.json(response)
   } catch (error) {
@@ -156,6 +166,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
         newEndpoints ?? (user?.customEndpoints as unknown)
       ),
       planIsPro: effective.isPro,
+      creditBalanceUsd: effective.creditBalanceUsd,
     }
     return Response.json(response)
   } catch (error) {

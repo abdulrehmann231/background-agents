@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest"
 import {
   agentSharedPoolExhausted,
+  agentUsesSharedPool,
   sharedPoolProviderForModel,
   formatTokenRate,
   agentModels,
@@ -21,6 +22,7 @@ import {
   resolveChatModel,
   type CredentialFlags,
 } from "@background-agents/common"
+import { creditTier } from "./server/credits"
 
 const sharedPoolFresh: CredentialFlags = { CLAUDE_SHARED_POOL_AVAILABLE: true }
 const sharedPoolUsedUp: CredentialFlags = {
@@ -68,6 +70,44 @@ describe("agentSharedPoolExhausted", () => {
       OPENCODE_API_KEY_USER: true,
     }
     expect(agentSharedPoolExhausted("opencode", ownOpencodeKey)).toBe(false)
+  })
+})
+
+describe("the yellow dot: a shared pool the balance is nearly out for", () => {
+  // getAgentStatus paints yellow on `agentUsesSharedPool(agent, flags) &&
+  // creditTier(balance) === "low"`. Red comes from the flag above instead, so
+  // these two together are the whole colour decision — this pins the half that
+  // the balance drives.
+  it("applies to every shared pool, since the balance is pooled", () => {
+    const allShared: CredentialFlags = {
+      CLAUDE_SHARED_POOL_AVAILABLE: true,
+      OPENCODE_API_KEY_SHARED: true,
+      GEMINI_API_KEY_SHARED: true,
+    }
+    expect(creditTier(0.05)).toBe("low")
+    for (const agent of ["claude-code", "opencode", "gemini"] as const) {
+      expect(agentUsesSharedPool(agent, allShared)).toBe(true)
+    }
+  })
+
+  it("does not apply to an agent running on the user's own key", () => {
+    // Their spend never touches the balance, so a low balance says nothing
+    // about their next send and the dot must stay green.
+    const ownOpencodeKey: CredentialFlags = { OPENCODE_API_KEY_USER: true }
+    expect(agentUsesSharedPool("opencode", ownOpencodeKey)).toBe(false)
+    expect(agentIsReady("opencode", { OPENCODE_API_KEY: true })).toBe(true)
+  })
+
+  it("does not apply to an agent with no shared pool at all", () => {
+    expect(agentUsesSharedPool("codex", { CLAUDE_SHARED_POOL_AVAILABLE: true })).toBe(false)
+  })
+
+  it("hands over to red at exactly the balance the server refuses", () => {
+    // The tier flips to "empty" at zero, which is where SHARED_BALANCE_EXHAUSTED
+    // is set too — so there is no balance that is both yellow here and refused
+    // there.
+    expect(creditTier(0.000001)).toBe("low")
+    expect(creditTier(0)).toBe("empty")
   })
 })
 

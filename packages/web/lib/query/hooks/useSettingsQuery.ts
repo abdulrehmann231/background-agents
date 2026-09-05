@@ -13,6 +13,12 @@ export interface SettingsData {
   credentialFlags: CredentialFlags
   customEndpoints?: CustomEndpoint[]
   planIsPro?: boolean
+  /**
+   * Purchased credits in USD, or null when the balance doesn't gate this user
+   * (unlimited plan, own keys everywhere) — and always null when logged out,
+   * since the anonymous shared-pool endpoint carries no user data.
+   */
+  creditBalanceUsd?: number | null
 }
 
 /**
@@ -45,7 +51,7 @@ export function useSettingsQuery() {
       if (!isAuthenticated) {
         // Logged out: settings stay at defaults; only shared-pool flags are real.
         const { credentialFlags } = await fetchSharedPoolFlags()
-        return { settings: DEFAULT_SETTINGS, credentialFlags }
+        return { settings: DEFAULT_SETTINGS, credentialFlags, creditBalanceUsd: null }
       }
       const response = await fetchSettings()
       return {
@@ -53,6 +59,7 @@ export function useSettingsQuery() {
         credentialFlags: response.credentialFlags,
         customEndpoints: response.customEndpoints,
         planIsPro: response.planIsPro,
+        creditBalanceUsd: response.creditBalanceUsd ?? null,
       }
     },
     // Wait until NextAuth resolves so we don't fetch the anon endpoint for a
@@ -63,6 +70,9 @@ export function useSettingsQuery() {
     placeholderData: {
       settings: DEFAULT_SETTINGS,
       credentialFlags: {},
+      // Null, not 0: the placeholder must not flash "out of credits" at a user
+      // whose balance simply hasn't loaded yet.
+      creditBalanceUsd: null,
     },
   })
 }

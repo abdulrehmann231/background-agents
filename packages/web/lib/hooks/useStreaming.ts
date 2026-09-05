@@ -184,6 +184,13 @@ export function useStreaming(options: UseStreamingOptions = {}) {
             } : c
           ))
 
+          // The turn just spent credits. The stream route meters the turn
+          // before emitting this event (see app/api/agent/stream/route.ts), so
+          // a refetch now returns the post-turn balance — which is what keeps
+          // the picker's dot and the composer's low-credit banner honest
+          // without polling. Cheap: the settings query is one row.
+          queryClient.invalidateQueries({ queryKey: queryKeys.settings.all })
+
           // Notify about conflict state change
           if (data.conflictState && onConflictStateChangeRef.current) {
             onConflictStateChangeRef.current(data.conflictState)

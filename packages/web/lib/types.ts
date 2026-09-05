@@ -32,6 +32,7 @@ export {
   formatTokenRate,
   agentHasFreeUsage,
   agentSharedPoolExhausted,
+  agentUsesSharedPool,
   agentIsReady,
 } from "@background-agents/common"
 

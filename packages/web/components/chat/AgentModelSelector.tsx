@@ -5,8 +5,9 @@ import { ChevronDown, Cpu, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
-import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, resolveModelForAgent, sharedPoolProviderForModel, formatTokenRate, ALL_AGENTS } from "@/lib/types"
-import { discountDivisorFor } from "@/lib/server/credits"
+import { getAgentModels, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, agentUsesSharedPool, resolveModelForAgent, sharedPoolProviderForModel, formatTokenRate, ALL_AGENTS } from "@/lib/types"
+import { creditTier, discountDivisorFor } from "@/lib/server/credits"
+import { fmtCreditAmount } from "@/lib/format"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
@@ -50,16 +51,30 @@ const ELIZA_ENV_OVERRIDE = process.env.NEXT_PUBLIC_ENABLE_ELIZA === "true"
 /**
  * Picker status for an agent's readiness dot:
  *  - "ready"     → green dot (free usage available or the user is set up)
- *  - "exhausted" → yellow dot (its only usage was a shared pool that's now used up)
+ *  - "low"       → yellow dot (shared-pool agent, balance nearly spent)
+ *  - "depleted"  → red dot (shared-pool agent, balance spent — the server will
+ *                  refuse the next send)
  *  - null        → no dot (needs setup)
  * Single source of truth for the dot color and its tooltip/description text.
+ *
+ * Red is driven by `agentSharedPoolExhausted` — the flag the server sets from
+ * the same comparison its send gate makes (lib/db/usage-limit) — rather than by
+ * the balance passed in, so a rounding difference in the float can never leave
+ * the dot green on a send the server is about to refuse. `balanceUsd` decides
+ * only the advisory yellow, which has no server counterpart.
  */
+type AgentStatusTone = "ready" | "low" | "depleted"
+
 function getAgentStatus(
   agent: Agent,
-  flags: CredentialFlags
-): { tone: "ready" | "exhausted"; label: string } | null {
+  flags: CredentialFlags,
+  balanceUsd: number | null | undefined
+): { tone: AgentStatusTone; label: string } | null {
   if (agentSharedPoolExhausted(agent, flags)) {
-    return { tone: "exhausted", label: "Free usage limit reached" }
+    return { tone: "depleted", label: "Out of credits" }
+  }
+  if (agentUsesSharedPool(agent, flags) && creditTier(balanceUsd) === "low") {
+    return { tone: "low", label: `Credits running low — ${fmtCreditAmount(balanceUsd!)} left` }
   }
   if (agentIsReady(agent, flags)) {
     return {
@@ -68,6 +83,13 @@ function getAgentStatus(
     }
   }
   return null
+}
+
+/** Tailwind background for each dot tone. */
+const DOT_CLASS: Record<AgentStatusTone, string> = {
+  ready: "bg-green-500",
+  low: "bg-yellow-500",
+  depleted: "bg-red-500",
 }
 
 /**
@@ -105,6 +127,9 @@ export function AgentModelSelector({
   // User's custom endpoints — merged into each agent's model list by name.
   const { data: settingsData } = useSettingsQuery()
   const endpoints = settingsData?.customEndpoints
+  // Null for anyone the balance doesn't gate (unlimited plan, own keys
+  // everywhere, logged out) — those users never get a credit-coloured dot.
+  const creditBalanceUsd = settingsData?.creditBalanceUsd ?? null
 
   // Eliza (a deterministic test agent) is hidden from the picker unless the user
   // enables it in the Developer settings, or the env override is set (tests/CI).
@@ -119,6 +144,15 @@ export function AgentModelSelector({
   const [showAgentSheet, setShowAgentSheet] = useState(false)
   const [showModelSheet, setShowModelSheet] = useState(false)
   const [search, setSearch] = useState("")
+
+  // The selected agent's dot, surfaced on the trigger itself — but only when
+  // it's a credit warning. The per-agent dots inside the dropdown are a
+  // comparison aid; a permanent green dot on the closed trigger would just be
+  // chrome, whereas amber/red there is the whole point of the warning (the
+  // dropdown that holds the other dots is shut most of the time).
+  const currentAgentStatus = getAgentStatus(currentAgent, credentialFlags, creditBalanceUsd)
+  const triggerTone =
+    currentAgentStatus && currentAgentStatus.tone !== "ready" ? currentAgentStatus : null
 
   const availableModels = getAgentModels(currentAgent, endpoints)
   const selectedModelConfig = availableModels.find(m => m.value === currentModel)
@@ -290,9 +324,9 @@ export function AgentModelSelector({
     value: agent,
     label: agentLabels[agent],
     icon: <AgentIcon agent={agent} className="h-5 w-5" />,
-    // Surface the agent's status: ready to use (free or configured), or a
-    // used-up free pool with nothing else to fall back on.
-    description: getAgentStatus(agent, credentialFlags)?.label,
+    // Surface the agent's status: ready to use (free or configured), a balance
+    // running low, or a spent one with nothing else to fall back on.
+    description: getAgentStatus(agent, credentialFlags, creditBalanceUsd)?.label,
   }))
 
   // Prepare model options for mobile bottom sheet
@@ -319,6 +353,13 @@ export function AgentModelSelector({
         >
           <AgentIcon agent={currentAgent} className="h-4 w-4" />
           <span className="hidden @[18rem]/row2:inline">{agentLabels[currentAgent]}</span>
+          {triggerTone && (
+            <span
+              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT_CLASS[triggerTone.tone])}
+              title={triggerTone.label}
+              aria-label={triggerTone.label}
+            />
+          )}
           <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
         </button>
 
@@ -376,12 +417,19 @@ export function AgentModelSelector({
         >
           <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
           <span className="hidden @[32rem]:inline">{agentLabels[currentAgent]}</span>
+          {triggerTone && (
+            <span
+              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT_CLASS[triggerTone.tone])}
+              title={triggerTone.label}
+              aria-label={triggerTone.label}
+            />
+          )}
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {showAgentDropdown && (
           <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-48">
             {agents.map((agent) => {
-              const status = getAgentStatus(agent, credentialFlags)
+              const status = getAgentStatus(agent, credentialFlags, creditBalanceUsd)
               return (
                 <button
                   key={agent}
@@ -396,11 +444,7 @@ export function AgentModelSelector({
                   <span
                     className={cn(
                       "h-2 w-2 shrink-0 rounded-full",
-                      status?.tone === "exhausted"
-                        ? "bg-yellow-500"
-                        : status?.tone === "ready"
-                          ? "bg-green-500"
-                          : "bg-transparent"
+                      status ? DOT_CLASS[status.tone] : "bg-transparent"
                     )}
                     title={status?.label}
                     aria-label={status?.label}
