@@ -5,11 +5,13 @@ import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, X, Paperclip, Penc
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import { useSpeechRecognition } from "@/lib/hooks/useSpeechRecognition"
+import { useCreditWarning } from "@/lib/hooks/useCreditWarning"
 import type { Chat, Agent, CredentialFlags, PendingFile } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 import { basename } from "@/lib/format"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
 import { AgentModelSelector } from "./AgentModelSelector"
+import { CreditWarningBanner } from "./CreditWarningBanner"
 import { RepoCombobox } from "./RepoCombobox"
 import { BranchCombobox } from "./BranchCombobox"
 import { McpServersCombobox } from "./McpServersCombobox"
@@ -233,6 +235,13 @@ export function ChatInput({
   isMobile,
 }: ChatInputProps) {
   const modals = useModals()
+  // Keyed off the *current* agent+model, so switching to a free model or an
+  // own-key one clears the warning along with the charge it was warning about.
+  const creditWarning = useCreditWarning({
+    agent: currentAgent,
+    model: currentModel,
+    credentialFlags,
+  })
   const [showModeDropdown, setShowModeDropdown] = useState(false)
   const [showModeSheet, setShowModeSheet] = useState(false)
 
@@ -341,6 +350,21 @@ export function ChatInput({
       "w-full mx-auto",
       isMobile ? "max-w-full" : "max-w-[52rem]"
     )}>
+      {/* Low/empty credit warning — above the composer, so it reads as context
+          for the send the user is about to make rather than as a message in the
+          conversation. */}
+      {creditWarning.tier && (
+        <div className="mb-2">
+          <CreditWarningBanner
+            tier={creditWarning.tier}
+            balanceUsd={creditWarning.balanceUsd}
+            onBuyCredits={() => modals.openSettingsSection("credits")}
+            onDismiss={creditWarning.dismiss}
+            isMobile={isMobile}
+          />
+        </div>
+      )}
+
       <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}

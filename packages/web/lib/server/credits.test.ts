@@ -6,6 +6,8 @@ import { describe, it, expect } from "vitest"
 
 import {
   chargeableUsd,
+  creditTier,
+  LOW_CREDIT_USD,
   DAILY_CREDIT_TARGET_USD,
   dailyCreditTargetUsd,
   dailyTopUpMicro,
@@ -248,6 +250,45 @@ describe("dailyTopUpMicro", () => {
     for (const plan of ["free", "pro"] as const) {
       const after = 0n + dailyTopUpMicro(0n, plan)
       expect(dailyTopUpMicro(after, plan)).toBe(0n)
+    }
+  })
+})
+
+describe("creditTier", () => {
+  it("classifies the three states the UI paints", () => {
+    expect(creditTier(1)).toBe("ok")
+    expect(creditTier(LOW_CREDIT_USD + 0.001)).toBe("ok")
+    expect(creditTier(LOW_CREDIT_USD)).toBe("low")
+    expect(creditTier(0.01)).toBe("low")
+    expect(creditTier(0)).toBe("empty")
+    expect(creditTier(-4.2)).toBe("empty")
+  })
+
+  it("agrees with the send gate on exactly where zero falls", () => {
+    // checkSharedPoolUsage allows on `credits > 0n` — so a balance of zero is
+    // refused there and must read as `empty` here, not `low`. A disagreement
+    // would paint a yellow dot on a send the server is about to 429.
+    expect(creditTier(0)).toBe("empty")
+    expect(creditTier(0.000001)).toBe("low")
+  })
+
+  it("reports no tier at all for a balance that doesn't gate the user", () => {
+    // Unlimited plans and own-key accounts get null from the API, and a
+    // logged-out visitor gets nothing. None may render as "empty".
+    expect(creditTier(null)).toBeNull()
+    expect(creditTier(undefined)).toBeNull()
+    expect(creditTier(NaN)).toBeNull()
+    expect(creditTier(Infinity)).toBeNull()
+  })
+
+  it("stays below every daily refill target", () => {
+    // The invariant the threshold exists under: a user topped up to their
+    // plan's target must open the app in the clear, or the warning is
+    // permanent and therefore worthless.
+    for (const target of Object.values(DAILY_CREDIT_TARGET_USD)) {
+      if (target === null) continue
+      expect(LOW_CREDIT_USD).toBeLessThan(target)
+      expect(creditTier(target)).toBe("ok")
     }
   })
 })

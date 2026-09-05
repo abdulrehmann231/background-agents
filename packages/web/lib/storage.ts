@@ -83,7 +83,7 @@ const DEFAULT_LOCAL_STATE: LocalState = {
  * Read and JSON-parse a localStorage value. Returns `fallback` when running on
  * the server, when the key is missing, or when the stored value fails to parse.
  */
-function readJSON<T>(key: string, fallback: T, label: string): T {
+export function readJSON<T>(key: string, fallback: T, label: string): T {
   if (typeof window === "undefined") return fallback
   try {
     const stored = localStorage.getItem(key)
@@ -99,7 +99,7 @@ function readJSON<T>(key: string, fallback: T, label: string): T {
  * JSON-serialize and write a value to localStorage. No-ops on the server and
  * swallows quota/serialization errors after logging them.
  */
-function writeJSON(key: string, value: unknown, label: string): void {
+export function writeJSON(key: string, value: unknown, label: string): void {
   if (typeof window === "undefined") return
   try {
     localStorage.setItem(key, JSON.stringify(value))

@@ -24,6 +24,7 @@ import { useDraftChat } from "@/lib/hooks/useDraftChat"
 import { usePendingMessageReplay } from "@/lib/hooks/usePendingMessageReplay"
 import { usePaletteProps } from "@/lib/hooks/usePaletteProps"
 import { useSendMessage } from "@/lib/hooks/useSendMessage"
+import { useTopUpSettle } from "@/lib/hooks/useTopUpSettle"
 import { useBranching } from "@/lib/hooks/useBranching"
 import { useChatNavigation } from "@/lib/hooks/useChatNavigation"
 import { useRepoSelectHandler } from "@/lib/hooks/useRepoSelectHandler"
@@ -228,6 +229,10 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     }
   }, [isMobile, sidebar])
 
+  // Set once on landing back from a successful Stripe checkout; see below.
+  const [settlingTopUp, setSettlingTopUp] = useState(false)
+  useTopUpSettle(settlingTopUp)
+
   // Stripe's Checkout success/cancel URLs redirect back to "/" with a `topup`
   // query param. Surface it as a toast, jump to the Credits tab on success so
   // the user lands where the (webhook-credited, so not instant) balance shows
@@ -243,6 +248,11 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         body: "Your credits will show up in a few seconds.",
       })
       modals.openSettingsSection("credits")
+      // The webhook credits the balance out of band from this redirect, so the
+      // settings query this page just mounted with predates the payment. Poll
+      // it briefly (see useTopUpSettle) rather than leaving a red dot over
+      // credits the user has already bought.
+      setSettlingTopUp(true)
     } else if (topup === "cancelled") {
       useToastStore.getState().addToast({ title: "Checkout cancelled" })
     }
