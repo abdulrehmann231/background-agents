@@ -9,6 +9,9 @@
 import { describe, it, expect } from "vitest"
 import {
   agentSharedPoolExhausted,
+  sharedPoolProviderForModel,
+  formatTokenRate,
+  agentModels,
   agentHasFreeUsage,
   agentIsReady,
   hasCredentialsForModel,
@@ -221,5 +224,39 @@ describe("free models survive a spent balance", () => {
     const paid = { value: "opencode-go/mimo-v2.5-pro", label: "MiMo", requiresKey: "opencode" as const }
     expect(hasCredentialsForModel(paid, spentWithSharedOpencode, "opencode")).toBe(false)
     expect(modelRequiresKey("opencode", paid.value)).toBe("opencode")
+  })
+})
+
+/**
+ * The price the model picker prints: the list rate divided by the pool's
+ * discount, so it reads as what the turn actually costs the user in credits.
+ */
+describe("shared-pool model pricing", () => {
+  const sharedAll: CredentialFlags = {
+    CLAUDE_SHARED_POOL_AVAILABLE: true,
+    OPENCODE_API_KEY_SHARED: true,
+    GEMINI_API_KEY_SHARED: true,
+  }
+
+  it("names the pool a shared run draws on", () => {
+    expect(sharedPoolProviderForModel("claude-code", "sonnet", sharedAll)).toBe("claude")
+    expect(sharedPoolProviderForModel("opencode", "opencode-go/glm-5.1", sharedAll)).toBe("opencode")
+    // Pi has no pool of its own, but its Flash model runs on the shared Gemini key.
+    expect(sharedPoolProviderForModel("pi", "google/gemini-2.5-flash", sharedAll)).toBe("gemini")
+  })
+
+  it("is null where no shared key serves the model, so it stays at list value", () => {
+    // Own key; Fable is BYOK-only; Zen is outside the Go key; Pro is BYOK-only.
+    expect(sharedPoolProviderForModel("claude-code", "sonnet", { ANTHROPIC_API_KEY: true })).toBeNull()
+    expect(sharedPoolProviderForModel("claude-code", "fable", sharedAll)).toBeNull()
+    expect(sharedPoolProviderForModel("opencode", "opencode/glm-5.1", sharedAll)).toBeNull()
+    expect(sharedPoolProviderForModel("gemini", "gemini-3.1-pro-preview", sharedAll)).toBeNull()
+  })
+
+  it("formats a rate the way the picker shows it", () => {
+    const sonnet = agentModels["claude-code"].find((m) => m.value === "sonnet")!.priceUsdPerM!
+    expect(formatTokenRate(sonnet)).toBe("$2/M")
+    expect(formatTokenRate(sonnet / 20)).toBe("10¢/M") // the shared Claude pool
+    expect(formatTokenRate(0)).toBe("FREE")
   })
 })

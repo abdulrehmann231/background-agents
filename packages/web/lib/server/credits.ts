@@ -23,6 +23,11 @@
  *
  * Free of database imports so the arithmetic can be unit-tested on its own,
  * mirroring lib/server/usage-cursor. The database side lives in lib/db/credits.
+ *
+ * Despite the `lib/server` path this module must stay importable from the
+ * client: the model picker reads {@link discountDivisorFor} to label the
+ * discount beside each model's list price. Keep it free of `server-only` and of
+ * anything that pulls one in.
  */
 
 import type { Plan } from "@/lib/server/usage-budgets"
