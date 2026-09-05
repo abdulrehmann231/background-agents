@@ -145,15 +145,6 @@ export function AgentModelSelector({
   const [showModelSheet, setShowModelSheet] = useState(false)
   const [search, setSearch] = useState("")
 
-  // The selected agent's dot, surfaced on the trigger itself — but only when
-  // it's a credit warning. The per-agent dots inside the dropdown are a
-  // comparison aid; a permanent green dot on the closed trigger would just be
-  // chrome, whereas amber/red there is the whole point of the warning (the
-  // dropdown that holds the other dots is shut most of the time).
-  const currentAgentStatus = getAgentStatus(currentAgent, credentialFlags, creditBalanceUsd)
-  const triggerTone =
-    currentAgentStatus && currentAgentStatus.tone !== "ready" ? currentAgentStatus : null
-
   const availableModels = getAgentModels(currentAgent, endpoints)
   const selectedModelConfig = availableModels.find(m => m.value === currentModel)
   const hasRequiredCredentials = selectedModelConfig
@@ -353,13 +344,6 @@ export function AgentModelSelector({
         >
           <AgentIcon agent={currentAgent} className="h-4 w-4" />
           <span className="hidden @[18rem]/row2:inline">{agentLabels[currentAgent]}</span>
-          {triggerTone && (
-            <span
-              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT_CLASS[triggerTone.tone])}
-              title={triggerTone.label}
-              aria-label={triggerTone.label}
-            />
-          )}
           <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
         </button>
 
@@ -417,13 +401,6 @@ export function AgentModelSelector({
         >
           <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
           <span className="hidden @[32rem]:inline">{agentLabels[currentAgent]}</span>
-          {triggerTone && (
-            <span
-              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT_CLASS[triggerTone.tone])}
-              title={triggerTone.label}
-              aria-label={triggerTone.label}
-            />
-          )}
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {showAgentDropdown && (
