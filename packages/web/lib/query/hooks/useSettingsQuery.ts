@@ -66,6 +66,15 @@ export function useSettingsQuery() {
     // user who is actually signed in (which would flash the wrong dots).
     enabled: status !== "loading",
     staleTime: 60 * 1000, // 1 minute - settings don't change often
+    // Opt back in to the focus refetch that QueryProvider turns off globally.
+    // This query carries the credit balance, which moves without this tab
+    // doing anything: a turn finished by the agent-lifecycle cron with no
+    // stream attached, the daily refill at UTC midnight, a top-up completed in
+    // another tab. Coming back to the tab is exactly when a stale balance is
+    // most likely and most misleading — a green dot over a balance the server
+    // will refuse. The staleTime above is what keeps it cheap: flicking
+    // between tabs refetches at most once a minute.
+    refetchOnWindowFocus: true,
     // Provide default values while loading
     placeholderData: {
       settings: DEFAULT_SETTINGS,
