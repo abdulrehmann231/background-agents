@@ -20,7 +20,7 @@ import type { ChatWithMessages } from "./types"
  * ChatWithMessages on purpose, so callers holding any chat-shaped row can pass
  * it without loading the messages relation.
  */
-export type DyingChat = {
+type DyingChat = {
   id: string
   userId: string
   agent: string
