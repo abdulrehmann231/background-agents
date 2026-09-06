@@ -22,7 +22,17 @@ export async function monitorAgent(
   daytona: Daytona,
   handlers: {
     onComplete: (snapshot: AgentSnapshot) => Promise<void>
-    onError: (error: string, errorKind?: AgentSnapshot["errorKind"]) => Promise<void>
+    /**
+     * `snapshot` carries the agent CLI's own session id, which is the id
+     * tokscale reports usage under — NOT the Daytona backgroundSessionId this
+     * function is called with. A failure handler that wants to bill the dying
+     * turn needs the former, and this is the only place it is known.
+     */
+    onError: (
+      error: string,
+      errorKind: AgentSnapshot["errorKind"],
+      snapshot: AgentSnapshot
+    ) => Promise<void>
   }
 ) {
   try {
@@ -43,7 +53,11 @@ export async function monitorAgent(
       await cancelBackgroundAgent(sandbox, backgroundSessionId, {
         repoPath: `${PATHS.SANDBOX_HOME}/project`,
       })
-      await handlers.onError(snapshot.error ?? "Unknown error", snapshot.errorKind)
+      await handlers.onError(
+        snapshot.error ?? "Unknown error",
+        snapshot.errorKind,
+        snapshot
+      )
     }
     // else still running, check again next cycle
   } catch (err) {
@@ -53,18 +67,33 @@ export async function monitorAgent(
 
 /**
  * Forcibly cancel a running background agent (used on hard-timeout).
+ *
+ * Returns the agent CLI's session id, read before the cancel while the session
+ * is still answering, so the caller can bill the turn it just killed. A timed
+ * out run has usually spent more than any other kind of failure, so losing this
+ * id is expensive. Undefined when the snapshot could not be read.
  */
 export async function stopAgent(
   sandboxId: string,
   backgroundSessionId: string,
   daytona: Daytona
-) {
+): Promise<string | undefined> {
   try {
     const sandbox = await daytona.get(sandboxId)
-    await cancelBackgroundAgent(sandbox, backgroundSessionId, {
-      repoPath: `${PATHS.SANDBOX_HOME}/project`,
-    })
+    const options = { repoPath: `${PATHS.SANDBOX_HOME}/project` }
+    // Read first, cancel second: the id is what makes the usage billable, and
+    // a cancelled session may no longer report it.
+    let agentSessionId: string | undefined
+    try {
+      agentSessionId = (await snapshotBackgroundAgent(sandbox, backgroundSessionId, options))
+        .sessionId
+    } catch (err) {
+      console.error(`[agent-lifecycle] Could not read session id before stop:`, err)
+    }
+    await cancelBackgroundAgent(sandbox, backgroundSessionId, options)
+    return agentSessionId
   } catch (err) {
     console.error(`[agent-lifecycle] Failed to stop agent:`, err)
+    return undefined
   }
 }

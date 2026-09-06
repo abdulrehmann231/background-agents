@@ -585,7 +585,10 @@ export async function failScheduledRun(
    * about the job itself — a spent daily balance, which clears at UTC midnight
    * — so a couple of capped days can't silently disable it.
    */
-  { countFailure = true }: { countFailure?: boolean } = {}
+  { countFailure = true }: { countFailure?: boolean } = {},
+  /** Agent CLI session id from the snapshot that saw the failure — see
+   * _lib/meter-dying-turn for why backgroundSessionId will not do. */
+  agentSessionId?: string
 ) {
   // Bill what the run already spent, before the chat update below clears
   // backgroundSessionId and — worse — before the sandbox is deleted at the end
@@ -598,7 +601,7 @@ export async function failScheduledRun(
       chatId: run.chatId,
       agent: run.job.agent,
       sandboxId: run.sandboxId,
-      backgroundSessionId: run.backgroundSessionId,
+      agentSessionId,
       daytona,
     })
   }

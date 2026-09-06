@@ -21,6 +21,13 @@ import { meterAssistantTurn } from "@/lib/server/token-metering"
 //
 // This is the missing counterpart. Call it before the teardown, never after.
 //
+// The id it needs is the AGENT CLI's session id — what tokscale files usage
+// under, and what every other metering call site passes as `snapshot.sessionId`.
+// It is NOT `Chat.backgroundSessionId`, which is the Daytona handle used to
+// talk to the sandbox: the two never coincide (checked against production —
+// no TokenUsage row has ever matched a backgroundSessionId), so passing the
+// wrong one silently meters nothing at all.
+//
 // Best-effort by construction: a failing turn is already a bad day, and a
 // metering error must not stop the chat being released from "running" — that
 // would strand it far more visibly than an unbilled turn. Every failure is
@@ -36,14 +43,26 @@ export async function meterDyingTurn(params: {
   chatId: string
   agent: string
   sandboxId: string | null
-  backgroundSessionId: string | null
+  /**
+   * The agent CLI's session id, from the snapshot that observed the failure.
+   * Not the Daytona backgroundSessionId — see above.
+   */
+  agentSessionId: string | null | undefined
+  /**
+   * `Chat.sessionId`, the persisted resume pointer. Used when the snapshot
+   * could not be read: a resumed turn continues that very session, so the CLI
+   * reports usage under it. Null on a chat's first turn, where only the
+   * snapshot knows the id — hence the ordering.
+   */
+  fallbackSessionId?: string | null
   daytona?: Daytona
 }): Promise<number> {
-  const { userId, chatId, agent, sandboxId, backgroundSessionId, daytona } = params
+  const { userId, chatId, agent, sandboxId, daytona } = params
+  const sessionId = params.agentSessionId || params.fallbackSessionId
 
   // No sandbox to run tokscale in, or no session to attribute usage to —
   // nothing to do. Not an error: a run can fail before either exists.
-  if (!sandboxId || !backgroundSessionId || !daytona) return 0
+  if (!sandboxId || !sessionId || !daytona) return 0
 
   try {
     // The turn's own assistant message, for attribution: its metadata carries
@@ -63,7 +82,7 @@ export async function meterDyingTurn(params: {
       messageId: assistantMessage?.id ?? null,
       messageMetadata: assistantMessage?.metadata,
       agent,
-      sessionId: backgroundSessionId,
+      sessionId,
     })
   } catch (err) {
     console.error(
