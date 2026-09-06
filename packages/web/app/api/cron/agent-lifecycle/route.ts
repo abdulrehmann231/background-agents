@@ -150,7 +150,7 @@ export async function GET(req: Request) {
         // Hard timeout: 25 minutes
         if (totalMinutes > INTERACTIVE_HARD_TIMEOUT) {
           await stopAgent(chat.sandboxId!, chat.backgroundSessionId!, daytona)
-          await markChatError(chat.id, "Run exceeded 25 minute limit")
+          await markChatError(chat, "Run exceeded 25 minute limit", daytona)
           results.timedOutInteractive++
           continue
         }
@@ -171,7 +171,7 @@ export async function GET(req: Request) {
               error,
               errorKind,
             })
-            await markChatError(chat.id, error)
+            await markChatError(chat, error, daytona)
           },
         })
       } catch (err) {
