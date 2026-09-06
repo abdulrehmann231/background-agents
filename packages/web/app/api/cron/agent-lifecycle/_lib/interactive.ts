@@ -25,7 +25,8 @@ type DyingChat = {
   userId: string
   agent: string
   sandboxId: string | null
-  backgroundSessionId: string | null
+  /** The persisted agent-session resume pointer, used as a fallback id. */
+  sessionId: string | null
 }
 
 export async function finalizeInteractiveChat(
@@ -111,7 +112,13 @@ export async function finalizeInteractiveChat(
 export async function markChatError(
   chat: DyingChat,
   reason: string,
-  daytona?: Daytona
+  daytona?: Daytona,
+  /**
+   * The agent CLI's session id, from whichever snapshot saw the failure. The
+   * chat row cannot supply it: Chat.backgroundSessionId is the Daytona handle,
+   * a different namespace entirely. Without this the turn cannot be billed.
+   */
+  agentSessionId?: string
 ) {
   // Bill what the turn already spent BEFORE the update below clears
   // backgroundSessionId. A failed turn is not a free turn: the model produced
@@ -123,7 +130,8 @@ export async function markChatError(
     chatId: chat.id,
     agent: chat.agent,
     sandboxId: chat.sandboxId,
-    backgroundSessionId: chat.backgroundSessionId,
+    agentSessionId,
+    fallbackSessionId: chat.sessionId,
     daytona,
   })
 
