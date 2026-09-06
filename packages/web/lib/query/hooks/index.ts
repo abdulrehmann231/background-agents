@@ -34,6 +34,8 @@ export type {
 } from "./useUsageDistributionQuery"
 export { useAdminActivityQuery } from "./useAdminActivityQuery"
 export { useAdminUsersQuery, useUpdateUserMutation } from "./useAdminUsersQuery"
+export { useAdminTopupsQuery } from "./useAdminTopupsQuery"
+export type { AdminTopups, TopupUser } from "./useAdminTopupsQuery"
 export { useRefreshClaudeCredsMutation } from "./useRefreshClaudeCredsMutation"
 export type {
   RefreshClaudeCredsParams,

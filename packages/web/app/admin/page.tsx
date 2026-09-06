@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Wallet,
   BarChart3,
+  CreditCard,
 } from "lucide-react"
 import { ActivityFeed } from "@/components/admin/ActivityFeed"
 import { ClaudeCredentials } from "@/components/admin/ClaudeCredentials"
@@ -28,6 +29,7 @@ import { DailyMessagesChatsChart } from "@/components/admin/charts/DailyMessages
 import { PoolSplitChart } from "@/components/admin/charts/PoolSplitChart"
 import { UsageByKeyChart } from "@/components/admin/charts/UsageByKeyChart"
 import { MessageValueHistogramChart } from "@/components/admin/charts/MessageValueHistogramChart"
+import { TopUpsByUserChart } from "@/components/admin/charts/TopUpsByUserChart"
 import { UsageByUserTable } from "@/components/admin/UsageByUserTable"
 import {
   useAdminStatsQuery,
@@ -35,6 +37,7 @@ import {
   useAdminUsersQuery,
   useUpdateUserMutation,
   useUsageDistributionQuery,
+  useAdminTopupsQuery,
   type StatsTimeRange,
   type StatsPool,
   type UsageProvider,
@@ -187,6 +190,9 @@ export default function AdminDashboard() {
     sortOrder,
   })
   const updateUserMutation = useUpdateUserMutation()
+  // Top-up payments by user, shown on the Leaderboard. Shares the global time
+  // range and admins toggle rather than adding another set of controls.
+  const topupsQuery = useAdminTopupsQuery(globalTimeRange, !includeAdmins)
 
   // Handle sort change
   const handleSortChange = (field: SortField) => {
@@ -511,6 +517,33 @@ export default function AdminDashboard() {
                     </h3>
                   </div>
                   <HourlyActivityChart data={hourly} metric={metric} />
+                </div>
+
+                {/* Top-up payments by user — real dollars users have paid us,
+                    independent of the metric selector above (which only
+                    weighs usage, not purchases). Spans both columns since it's
+                    the row's odd one out. */}
+                <div className="rounded-xl border bg-card p-4 md:p-6 shadow-sm lg:col-span-2">
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                      <CreditCard className="h-4 w-4 text-emerald-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Top-ups by User</h3>
+                      {!!topupsQuery.data?.totalUsd && (
+                        <p className="text-xs text-muted-foreground">
+                          ${topupsQuery.data.totalUsd.toFixed(2)} total across{" "}
+                          {topupsQuery.data.totalCount} payment
+                          {topupsQuery.data.totalCount === 1 ? "" : "s"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {topupsQuery.isLoading ? (
+                    <div className="h-[250px] animate-pulse rounded bg-muted/50" />
+                  ) : (
+                    <TopUpsByUserChart data={topupsQuery.data?.users ?? []} />
+                  )}
                 </div>
               </section>
 
