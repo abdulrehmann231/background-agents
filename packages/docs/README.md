@@ -115,6 +115,8 @@ Screenshots below are committed under `media/`; videos and GIFs are hosted on R2
 | `skills-list.png` | Skills |
 | `custom-endpoint-form.png` | Custom endpoints |
 | `endpoint-in-dropdown.png` | Custom endpoints |
+| `codex-subscription-connected.png` | ChatGPT subscription |
+| `codex-subscription-code.png` | ChatGPT subscription |
 
 ### Conventions
 

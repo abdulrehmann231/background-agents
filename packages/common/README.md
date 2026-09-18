@@ -38,6 +38,7 @@ import {
   agentSlugs,
   agentLabels,
   agentToProvider,
+  providerToAgent,
   agentModels,
   defaultAgentModel,
   agentSupportsPlanMode,
@@ -46,6 +47,7 @@ import {
   // Functions
   getDefaultAgent,
   resolveAgentSlug,
+  providerLabel,
   hasOwnAnthropicCredentials,
   sharedClaudePoolEligible,
   agentUsesSharedPool,
