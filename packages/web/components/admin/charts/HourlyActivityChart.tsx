@@ -11,6 +11,7 @@ import {
   Cell,
 } from "recharts"
 import { chartTooltipProps, barTooltipCursor } from "./chartTooltip"
+import { ChartEmptyState } from "./ChartEmptyState"
 import { formatHour, formatMetricValue, metricLabel, type StatsMetric } from "./chartFormatters"
 
 interface HourlyActivityData {
@@ -25,11 +26,7 @@ interface HourlyActivityChartProps {
 
 export function HourlyActivityChart({ data, metric }: HourlyActivityChartProps) {
   if (!data || data.length === 0) {
-    return (
-      <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-        No hourly activity data available
-      </div>
-    )
+    return <ChartEmptyState message="No hourly activity data available" />
   }
 
   // Ensure we have all 24 hours, fill with 0 if missing

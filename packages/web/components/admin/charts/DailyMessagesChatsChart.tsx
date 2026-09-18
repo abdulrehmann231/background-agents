@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { ChartEmptyState } from "./ChartEmptyState"
 import {
   formatAxisDate,
   formatTooltipDate,
@@ -38,11 +39,7 @@ export function DailyMessagesChatsChart({
   isHourly = false,
 }: DailyMessagesChatsChartProps) {
   if (!data || data.length === 0) {
-    return (
-      <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-        No data available
-      </div>
-    )
+    return <ChartEmptyState message="No data available" />
   }
 
   // "messages" carries a second series (conversations); tokens/cost is single-value.

@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { ChartEmptyState } from "./ChartEmptyState"
 import { formatAxisDate, formatHour, formatTooltipDate } from "./chartFormatters"
 import type { TopupSeriesPoint } from "@/lib/query/hooks"
 
@@ -30,11 +31,7 @@ export function TopUpsOverTimeChart({ data, isHourly = false }: TopUpsOverTimeCh
   const total = data.length > 0 ? data[data.length - 1].cumulativeUsd : 0
 
   if (total <= 0) {
-    return (
-      <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-        No top-up payments in this range
-      </div>
-    )
+    return <ChartEmptyState message="No top-up payments in this range" />
   }
 
   return (

@@ -3,6 +3,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { chartTooltipProps, barTooltipCursor } from "./chartTooltip"
 import { formatMetricValue } from "./chartFormatters"
+import { ChartEmptyState } from "./ChartEmptyState"
 import type { MessageHistogramBucket, UsageMetric } from "@/lib/query/hooks"
 
 const BAR_COLOR = "hsl(262, 83%, 58%)"
@@ -22,11 +23,7 @@ export function MessageValueHistogramChart({ data, metric }: MessageValueHistogr
   const totalMessages = data.reduce((acc, b) => acc + b.count, 0)
 
   if (totalMessages === 0) {
-    return (
-      <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-        No messages recorded in this range
-      </div>
-    )
+    return <ChartEmptyState message="No messages recorded in this range" />
   }
 
   const chartData = data.map((b) => ({

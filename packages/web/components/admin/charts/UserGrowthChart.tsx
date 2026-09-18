@@ -11,6 +11,7 @@ import {
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
 import { formatAxisDate, formatTooltipDate } from "./chartFormatters"
+import { ChartEmptyState } from "./ChartEmptyState"
 
 interface WeeklyActiveUsersData {
   date: string
@@ -23,11 +24,7 @@ interface UserGrowthChartProps {
 
 export function UserGrowthChart({ data }: UserGrowthChartProps) {
   if (!data || data.length === 0) {
-    return (
-      <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-        No weekly active users data available
-      </div>
-    )
+    return <ChartEmptyState message="No weekly active users data available" />
   }
 
   return (
