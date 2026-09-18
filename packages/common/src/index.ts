@@ -90,7 +90,6 @@ export {
   compareBranches,
   createRepo,
   createPullRequest,
-  createFileCommit,
   forkRepo,
 } from "./github"
 
