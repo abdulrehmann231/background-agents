@@ -38,6 +38,10 @@ export const queryKeys = {
       [...queryKeys.sandbox.all, "files", sandboxId, filePath] as const,
   },
 
+  // Pre-send cost estimate
+  costEstimate: (agent: string, model: string, chatId: string | null) =>
+    ["costEstimate", agent, model, chatId] as const,
+
   // Admin
   admin: {
     all: ["admin"] as const,

@@ -7,9 +7,10 @@ import { useModals } from "@/lib/contexts"
 import { useSpeechRecognition } from "@/lib/hooks/useSpeechRecognition"
 import { useCreditWarning } from "@/lib/hooks/useCreditWarning"
 import { isModKeyPressed } from "@/lib/keyboard"
+import { useCostEstimateQuery } from "@/lib/query/hooks/useCostEstimateQuery"
 import type { Chat, Agent, CredentialFlags, PendingFile } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
-import { basename } from "@/lib/format"
+import { basename, fmtCreditAmount } from "@/lib/format"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
 import { AgentModelSelector } from "./AgentModelSelector"
 import { CreditWarningBanner } from "./CreditWarningBanner"
@@ -243,6 +244,11 @@ export function ChatInput({
     model: currentModel,
     credentialFlags,
   })
+  // What this send starts around. Null unless a shared pool actually serves the
+  // selection, so an own-key or free model resolves to no hint rather than to a
+  // hint reading zero.
+  const { data: costEstimate } = useCostEstimateQuery(currentAgent, currentModel, chat.id)
+
   const [showModeDropdown, setShowModeDropdown] = useState(false)
   const [showModeSheet, setShowModeSheet] = useState(false)
 
@@ -363,6 +369,27 @@ export function ChatInput({
             onDismiss={creditWarning.dismiss}
             isMobile={isMobile}
           />
+        </div>
+      )}
+
+      {/* A floor, not a forecast: the input and cache tokens a turn like this
+          one spends, priced at today's rates, at the 25th percentile of what
+          comparable recent turns actually used. Output is on top of it.
+          Suppressed while the empty-balance warning is up — that banner owns
+          the moment, and a second line of money talk would compete with it. */}
+      {costEstimate?.fromUsd != null && creditWarning.tier !== "empty" && (
+        <div
+          data-testid="cost-estimate-hint"
+          role="status"
+          className={cn(
+            "mb-1.5 px-1 text-muted-foreground",
+            isMobile ? "text-xs" : "text-[11px]"
+          )}
+        >
+          Starts around{" "}
+          <span className="text-foreground font-medium tabular-nums">
+            {fmtCreditAmount(costEstimate.fromUsd)}
+          </span>
         </div>
       )}
 

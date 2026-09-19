@@ -141,3 +141,39 @@ export function priceClaudeTurn(
     perToken(rate.input * CACHE_WRITE_5M_MULTIPLIER, tokens.cacheWriteTokens)
   )
 }
+
+/**
+ * The per-token rates, in USD per million tokens, for the part of a turn whose
+ * size is settled before the model generates anything: uncached input, cache
+ * reads and cache writes.
+ *
+ * {@link priceClaudeTurn} prices a turn whose token counts are already known.
+ * The pre-send estimate works the other way round — it prices token counts
+ * sampled from past turns, inside SQL — so it needs the coefficients
+ * themselves. Both read the same table, so an estimate and the charge it
+ * previews cannot drift apart.
+ *
+ * Output and reasoning are deliberately absent. The estimate quotes only what
+ * can be priced before a send, and those two are exactly what it cannot know.
+ *
+ * Shared with OpenCode Go (see lib/server/opencode-pricing) so the estimate is
+ * one arithmetic expression rather than a branch per provider.
+ */
+export interface KnownTokenRates {
+  input: number
+  cacheRead: number
+  cacheWrite: number
+}
+
+/** Known-token rates for a model, or null when it isn't one we price. */
+export function claudeKnownRatesFor(model: string | null | undefined): KnownTokenRates | null {
+  const key = normalizeClaudeModel(model)
+  if (!key) return null
+  const rate = CLAUDE_RATES[key]
+  if (!rate) return null
+  return {
+    input: rate.input,
+    cacheRead: rate.input * CACHE_READ_MULTIPLIER,
+    cacheWrite: rate.input * CACHE_WRITE_5M_MULTIPLIER,
+  }
+}
