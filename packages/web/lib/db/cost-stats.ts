@@ -49,15 +49,17 @@ const MIN_SAMPLES_WIDE = 20
 /**
  * Narrowest first — the first scope to clear its floor wins.
  *
- * `provider` pools turns across every model the provider serves, which is a sane
- * fallback only because the sample holds token volumes rather than dollars. How
- * much cache a turn reads is a property of the agent and the work, not of the
- * price list, so borrowing those volumes from a sibling model and pricing them
- * at the rates each one actually ran on answers "what would a turn like this
- * cost here". Borrowing another model's *dollars* would have answered a question
- * nobody asked.
+ * There is deliberately no provider-wide rung beneath these two. Pooling every
+ * model the provider serves would mean quoting a blend of other models' prices:
+ * each turn is priced at the rates it actually ran on, so a Fable turn enters at
+ * $10/M against Haiku's $1/M. Over 60 days of production that blend came to
+ * $0.1970, which is 4.2x under Fable's own figure and 1.8x over Haiku's. It
+ * cannot be rescued by re-pricing the borrowed volumes at the selected model's
+ * rates either, because the selection is an alias the ledger never sees — see
+ * pricedModelsTable. Showing nothing is the honest answer, and it costs almost
+ * nothing: every selection with real traffic clears the 20-turn model floor.
  */
-const SCOPE_ORDER = ["chat", "model", "provider"] as const
+const SCOPE_ORDER = ["chat", "model"] as const
 
 interface ScopeRow {
   scope: string
@@ -210,8 +212,6 @@ export async function getCostEstimate(params: {
           AND model IS NOT DISTINCT FROM ${model}
       UNION ALL
       SELECT 'model', known_usd FROM timed WHERE model IS NOT DISTINCT FROM ${model}
-      UNION ALL
-      SELECT 'provider', known_usd FROM timed
     )
     SELECT scope,
            COUNT(*)::int AS n,
