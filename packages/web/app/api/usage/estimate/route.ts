@@ -90,7 +90,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     const response: CostEstimateResponse = {
       fromUsd: provider
         ? await cached(`${userId}:${scopedChatId ?? "-"}:${provider}:${model}`, () =>
-            getCostEstimate({ userId, chatId: scopedChatId, provider, model })
+            getCostEstimate({ chatId: scopedChatId, provider, model })
           )
         : null,
     }

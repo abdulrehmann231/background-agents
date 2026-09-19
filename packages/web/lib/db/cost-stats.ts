@@ -1,5 +1,6 @@
 import "server-only"
 
+import { Prisma } from "@prisma/client"
 import { prisma } from "./prisma"
 import { getMultiplierFor } from "./provider-pricing"
 import { claudeKnownRatesFor, type KnownTokenRates } from "@/lib/server/claude-pricing"
@@ -52,9 +53,9 @@ const MIN_SAMPLES_WIDE = 20
  * fallback only because the sample holds token volumes rather than dollars. How
  * much cache a turn reads is a property of the agent and the work, not of the
  * price list, so borrowing those volumes from a sibling model and pricing them
- * at the selected model's rates answers "what would a turn like this cost here".
- * Borrowing another model's *dollars* would have answered a question nobody
- * asked.
+ * at the rates each one actually ran on answers "what would a turn like this
+ * cost here". Borrowing another model's *dollars* would have answered a question
+ * nobody asked.
  */
 const SCOPE_ORDER = ["chat", "model", "provider"] as const
 
@@ -64,11 +65,49 @@ interface ScopeRow {
   known_quote: number | null
 }
 
-/** Today's known-token rates for a model, or null when neither provider prices it. */
-function ratesFor(provider: string, model: string | null): KnownTokenRates | null {
+/** Today's known-token rates for a model id as the ledger records it. */
+function ratesFor(provider: string, model: string): KnownTokenRates | null {
   if (provider === "claude") return claudeKnownRatesFor(model)
   if (provider === "opencode") return openCodeKnownRatesFor(model)
   return null
+}
+
+/**
+ * The priced model ids this provider has actually served lately, as a SQL table
+ * of `(model, input, cacheRead, cacheWrite)`.
+ *
+ * The rates have to reach the query as data because the selection the user made
+ * does not name a model the ledger would recognise. The composer's Claude ids
+ * are aliases — `opus`, `default`, `best` — and the CLI resolves them at run
+ * time to whatever version is current, so the id that comes back is
+ * `claude-opus-4-8`. Worse, the mapping is not one-to-one: over the last 60 days
+ * `fable` resolved to Fable 5 on 489 turns and to Opus 4.8 on 90, and `best`
+ * split 60/44 between the two. A lookup table from alias to version would be
+ * wrong for those two aliases immediately and for the rest at the next model
+ * release.
+ *
+ * So nothing is translated. Each turn is priced at the rates of the model it
+ * actually ran on, and the *selection* is matched separately against
+ * `Message.model`, which is the same alias the composer is holding. A turn whose
+ * model has no rates is dropped rather than guessed at.
+ */
+async function pricedModelsTable(provider: string, since: Date): Promise<Prisma.Sql | null> {
+  const models = await prisma.tokenUsage.findMany({
+    where: { provider, pool: "shared", freeModel: false, createdAt: { gte: since } },
+    select: { model: true },
+    distinct: ["model"],
+  })
+
+  const rows = models.flatMap(({ model }) => {
+    if (!model) return []
+    const rates = ratesFor(provider, model)
+    if (!rates) return []
+    return [
+      Prisma.sql`(${model}, ${rates.input}::float8, ${rates.cacheRead}::float8, ${rates.cacheWrite}::float8)`,
+    ]
+  })
+
+  return rows.length > 0 ? Prisma.join(rows, ", ") : null
 }
 
 /**
@@ -106,22 +145,22 @@ function ratesFor(provider: string, model: string | null): KnownTokenRates | nul
  *     duration on its own; the turn's last `TokenUsage` row marks the end.
  */
 export async function getCostEstimate(params: {
-  userId: string
   chatId: string | null
   provider: string
   model: string | null
 }): Promise<number | null> {
   const { chatId, provider, model } = params
 
-  // No rate table, no estimate. Guessing a price for a model we do not price is
-  // exactly the failure this approach exists to avoid.
-  const rates = ratesFor(provider, model)
-  if (!rates) return null
-
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
+  // No priced model on this provider, no estimate. Guessing a price for models
+  // we do not price is exactly the failure this approach exists to avoid.
+  const rates = await pricedModelsTable(provider, since)
+  if (!rates) return null
+
   const rows = await prisma.$queryRaw<ScopeRow[]>`
-    WITH deduped AS (
+    WITH rates(model, input, cache_read, cache_write) AS (VALUES ${rates}),
+    deduped AS (
       SELECT DISTINCT ON (tu."messageId", tu."sessionId", tu."cumulativeTotal", tu.model)
              tu."messageId", tu.model, tu."createdAt",
              tu."inputTokens", tu."cacheReadTokens", tu."cacheWriteTokens"
@@ -135,30 +174,36 @@ export async function getCostEstimate(params: {
       ORDER BY tu."messageId", tu."sessionId", tu."cumulativeTotal", tu.model,
                tu."totalTokens" DESC
     ),
-    turns AS (
+    -- Priced per model rather than per turn, because a turn can span models when
+    -- an agent switches mid-run. Each part is charged at what it actually ran on
+    -- and the parts are added back up below.
+    priced AS (
       SELECT d."messageId",
              MAX(d."createdAt") AS metered_at,
              -- Re-priced at today's rates rather than read back in the dollars
              -- recorded at the time: the token counts are the measurement, the
              -- rates are current.
-             ( ${rates.input}::float8      * SUM(d."inputTokens")
-             + ${rates.cacheRead}::float8  * SUM(d."cacheReadTokens")
-             + ${rates.cacheWrite}::float8 * SUM(d."cacheWriteTokens")
-             ) / 1000000.0 AS known_usd,
-             -- A turn can span models (an agent switching mid-run). Attribute it
-             -- whole to whichever carried the most tokens, so it stays one
-             -- observation.
-             (ARRAY_AGG(d.model ORDER BY d."inputTokens" DESC))[1] AS model
+             ( r.input       * SUM(d."inputTokens")
+             + r.cache_read  * SUM(d."cacheReadTokens")
+             + r.cache_write * SUM(d."cacheWriteTokens")
+             ) / 1000000.0 AS known_usd
       FROM deduped d
-      GROUP BY 1
+      JOIN rates r ON r.model = d.model
+      GROUP BY d."messageId", r.input, r.cache_read, r.cache_write
+    ),
+    turns AS (
+      SELECT "messageId", MAX(metered_at) AS metered_at, SUM(known_usd) AS known_usd
+      FROM priced GROUP BY 1
     ),
     timed AS (
-      SELECT t.known_usd, t.model, m."chatId"
+      SELECT t.known_usd, m.model, m."chatId"
       FROM turns t
       JOIN "Message" m ON m.id = t."messageId"
       WHERE EXTRACT(epoch FROM (t.metered_at - m."createdAt"))
               BETWEEN ${MIN_TURN_SECONDS} AND ${MAX_TURN_SECONDS}
     ),
+    -- Matched on the id the composer is holding, which is what Message.model
+    -- stores. See pricedModelsTable for why it is never compared to the ledger's.
     scoped AS (
       SELECT 'chat'::text AS scope, known_usd FROM timed
         WHERE ${chatId}::text IS NOT NULL AND "chatId" = ${chatId}
