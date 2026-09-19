@@ -9,9 +9,10 @@ import type { CostEstimateResponse } from "@/app/api/usage/estimate/route"
  *
  * Keyed on the selection rather than on the draft, because the figure does not
  * depend on what is typed: it prices a whole turn's input and cache traffic,
- * which the agent loop dominates. The server caches for five minutes, and the
- * long `staleTime` here keeps a model switch from re-fetching what it already
- * has.
+ * which the agent loop dominates. Switching agent or model re-quotes at once;
+ * a finished turn invalidates this key from useStreaming, since the chat's own
+ * history is what just changed. `staleTime` only stops a remount in between
+ * from re-fetching what it already has — an invalidation still refetches.
  */
 export function useCostEstimateQuery(
   agent: string | undefined,
@@ -19,7 +20,7 @@ export function useCostEstimateQuery(
   chatId: string | null
 ) {
   return useQuery({
-    queryKey: queryKeys.costEstimate(agent ?? "", model ?? "", chatId),
+    queryKey: queryKeys.costEstimate.for(agent ?? "", model ?? "", chatId),
     queryFn: async (): Promise<CostEstimateResponse> => {
       const params = new URLSearchParams({ agent: agent!, model: model! })
       if (chatId) params.set("chatId", chatId)

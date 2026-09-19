@@ -191,6 +191,14 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           // without polling. Cheap: the settings query is one row.
           queryClient.invalidateQueries({ queryKey: queryKeys.settings.all })
 
+          // Same moment, same reason: the chat just gained a turn, and the
+          // composer's cost hint is quoted from the chat's own history once it
+          // has five of them. Within one chat the known cost of a turn moves
+          // about 2x between its early turns and its later ones, so a figure
+          // fixed when the chat was opened drifts further than the difference
+          // between the models it is there to compare.
+          queryClient.invalidateQueries({ queryKey: queryKeys.costEstimate.all })
+
           // Notify about conflict state change
           if (data.conflictState && onConflictStateChangeRef.current) {
             onConflictStateChangeRef.current(data.conflictState)

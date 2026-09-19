@@ -15,41 +15,6 @@ export interface CostEstimateResponse {
   fromUsd: number | null
 }
 
-/**
- * How long an estimate is reused before it is recomputed.
- *
- * Short enough that a new chat crossing the sample floor starts showing its own
- * number within minutes, long enough that a burst of model switches does not put
- * a 60-day aggregate on the database each time.
- */
-const TTL_MS = 5 * 60 * 1000
-
-/** Bounded so a long-lived instance cannot accumulate a key per chat forever. */
-const MAX_ENTRIES = 500
-
-const cache = new Map<string, { at: number; value: number | null }>()
-
-async function cached(
-  key: string,
-  compute: () => Promise<number | null>
-): Promise<number | null> {
-  const hit = cache.get(key)
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value
-
-  const value = await compute()
-
-  // Oldest-first eviction: `Map` preserves insertion order, and re-inserting on
-  // every write keeps the recently used keys at the back.
-  if (cache.size >= MAX_ENTRIES) {
-    const oldest = cache.keys().next().value
-    if (oldest !== undefined) cache.delete(oldest)
-  }
-  cache.delete(key)
-  cache.set(key, { at: Date.now(), value })
-
-  return value
-}
-
 // =============================================================================
 // GET - what the next turn starts around
 // =============================================================================
@@ -62,6 +27,11 @@ async function cached(
  * what makes a null answer meaningful: no shared pool serves this selection, so
  * the send draws nothing from the balance and there is no charge to preview — a
  * BYOK key, a custom endpoint, or a free model.
+ *
+ * Not cached here. The aggregate runs in well under a second, and the client
+ * asks only when the selection changes or a turn finishes — a cache would buy
+ * nothing and would hold a stale figure across exactly the event that makes it
+ * stale.
  */
 export async function GET(req: NextRequest): Promise<Response> {
   const authResult = await requireAuth()
@@ -88,11 +58,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     const provider = sharedPoolProviderForModel(agent as Agent, model, flags.flags)
 
     const response: CostEstimateResponse = {
-      fromUsd: provider
-        ? await cached(`${userId}:${scopedChatId ?? "-"}:${provider}:${model}`, () =>
-            getCostEstimate({ chatId: scopedChatId, provider, model })
-          )
-        : null,
+      fromUsd: provider ? await getCostEstimate({ chatId: scopedChatId, provider, model }) : null,
     }
     return Response.json(response)
   } catch (error) {

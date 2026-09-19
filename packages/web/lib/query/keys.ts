@@ -39,8 +39,11 @@ export const queryKeys = {
   },
 
   // Pre-send cost estimate
-  costEstimate: (agent: string, model: string, chatId: string | null) =>
-    ["costEstimate", agent, model, chatId] as const,
+  costEstimate: {
+    all: ["costEstimate"] as const,
+    for: (agent: string, model: string, chatId: string | null) =>
+      [...queryKeys.costEstimate.all, agent, model, chatId] as const,
+  },
 
   // Admin
   admin: {
