@@ -85,25 +85,27 @@ export function SettingsPage({
       {/* Page header — the only way back out on mobile, where there is no sidebar. */}
       <header
         className={cn(
-          "flex flex-shrink-0 items-center gap-1 border-b border-border px-2 sm:px-4",
-          isMobile ? "pt-safe pb-2" : "py-2.5"
+          "flex flex-shrink-0 items-center gap-1 border-b border-sidebar-border px-2 sm:px-3",
+          isMobile ? "pt-safe pb-2" : "py-2"
         )}
       >
         <button
           onClick={onClose}
           aria-label="Back"
-          className="flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer touch-target"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer touch-target"
         >
           <ArrowLeft className="h-[18px] w-[18px]" />
         </button>
-        <h1 className="text-base font-semibold sm:text-lg">Settings</h1>
+        <h1 className={cn("font-medium", isMobile ? "text-base" : "text-sm")}>Settings</h1>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {!isMobile && (
+          // Same surface and hairline as the chat sidebar: the app separates
+          // columns with a border, never with a different background tint.
           <nav
             aria-label="Settings sections"
-            className="flex w-44 flex-shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-muted/20 p-2 lg:w-56"
+            className="flex w-44 flex-shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-sidebar-border bg-background p-2 lg:w-52"
           >
             {sections.map((s) => {
               const Icon = s.icon
@@ -114,7 +116,7 @@ export function SettingsPage({
                   onClick={() => selectSection(s.key)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm transition-colors cursor-pointer",
+                    "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors cursor-pointer",
                     isActive
                       ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -129,19 +131,16 @@ export function SettingsPage({
         )}
 
         <div className={cn("min-w-0 flex-1 overflow-y-auto", isMobile && "mobile-scroll")}>
-          {/* Fills the pane rather than sitting in a capped, centred column:
-              Settings owns the whole window, so a narrower block would leave
-              the section divider stranded mid-screen. */}
+          {/* Capped and centred in the pane beside the rail. The cap keeps a
+              control from ending up a screen-width away from its label. */}
           <div
             className={cn(
               "w-full",
-              isMobile ? "px-4 pt-4 pb-16" : "px-8 pt-5 pb-10"
+              isMobile ? "px-4 pt-4 pb-16" : "mx-auto max-w-3xl px-8 pt-6 pb-12"
             )}
           >
             {!isMobile && (
-              <h2 className="mb-5 border-b border-border pb-4 text-xl font-medium">
-                {activeTitle}
-              </h2>
+              <h2 className="mb-1 text-base font-medium">{activeTitle}</h2>
             )}
             {isPlaceholderData || !data ? (
               <SettingsSkeleton />
