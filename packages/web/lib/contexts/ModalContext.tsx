@@ -1,7 +1,10 @@
 "use client"
 
 import { createContext, useContext, useState, useCallback, ReactNode } from "react"
-import type { HighlightKey, SectionKey } from "@/components/modals/SettingsModal"
+import { normalizeSectionKey, type SectionKey } from "@/components/settings/sections"
+import type { HighlightKey } from "@/components/settings"
+import { ROUTES } from "@/lib/hooks/useUrlNavigation"
+import { useSidebar } from "./SidebarContext"
 
 // =============================================================================
 // ModalContext - Provides modal state to avoid drilling modal callbacks
@@ -12,15 +15,18 @@ export interface ModalContextValue {
   repoCreateOpen: boolean
   setRepoCreateOpen: (open: boolean) => void
 
-  // Settings modal
+  // Settings page (a full view, not a modal — see components/settings/SettingsPage)
   settingsOpen: boolean
-  setSettingsOpen: (open: boolean) => void
   settingsHighlightKey: HighlightKey
-  settingsDefaultSection: SectionKey
-  /** Called when Settings is dismissed without providing the highlighted API key. */
+  /** Section currently shown by the settings page (mirrors /settings/<section>). */
+  settingsSection: SectionKey
+  /** Set the shown section without touching history (unknown ids fall back to "general"). */
+  setSettingsSection: (section: string | null) => void
+  /** Called when Settings is left without providing the highlighted API key. */
   settingsDismissRevert: (() => void) | null
   openSettings: (highlightKey?: HighlightKey, onDismissWithoutKey?: () => void) => void
   openSettingsSection: (section?: SectionKey) => void
+  /** Clears the one-shot settings state. Navigation away is the caller's job. */
   closeSettings: () => void
 
   // Help & Sign-in modals
@@ -73,16 +79,19 @@ interface ModalProviderProps {
 const ModalContext = createContext<ModalContextValue | null>(null)
 
 export function ModalProvider({ children, isMobile, onMobileSidebarClose }: ModalProviderProps) {
+  const sidebar = useSidebar()
+
   // Repo Create modal
   const [repoCreateOpen, setRepoCreateOpen] = useState(false)
 
-  // Settings modal state
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Settings page state. "Open" is just the main view being the settings page,
+  // so the browser URL (/settings/...) stays the single source of truth.
   const [settingsHighlightKey, setSettingsHighlightKey] = useState<HighlightKey>(null)
-  const [settingsDefaultSection, setSettingsDefaultSection] = useState<SectionKey>("general")
-  // Revert callback invoked if Settings is dismissed without the highlighted key
-  // (e.g. the user picked an agent that needs a key, then closed without one).
+  const [settingsSectionState, setSettingsSectionState] = useState<SectionKey>("general")
+  // Revert callback invoked if Settings is left without the highlighted key
+  // (e.g. the user picked an agent that needs a key, then left without one).
   const [settingsDismissRevert, setSettingsDismissRevert] = useState<(() => void) | null>(null)
+  const settingsOpen = sidebar.viewMode === "settings"
 
   // Help & Sign-in modals
   const [helpOpen, setHelpOpen] = useState(false)
@@ -113,34 +122,50 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
   const openChatUsage = useCallback((chatId: string) => setChatUsageChatId(chatId), [])
   const closeChatUsage = useCallback(() => setChatUsageChatId(null), [])
 
-  // Handler for opening settings (optionally with a highlighted API key field
-  // and a revert callback for when it's dismissed without providing that key)
-  const openSettings = useCallback((highlightKey?: HighlightKey, onDismissWithoutKey?: () => void) => {
-    setSettingsHighlightKey(highlightKey ?? null)
-    setSettingsDefaultSection("general")
-    // Store the callback itself (wrap so useState doesn't treat it as an updater).
-    setSettingsDismissRevert(() => onDismissWithoutKey ?? null)
-    setSettingsOpen(true)
+  // Show the given section without touching history — used by the URL sync on
+  // initial load and browser back/forward.
+  const setSettingsSection = useCallback((section: string | null) => {
+    setSettingsSectionState(normalizeSectionKey(section))
+  }, [])
+
+  // Switch the main view to the settings page at the given section. Uses
+  // pushState (like the rest of the app's navigation) so no remount happens,
+  // and replaceState when Settings is already open so each visited section
+  // doesn't add a history entry to step back through.
+  const goToSettings = useCallback((section: SectionKey) => {
+    setSettingsSectionState(section)
+    const alreadyOpen = sidebar.viewMode === "settings"
+    sidebar.setViewMode("settings")
+    sidebar.setSelectedScheduledJob(null)
+    const url = ROUTES.settings.build(section)
+    if (alreadyOpen) window.history.replaceState(null, "", url)
+    else window.history.pushState(null, "", url)
     // Close mobile sidebar when opening settings
     if (isMobile) {
       onMobileSidebarClose?.()
     }
-  }, [isMobile, onMobileSidebarClose])
+  }, [sidebar, isMobile, onMobileSidebarClose])
+
+  // Handler for opening settings (optionally with a highlighted API key field
+  // and a revert callback for when it's left without providing that key)
+  const openSettings = useCallback((highlightKey?: HighlightKey, onDismissWithoutKey?: () => void) => {
+    setSettingsHighlightKey(highlightKey ?? null)
+    // Store the callback itself (wrap so useState doesn't treat it as an updater).
+    setSettingsDismissRevert(() => onDismissWithoutKey ?? null)
+    // A highlighted key only makes sense on the section that shows it.
+    goToSettings(highlightKey ? "api-keys" : "general")
+  }, [goToSettings])
 
   // Handler for opening settings to a specific section (used by command palette)
   const openSettingsSection = useCallback((section?: SectionKey) => {
     setSettingsHighlightKey(null)
     setSettingsDismissRevert(null)
-    setSettingsDefaultSection(section ?? "general")
-    setSettingsOpen(true)
-    if (isMobile) {
-      onMobileSidebarClose?.()
-    }
-  }, [isMobile, onMobileSidebarClose])
+    goToSettings(section ?? "general")
+  }, [goToSettings])
 
-  // Handler for closing settings
+  // Clear the one-shot settings state (highlight + revert callback). The caller
+  // navigates away; the settings page itself persists pending edits first.
   const closeSettings = useCallback(() => {
-    setSettingsOpen(false)
     setSettingsHighlightKey(null)
     setSettingsDismissRevert(null)
   }, [])
@@ -150,11 +175,11 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
     repoCreateOpen,
     setRepoCreateOpen,
 
-    // Settings modal
+    // Settings page
     settingsOpen,
-    setSettingsOpen,
     settingsHighlightKey,
-    settingsDefaultSection,
+    settingsSection: settingsSectionState,
+    setSettingsSection,
     settingsDismissRevert,
     openSettings,
     openSettingsSection,

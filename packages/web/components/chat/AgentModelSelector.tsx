@@ -11,7 +11,7 @@ import { fmtCreditAmount } from "@/lib/format"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
-import type { HighlightKey } from "../modals/SettingsModal"
+import type { HighlightKey } from "@/components/settings"
 import {
   Popover,
   PopoverContent,

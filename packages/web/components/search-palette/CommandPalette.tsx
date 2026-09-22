@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/command"
 import { VariableIcon } from "@/components/icons/variable-icon"
 import { SLASH_COMMANDS } from "@background-agents/common"
-import type { SectionKey } from "@/components/modals/SettingsModal"
+import type { SectionKey } from "@/components/settings/sections"
 import type { Theme } from "@/lib/types"
 import type { PaletteCommandCallbacks } from "./types"
 

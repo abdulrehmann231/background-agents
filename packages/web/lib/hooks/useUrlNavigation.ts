@@ -50,6 +50,15 @@ export const ROUTES = {
       return m ? { jobId: m[1] } : null
     },
   },
+  settings: {
+    path: "/settings/:section?",
+    build: (section?: string) =>
+      section && section !== "general" ? `/settings/${section}` : "/settings",
+    match: (path: string): RouteMatch<{ section: string | null }> => {
+      const m = path.match(/^\/settings(?:\/([^/]+))?$/)
+      return m ? { section: m[1] ?? null } : null
+    },
+  },
   jobRun: {
     path: "/jobs/:jobId/runs/:runId",
     build: (jobId: string, runId: string) => `/jobs/${jobId}/runs/${runId}` as const,
@@ -71,6 +80,7 @@ export function matchRoute(path: string):
   | { route: "jobRun"; jobId: string; runId: string }
   | { route: "job"; jobId: string }
   | { route: "jobs" }
+  | { route: "settings"; section: string | null }
   | { route: "home" }
   | null {
   // Check in order of specificity (more specific patterns first)
@@ -103,6 +113,11 @@ export function matchRoute(path: string):
 
   if (ROUTES.jobs.match(path)) {
     return { route: "jobs" }
+  }
+
+  const settingsMatch = ROUTES.settings.match(path)
+  if (settingsMatch) {
+    return { route: "settings", section: settingsMatch.section }
   }
 
   if (ROUTES.home.match(path)) {

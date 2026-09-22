@@ -6,6 +6,9 @@ import { createContext, useContext, useState, useCallback, ReactNode } from "rea
 // SidebarContext - Provides sidebar UI state to avoid prop drilling
 // =============================================================================
 
+/** Which primary view fills the main content area. */
+export type ViewMode = "chat" | "scheduled-jobs" | "settings"
+
 export interface SidebarContextValue {
   // Sidebar collapse state
   collapsed: boolean
@@ -30,9 +33,9 @@ export interface SidebarContextValue {
   toggleChatCollapsed: (id: string) => void
   expandChatAndAncestors: (targetId: string, byId: Map<string, { parentChatId?: string | null }>) => void
 
-  // Scheduled jobs view
-  viewMode: "chat" | "scheduled-jobs"
-  setViewMode: (mode: "chat" | "scheduled-jobs") => void
+  // Main view (chat, scheduled jobs, or the settings page)
+  viewMode: ViewMode
+  setViewMode: (mode: ViewMode) => void
   selectedScheduledJob: { id: string; name: string } | null
   setSelectedScheduledJob: (job: { id: string; name: string } | null) => void
 }
@@ -94,8 +97,8 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
     })
   }, [])
 
-  // View mode (chat vs scheduled jobs)
-  const [viewMode, setViewMode] = useState<"chat" | "scheduled-jobs">("chat")
+  // View mode (chat vs scheduled jobs vs settings)
+  const [viewMode, setViewMode] = useState<ViewMode>("chat")
   const [selectedScheduledJob, setSelectedScheduledJob] = useState<{ id: string; name: string } | null>(null)
 
   const value: SidebarContextValue = {

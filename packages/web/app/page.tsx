@@ -8,8 +8,10 @@ import { Sidebar } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
 import { PreviewView } from "@/components/PreviewView"
 import { AppModals } from "@/components/AppModals"
+import { SettingsPage } from "@/components/settings"
 import { useGitDialogs } from "@/components/modals/git-dialogs"
 import { ScheduledJobsView } from "@/components/scheduled-jobs/ScheduledJobsView"
+import { focusChatPrompt } from "@/components/ui/modal-header"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider, usePalette } from "@/components/search-palette"
 import { basename } from "@/lib/format"
@@ -19,6 +21,7 @@ import { useGitHubTokenCheck } from "@/lib/hooks/useGitHubTokenCheck"
 import { usePreview } from "@/lib/hooks/usePreview"
 import { usePageTitle } from "@/lib/hooks/usePageTitle"
 import { useUrlSync } from "@/lib/hooks/useUrlSync"
+import { ROUTES } from "@/lib/hooks/useUrlNavigation"
 import { useSandboxActions } from "@/lib/hooks/useSandboxActions"
 import { useDraftChat } from "@/lib/hooks/useDraftChat"
 import { usePendingMessageReplay } from "@/lib/hooks/usePendingMessageReplay"
@@ -308,6 +311,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       startNewChat(NEW_REPOSITORY, "main", undefined, true, "pending", agent),
     setViewMode: sidebar.setViewMode,
     setSelectedScheduledJob: sidebar.setSelectedScheduledJob,
+    setSettingsSection: modals.setSettingsSection,
   })
 
   // =============================================================================
@@ -380,6 +384,9 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
 
   // Dynamic page title based on current view
   const pageTitle = useMemo(() => {
+    if (modals.settingsOpen) {
+      return "Settings"
+    }
     if (isJobsRoute) {
       return sidebar.selectedScheduledJob?.name ?? "Scheduled Agents"
     }
@@ -390,7 +397,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
       return "New Chat"
     }
     return null
-  }, [isJobsRoute, isNewChatRoute, isDraftMode, displayCurrentChat?.displayName, sidebar.selectedScheduledJob?.name])
+  }, [modals.settingsOpen, isJobsRoute, isNewChatRoute, isDraftMode, displayCurrentChat?.displayName, sidebar.selectedScheduledJob?.name])
 
   usePageTitle(pageTitle)
 
@@ -418,6 +425,21 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     }
     modals.setRepoCreateOpen(true)
   }
+
+  // Leave the settings page and go back to whatever the user was looking at.
+  // Replaces the /settings history entry rather than pushing a new one, so
+  // Back keeps stepping through the chats they visited, not in and out of
+  // Settings. The page persists its pending edits as it unmounts.
+  const handleCloseSettings = useCallback(() => {
+    modals.closeSettings()
+    sidebar.setViewMode("chat")
+    const target =
+      currentChatId && !isDraftChatId(currentChatId)
+        ? ROUTES.chat.build(currentChatId)
+        : ROUTES.home.build()
+    window.history.replaceState(null, "", target)
+    focusChatPrompt()
+  }, [modals, sidebar, currentChatId, isDraftChatId])
 
   // After sign-in, replay any pending message saved before the OAuth redirect.
   // The hook handles the two-effect coordination (create chat → stage send →
@@ -597,127 +619,144 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     <GitProvider value={gitContextValue}>
     <LocalSyncManager />
     <div className={`flex overflow-hidden ${isMobile ? 'h-screen-mobile' : 'h-screen'}`}>
-      {/* Sidebar — desktop renders inline, mobile renders as a drawer.
-          The Sidebar component branches on isMobile internally, so the only
-          props that actually differ are the collapse/width controls (no-op on
-          mobile), the drawer-specific mobileOpen/onMobileClose, and the
-          scheduled-jobs handler (which also closes the drawer on mobile). */}
-      <Sidebar
-        chats={displayChats}
-        currentChatId={displayCurrentChatId}
-        deletingChatIds={deletingChatIds}
-        unseenChatIds={unseenChatIds}
-        onSelectChat={handleSelectChat}
-        onNewChat={handleNewChat}
-        onDeleteChat={(chatId) => {
-          // Always confirm deletions triggered from the sidebar "..." menu.
-          modals.setDeleteConfirmChatId(chatId)
-        }}
-        onPinChat={(chatId, pinned) => setChatPinned(chatId, pinned)}
-        onBranchChat={handleBranchFromChat}
-        onArchiveChat={(chatId) => setChatArchived(chatId, true, getNextChatId)}
-        onUnarchiveChat={(chatId) => setChatArchived(chatId, false, getNextChatId)}
-        onRenameChat={renameChat}
-        isMobile={isMobile}
-        collapsed={isMobile ? false : sidebar.collapsed}
-        onToggleCollapse={isMobile ? () => {} : () => sidebar.toggleCollapse()}
-        width={isMobile ? 280 : sidebar.width}
-        onWidthChange={isMobile ? () => {} : sidebar.setWidth}
-        mobileOpen={isMobile ? sidebar.mobileSidebarOpen : undefined}
-        onMobileClose={isMobile ? () => sidebar.setMobileSidebarOpen(false) : undefined}
-        repoFilter={sidebar.repoFilter}
-        onRepoFilterChange={handleRepoFilterChange}
-        collapsedChatIds={sidebar.collapsedChatIds}
-        onToggleChatCollapsed={sidebar.toggleChatCollapsed}
-        onRequestMergeChats={handleRequestMergeChats}
-        onRequestRebaseChat={handleRequestRebaseChat}
-        onOpenScheduledJobs={
-          isMobile
-            ? () => {
-                handleOpenScheduledJobs()
-                sidebar.setMobileSidebarOpen(false)
-              }
-            : handleOpenScheduledJobs
-        }
-        scheduledJobsActive={sidebar.viewMode === "scheduled-jobs"}
-        selectedScheduledJob={sidebar.viewMode === "scheduled-jobs" ? sidebar.selectedScheduledJob : null}
-        isLoadingChats={!isHydrated || (isLoading && displayChats.length === 0)}
-      />
+      {/* Settings takes over the whole window — the chat sidebar and panel
+          are unmounted while it's open, so it reads as a page of its own
+          rather than a third navigation column. */}
+      {sidebar.viewMode === "settings" ? (
+        <SettingsPage
+          isMobile={isMobile}
+          activeSection={modals.settingsSection}
+          onSectionChange={modals.setSettingsSection}
+          onSave={updateSettings}
+          onClose={handleCloseSettings}
+          highlightKey={modals.settingsHighlightKey}
+          onDismissWithoutKey={modals.settingsDismissRevert}
+        />
+      ) : (
+        <>
+        {/* Sidebar — desktop renders inline, mobile renders as a drawer.
+            The Sidebar component branches on isMobile internally, so the only
+            props that actually differ are the collapse/width controls (no-op on
+            mobile), the drawer-specific mobileOpen/onMobileClose, and the
+            scheduled-jobs handler (which also closes the drawer on mobile). */}
+        <Sidebar
+          chats={displayChats}
+          currentChatId={displayCurrentChatId}
+          deletingChatIds={deletingChatIds}
+          unseenChatIds={unseenChatIds}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onDeleteChat={(chatId) => {
+            // Always confirm deletions triggered from the sidebar "..." menu.
+            modals.setDeleteConfirmChatId(chatId)
+          }}
+          onPinChat={(chatId, pinned) => setChatPinned(chatId, pinned)}
+          onBranchChat={handleBranchFromChat}
+          onArchiveChat={(chatId) => setChatArchived(chatId, true, getNextChatId)}
+          onUnarchiveChat={(chatId) => setChatArchived(chatId, false, getNextChatId)}
+          onRenameChat={renameChat}
+          isMobile={isMobile}
+          collapsed={isMobile ? false : sidebar.collapsed}
+          onToggleCollapse={isMobile ? () => {} : () => sidebar.toggleCollapse()}
+          width={isMobile ? 280 : sidebar.width}
+          onWidthChange={isMobile ? () => {} : sidebar.setWidth}
+          mobileOpen={isMobile ? sidebar.mobileSidebarOpen : undefined}
+          onMobileClose={isMobile ? () => sidebar.setMobileSidebarOpen(false) : undefined}
+          repoFilter={sidebar.repoFilter}
+          onRepoFilterChange={handleRepoFilterChange}
+          collapsedChatIds={sidebar.collapsedChatIds}
+          onToggleChatCollapsed={sidebar.toggleChatCollapsed}
+          onRequestMergeChats={handleRequestMergeChats}
+          onRequestRebaseChat={handleRequestRebaseChat}
+          onOpenScheduledJobs={
+            isMobile
+              ? () => {
+                  handleOpenScheduledJobs()
+                  sidebar.setMobileSidebarOpen(false)
+                }
+              : handleOpenScheduledJobs
+          }
+          scheduledJobsActive={sidebar.viewMode === "scheduled-jobs"}
+          selectedScheduledJob={sidebar.viewMode === "scheduled-jobs" ? sidebar.selectedScheduledJob : null}
+          isLoadingChats={!isHydrated || (isLoading && displayChats.length === 0)}
+        />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
-        {isMobile && (
-          <MobileHeaderWithPalette
-            chat={displayCurrentChat}
-            viewMode={sidebar.viewMode}
-            githubBranchUrl={githubBranchUrl}
-            onOpenMenu={() => sidebar.setMobileSidebarOpen(true)}
-            onOpenInGitHub={handleOpenInGitHub}
-            onOpenEnvVars={handleOpenEnvVars}
-          />
-        )}
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Mobile Header */}
+          {isMobile && (
+            <MobileHeaderWithPalette
+              chat={displayCurrentChat}
+              viewMode={sidebar.viewMode}
+              githubBranchUrl={githubBranchUrl}
+              onOpenMenu={() => sidebar.setMobileSidebarOpen(true)}
+              onOpenInGitHub={handleOpenInGitHub}
+              onOpenEnvVars={handleOpenEnvVars}
+            />
+          )}
 
-        <div className="flex-1 flex min-h-0">
-            <div className="flex-1 flex flex-col min-w-0">
-              {sidebar.viewMode === "scheduled-jobs" ? (
-                <ScheduledJobsView
-                  onOpenForm={() => modals.setScheduledJobFormOpen(true)}
-                  refreshKey={scheduledJobsRefreshKey}
-                  urlJobId={urlJobId}
-                  onNavigateToJob={handleNavigateToJob}
-                />
-              ) : (
-                <ChatPanelWithPalette
-                  chat={displayCurrentChat}
-                  settings={settings}
-                  credentialFlags={credentialFlags}
-                  showClaudeLimitDialog={() => {
-                    setLimitReachedState({ show: true, provider: "claude" })
-                  }}
-                  onSendMessage={handleSendMessage}
-                  onReload={reloadChat}
-                  onEnqueueMessage={enqueueMessage}
-                  onRemoveQueuedMessage={removeQueuedMessage}
-                  onResumeQueue={resumeQueue}
-                  onStopAgent={stopAgent}
-                  onUpdateChat={handleUpdateChatProp}
-                  onSlashCommand={handleSlashCommand}
-                  onOpenFile={(filePath) => {
-                    const filename = basename(filePath)
-                    preview.openPreview({ type: "file", filePath, filename })
-                  }}
-                  onOpenEnvVars={handleOpenEnvVars}
-                  isDraftChat={!!displayCurrentChatId && isDraftChatId(displayCurrentChatId)}
-                  onMaterializeDraftForMcp={handleMaterializeDraftForMcp}
-                  isMobile={isMobile}
-                  isLoadingMessages={isLoadingMessages}
-                  draft={currentDraft}
-                  onDraftChange={handleDraftChange}
-                  isSending={isSendingMessage}
-                  isAuthenticated={!!session}
-                />
+          <div className="flex-1 flex min-h-0">
+              <div className="flex-1 flex flex-col min-w-0">
+                {sidebar.viewMode === "scheduled-jobs" ? (
+                  <ScheduledJobsView
+                    onOpenForm={() => modals.setScheduledJobFormOpen(true)}
+                    refreshKey={scheduledJobsRefreshKey}
+                    urlJobId={urlJobId}
+                    onNavigateToJob={handleNavigateToJob}
+                  />
+                ) : (
+                  <ChatPanelWithPalette
+                    chat={displayCurrentChat}
+                    settings={settings}
+                    credentialFlags={credentialFlags}
+                    showClaudeLimitDialog={() => {
+                      setLimitReachedState({ show: true, provider: "claude" })
+                    }}
+                    onSendMessage={handleSendMessage}
+                    onReload={reloadChat}
+                    onEnqueueMessage={enqueueMessage}
+                    onRemoveQueuedMessage={removeQueuedMessage}
+                    onResumeQueue={resumeQueue}
+                    onStopAgent={stopAgent}
+                    onUpdateChat={handleUpdateChatProp}
+                    onSlashCommand={handleSlashCommand}
+                    onOpenFile={(filePath) => {
+                      const filename = basename(filePath)
+                      preview.openPreview({ type: "file", filePath, filename })
+                    }}
+                    onOpenEnvVars={handleOpenEnvVars}
+                    isDraftChat={!!displayCurrentChatId && isDraftChatId(displayCurrentChatId)}
+                    onMaterializeDraftForMcp={handleMaterializeDraftForMcp}
+                    isMobile={isMobile}
+                    isLoadingMessages={isLoadingMessages}
+                    draft={currentDraft}
+                    onDraftChange={handleDraftChange}
+                    isSending={isSendingMessage}
+                    isAuthenticated={!!session}
+                  />
+                )}
+              </div>
+              {!isMobile && preview.previewOpen && (
+                <>
+                  <div
+                    onMouseDown={preview.startPreviewResize}
+                    className="group flex-shrink-0 w-1 cursor-col-resize relative"
+                    aria-label="Resize preview"
+                    role="separator"
+                  >
+                    <span className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
+                  </div>
+                  <PreviewView
+                    style={{ width: preview.previewWidth }}
+                    className="flex-shrink-0"
+                    {...previewCommonProps}
+                  />
+                </>
               )}
             </div>
-            {!isMobile && preview.previewOpen && (
-              <>
-                <div
-                  onMouseDown={preview.startPreviewResize}
-                  className="group flex-shrink-0 w-1 cursor-col-resize relative"
-                  aria-label="Resize preview"
-                  role="separator"
-                >
-                  <span className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
-                </div>
-                <PreviewView
-                  style={{ width: preview.previewWidth }}
-                  className="flex-shrink-0"
-                  {...previewCommonProps}
-                />
-              </>
-            )}
-          </div>
-      </div>
+        </div>
+        </>
+      )}
 
       {/* Mobile preview - full-screen overlay since there's no room for a split pane. */}
       {isMobile && preview.previewOpen && (
@@ -750,7 +789,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         githubTokenInvalid={githubTokenInvalid}
         onDismissReAuthBanner={dismissReAuthBanner}
         onRepoSelect={handleRepoSelect}
-        onSaveSettings={updateSettings}
         onSaveEnvVars={handleSaveEnvVars}
         envVarsChatEnvVars={envVarsChatEnvVars}
         envVarsRepoEnvVars={envVarsRepoEnvVars}
