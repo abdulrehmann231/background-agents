@@ -4,12 +4,22 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useUserUsageQuery } from "@/lib/query/hooks/useUserUsageQuery"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { fmtBalance, fmtTokens } from "@/lib/format"
-import type { UsageRange } from "@/lib/db/user-usage"
+import type { UsageDimension, UsageRange } from "@/lib/db/user-usage"
 import { MobileSectionHeader } from "./shared"
 import { SpendPerDayChart, type UsageMetricKey } from "./charts/SpendPerDayChart"
+import { UsageBreakdown } from "./charts/UsageBreakdown"
 
 const RANGES: { key: UsageRange; label: string; days: number }[] = [
   { key: "7d", label: "7 days", days: 7 },
@@ -21,6 +31,16 @@ const METRICS: { key: UsageMetricKey; label: string }[] = [
   { key: "credits", label: "Credits" },
   { key: "tokens", label: "Tokens" },
 ]
+
+const DIMENSIONS: { key: UsageDimension; label: string }[] = [
+  { key: "model", label: "Model" },
+  { key: "agent", label: "Agent" },
+  { key: "repo", label: "Repo" },
+  { key: "chat", label: "Chat" },
+]
+
+/** The whole-account scope, as both the select value and the query param. */
+const ACCOUNT_SCOPE = "account"
 
 interface UsageSectionProps {
   isMobile: boolean
@@ -37,9 +57,11 @@ interface UsageSectionProps {
 export function UsageSection({ isMobile }: UsageSectionProps) {
   const [range, setRange] = useState<UsageRange>("30d")
   const [metric, setMetric] = useState<UsageMetricKey>("credits")
+  const [scope, setScope] = useState<string>(ACCOUNT_SCOPE)
+  const [dimension, setDimension] = useState<UsageDimension>("model")
 
   const { status: sessionStatus } = useSession()
-  const { data, isPending, isError } = useUserUsageQuery(range)
+  const { data, isPending, isError } = useUserUsageQuery(range, scope)
   const { data: settings } = useSettingsQuery()
   // The query is disabled when logged out, which leaves it pending forever —
   // so signed-out gets its own branch rather than a skeleton that never fills.
@@ -52,8 +74,12 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
   // Runway is the question a balance actually raises: not "how much is left"
   // but "how long does that last". Based on the window on screen, so changing
   // the range changes the assumption behind it — which is the honest reading.
+  // Only meaningful for the whole account: a repo's burn rate says nothing
+  // about how long the balance lasts, since everything else is spending it too.
+  const isAccountScope = scope === ACCOUNT_SCOPE
   const dailyBurn = totals && rangeDays > 0 ? totals.creditsUsd / rangeDays : 0
-  const runwayDays = balanceUsd !== null && dailyBurn > 0 ? balanceUsd / dailyBurn : null
+  const runwayDays =
+    isAccountScope && balanceUsd !== null && dailyBurn > 0 ? balanceUsd / dailyBurn : null
 
   return (
     <div>
@@ -73,6 +99,12 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
           onChange={setMetric}
           ariaLabel="Measure"
         />
+        <ScopePicker
+          value={scope}
+          onChange={setScope}
+          options={data?.scopeOptions}
+          disabled={isSignedOut}
+        />
       </div>
 
       {isSignedOut ? (
@@ -89,7 +121,7 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile
-              label={`Spent · ${rangeDays}d`}
+              label={isAccountScope ? `Spent · ${rangeDays}d` : `Spent here · ${rangeDays}d`}
               value={fmtBalance(totals!.creditsUsd)}
               delta={pctDelta(totals!.creditsUsd, totals!.prevCreditsUsd)}
               hero
@@ -98,9 +130,11 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
               label="Balance"
               value={balanceUsd === null ? "—" : fmtBalance(balanceUsd)}
               caption={
-                runwayDays === null
-                  ? "No spend to project from"
-                  : `≈ ${formatRunway(runwayDays)} at this rate`
+                !isAccountScope
+                  ? "Whole account"
+                  : runwayDays === null
+                    ? "No spend to project from"
+                    : `≈ ${formatRunway(runwayDays)} at this rate`
               }
             />
             <StatTile
@@ -125,6 +159,32 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
                 : "Every token recorded, by agent — including runs on your own keys."}
             </p>
             <SpendPerDayChart daily={data.daily} providers={data.providers} metric={metric} />
+          </div>
+
+          <div className="mt-8">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-medium">Where it went</h3>
+                <p className="text-xs text-muted-foreground">
+                  Ranked by {metric === "credits" ? "credits charged" : "tokens"}. Pick a repo or
+                  chat row to narrow everything above to it.
+                </p>
+              </div>
+              <SegmentedControl
+                options={DIMENSIONS}
+                value={dimension}
+                onChange={setDimension}
+                ariaLabel="Break down by"
+              />
+            </div>
+            <UsageBreakdown
+              rows={data.breakdowns[dimension]}
+              dimension={dimension}
+              metric={metric}
+              onScopeTo={(row) =>
+                setScope(dimension === "repo" ? `repo:${row.key}` : `chat:${row.key}`)
+              }
+            />
           </div>
         </>
       )}
@@ -182,6 +242,59 @@ function StatTile({ label, value, delta, caption, hero = false }: StatTileProps)
       )}
       {caption && <div className="mt-1.5 text-[11px] text-muted-foreground">{caption}</div>}
     </div>
+  )
+}
+
+/**
+ * Scope: the whole account, one repo, or one chat — one control, since they are
+ * one idea rather than three independent filters.
+ *
+ * Options always list the whole account even while a scope is applied, so the
+ * control can always get back out of wherever it is.
+ */
+function ScopePicker({
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  value: string
+  onChange: (next: string) => void
+  options?: { repos: { key: string; label: string }[]; chats: { key: string; label: string }[] }
+  disabled?: boolean
+}) {
+  const repos = options?.repos ?? []
+  const chats = options?.chats ?? []
+
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="h-8 w-52 text-xs" aria-label="Scope">
+        <SelectValue placeholder="Whole account" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ACCOUNT_SCOPE}>Whole account</SelectItem>
+        {repos.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Repositories</SelectLabel>
+            {repos.map((repo) => (
+              <SelectItem key={repo.key} value={`repo:${repo.key}`}>
+                {repo.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+        {chats.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Chats</SelectLabel>
+            {chats.map((chat) => (
+              <SelectItem key={chat.key} value={`chat:${chat.key}`}>
+                {chat.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+      </SelectContent>
+    </Select>
   )
 }
 

@@ -77,6 +77,16 @@ export function seriesColor(provider: string, isDark: boolean): string {
   return (isDark ? SERIES_DARK : SERIES_LIGHT)[AGENT_SLOT[agent]]
 }
 
+/**
+ * The colour for a chart with a single series — slot 1.
+ *
+ * Nominal categories (models, repos, chats) all share this one hue: shading
+ * them by value would re-encode the bar length as colour.
+ */
+export function singleSeriesColor(isDark: boolean): string {
+  return (isDark ? SERIES_DARK : SERIES_LIGHT)[0]
+}
+
 /** Display label for a series keyed by provider name. */
 export function providerSeriesLabel(provider: string): string {
   return provider === OTHER_KEY ? "Other" : providerLabel(provider as ProviderName)

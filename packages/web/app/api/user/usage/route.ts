@@ -3,14 +3,16 @@ import { requireAuth, isAuthError, internalError } from "@/lib/db/api-helpers"
 import {
   getUserUsageSummary,
   parseUsageRange,
+  parseUsageScope,
   type UserUsageSummary,
 } from "@/lib/db/user-usage"
 
 export type UserUsageResponse = UserUsageSummary
 
 /**
- * GET /api/user/usage?range=7d|30d|90d — the authenticated user's own spend and
- * token usage over a window, for the Usage settings tab.
+ * GET /api/user/usage?range=7d|30d|90d&scope=account|repo:<slug>|chat:<id> —
+ * the authenticated user's own spend and token usage over a window, for the
+ * Usage settings tab.
  *
  * The self-serve counterpart to /api/admin/stats: same shape of question, but
  * scoped to the caller and gated on requireAuth rather than requireAdmin.
@@ -24,10 +26,12 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (isAuthError(auth)) return auth
   const { userId } = auth
 
-  const range = parseUsageRange(req.nextUrl.searchParams.get("range"), "30d")
+  const params = req.nextUrl.searchParams
+  const range = parseUsageRange(params.get("range"), "30d")
+  const scope = parseUsageScope(params.get("scope"))
 
   try {
-    const summary = await getUserUsageSummary(userId, range)
+    const summary = await getUserUsageSummary(userId, range, scope)
     return Response.json(summary satisfies UserUsageResponse)
   } catch (error) {
     return internalError(error)
