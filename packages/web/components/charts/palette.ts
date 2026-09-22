@@ -15,7 +15,7 @@ import { ALL_AGENTS, providerToAgent, providerLabel, type Agent, type ProviderNa
  * drawing this palette also carries a legend naming each series: identity is
  * never left to colour alone. Re-validate rather than eyeball if you edit one.
  */
-const SERIES_LIGHT = [
+export const SERIES_LIGHT = [
   "#2a78d6", // blue
   "#eb6834", // orange
   "#1baf7a", // aqua
@@ -26,7 +26,7 @@ const SERIES_LIGHT = [
   "#e34948", // red
 ] as const
 
-const SERIES_DARK = [
+export const SERIES_DARK = [
   "#3987e5",
   "#d95926",
   "#199e70",

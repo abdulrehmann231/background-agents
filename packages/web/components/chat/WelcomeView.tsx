@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { Github, HelpCircle, Command } from "lucide-react"
+import { CreditBalancePill } from "./CreditBalancePill"
 import { cn } from "@/lib/utils"
 
 interface WelcomeViewProps {
@@ -30,6 +31,8 @@ export function WelcomeView({
         isMobile ? "p-4 pb-safe" : "p-4"
       )}>
         <div className="absolute top-3 right-3 flex items-center gap-1">
+          {/* The balance matters most here, before anything has been spent. */}
+          <CreditBalancePill />
           {onOpenCommandPalette && (
             <button
               onClick={onOpenCommandPalette}

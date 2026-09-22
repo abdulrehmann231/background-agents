@@ -101,6 +101,26 @@ export interface UsageBreakdownRow {
   turns: number
 }
 
+/**
+ * How the window's tokens were made up, and how much of them reached the
+ * balance.
+ *
+ * The five parts are reported separately by tokscale and don't necessarily add
+ * up to `totalTokens`, so anything drawing them as a whole should total the
+ * parts rather than assume `totalTokens` is their sum.
+ */
+export interface UsageTokenMix {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  /** Tokens on turns that produced a debit — what the balance actually paid for. */
+  chargedTokens: number
+  /** Every token recorded in the window, charged or not. */
+  totalTokens: number
+}
+
 /** The dimensions a breakdown can be sliced by. */
 export type UsageDimension = "agent" | "model" | "repo" | "chat"
 
@@ -117,6 +137,7 @@ export interface UserUsageSummary {
   daily: UsageDayPoint[]
   /** Providers with activity in the window, ranked by credits then tokens. */
   providers: string[]
+  tokenMix: UsageTokenMix
   breakdowns: Record<UsageDimension, UsageBreakdownRow[]>
   /** Everything the scope picker can offer — always the whole account, so the
    *  picker can still get back out of a scope it is currently inside. */
@@ -218,6 +239,7 @@ export async function getUserUsageSummary(
     tokenTotals,
     creditsByDay,
     tokensByDay,
+    mixRows,
     agentRows,
     modelRows,
     repoRows,
@@ -271,6 +293,27 @@ export async function getUserUsageSummary(
          AND "createdAt" >= NOW() - ${interval}::interval
          ${scopeUsage}
        GROUP BY 1, 2
+    `,
+    prisma.$queryRaw<
+      Array<{
+        input: bigint | null
+        output: bigint | null
+        cacheRead: bigint | null
+        cacheWrite: bigint | null
+        reasoning: bigint | null
+        chargedTokens: bigint | null
+        totalTokens: bigint | null
+      }>
+    >`
+      SELECT SUM(tu."inputTokens")::bigint AS input,
+             SUM(tu."outputTokens")::bigint AS output,
+             SUM(tu."cacheReadTokens")::bigint AS "cacheRead",
+             SUM(tu."cacheWriteTokens")::bigint AS "cacheWrite",
+             SUM(tu."reasoningTokens")::bigint AS reasoning,
+             SUM(tu."totalTokens") FILTER (WHERE ct."id" IS NOT NULL)::bigint AS "chargedTokens",
+             SUM(tu."totalTokens")::bigint AS "totalTokens"
+        FROM "TokenUsage" tu ${ledgerJoin}
+       WHERE ${usageWindow} ${scopeTu}
     `,
     prisma.$queryRaw<RawBreakdownRow[]>`
       SELECT tu."provider" AS key, ${measures}
@@ -350,6 +393,17 @@ export async function getUserUsageSummary(
       (tokensByProvider.get(b) ?? 0) - (tokensByProvider.get(a) ?? 0)
   )
 
+  const mix = mixRows[0]
+  const tokenMix: UsageTokenMix = {
+    input: Number(mix?.input ?? 0n),
+    output: Number(mix?.output ?? 0n),
+    cacheRead: Number(mix?.cacheRead ?? 0n),
+    cacheWrite: Number(mix?.cacheWrite ?? 0n),
+    reasoning: Number(mix?.reasoning ?? 0n),
+    chargedTokens: Number(mix?.chargedTokens ?? 0n),
+    totalTokens: Number(mix?.totalTokens ?? 0n),
+  }
+
   const breakdowns: Record<UsageDimension, UsageBreakdownRow[]> = {
     agent: toBreakdownRows(agentRows, (r) => providerLabel((r.key ?? "") as ProviderName)),
     model: toBreakdownRows(modelRows, (r) => r.key || "Unknown model"),
@@ -382,6 +436,7 @@ export async function getUserUsageSummary(
     },
     daily,
     providers,
+    tokenMix,
     breakdowns,
     scopeOptions,
   }

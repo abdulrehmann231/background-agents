@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react"
 import { Menu, MoreVertical, ChevronDown, Pencil, Github, Trash2, Clock, Command } from "lucide-react"
 import { useModals, useSidebar } from "@/lib/contexts"
+import { CreditBalancePill } from "@/components/chat/CreditBalancePill"
 import type { Chat } from "@/lib/types"
 
 interface MobileHeaderProps {
@@ -120,6 +121,8 @@ export function MobileHeader({
           )}
         </div>
       )}
+
+      {viewMode === "chat" && <CreditBalancePill compact />}
 
       {/* Command palette - only show for chat view */}
       {viewMode === "chat" && onOpenCommandPalette && (

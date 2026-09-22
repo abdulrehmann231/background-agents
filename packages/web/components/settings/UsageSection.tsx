@@ -20,6 +20,8 @@ import type { UsageDimension, UsageRange } from "@/lib/db/user-usage"
 import { MobileSectionHeader } from "./shared"
 import { SpendPerDayChart, type UsageMetricKey } from "./charts/SpendPerDayChart"
 import { UsageBreakdown } from "./charts/UsageBreakdown"
+import { TokenMixBar } from "./charts/TokenMixBar"
+import { ChargedShareMeter } from "./charts/ChargedShareMeter"
 
 const RANGES: { key: UsageRange; label: string; days: number }[] = [
   { key: "7d", label: "7 days", days: 7 },
@@ -185,6 +187,23 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
                 setScope(dimension === "repo" ? `repo:${row.key}` : `chat:${row.key}`)
               }
             />
+          </div>
+
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            <section>
+              <h3 className="text-sm font-medium">What the tokens were</h3>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Cache reads are the cheap part; cache writes cost more than fresh input.
+              </p>
+              <TokenMixBar mix={data.tokenMix} />
+            </section>
+            <section>
+              <h3 className="text-sm font-medium">How much you paid for</h3>
+              <p className="mb-3 text-xs text-muted-foreground">
+                The rest ran on your own keys or a free model and cost nothing.
+              </p>
+              <ChargedShareMeter mix={data.tokenMix} />
+            </section>
           </div>
         </>
       )}
