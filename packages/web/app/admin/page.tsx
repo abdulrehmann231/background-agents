@@ -55,7 +55,7 @@ import {
   type UserUsage,
   type UsageDistribution,
 } from "@/lib/query/hooks"
-import { metricLabel, type StatsMetric } from "@/components/admin/charts/chartFormatters"
+import { metricLabel, type StatsMetric } from "@/components/charts/chartFormatters"
 import { cn } from "@/lib/utils"
 
 const METRIC_OPTIONS: { key: StatsMetric; label: string }[] = [

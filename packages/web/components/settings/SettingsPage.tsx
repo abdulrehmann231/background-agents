@@ -14,6 +14,7 @@ import { GeneralSection } from "./GeneralSection"
 import { ApiKeysSection, type HighlightKey } from "./ApiKeysSection"
 import { CustomEndpointsSection } from "./CustomEndpointsSection"
 import { CreditsSection } from "./CreditsSection"
+import { UsageSection } from "./UsageSection"
 import { GitSection } from "./GitSection"
 import { NotificationsSection } from "./NotificationsSection"
 import { LocalSyncSection } from "./LocalSyncSection"
@@ -476,6 +477,8 @@ function SettingsForm({
         )
       case "credits":
         return <CreditsSection isMobile={isMobile} />
+      case "usage":
+        return <UsageSection isMobile={isMobile} />
       case "git":
         return (
           <GitSection

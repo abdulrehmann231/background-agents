@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Key,
   Sun,
   Bot,
@@ -17,6 +18,7 @@ export type SectionKey =
   | "api-keys"
   | "custom-endpoints"
   | "credits"
+  | "usage"
   | "git"
   | "notifications"
   | "local-sync"
@@ -30,6 +32,7 @@ const baseSections: SectionDef[] = [
   { key: "api-keys", label: "API Keys", icon: Key },
   { key: "custom-endpoints", label: "Custom endpoints", icon: Server },
   { key: "credits", label: "Credits", icon: CreditCard },
+  { key: "usage", label: "Usage", icon: BarChart3 },
   { key: "appearance", label: "Appearance", icon: Sun },
   { key: "git", label: "Git", icon: GitBranch },
   { key: "notifications", label: "Notifications", icon: Bell },

@@ -18,6 +18,9 @@ export { useUpdateSettingsMutation } from "./useUpdateSettingsMutation"
 export { useSuggestNameMutation } from "./useSuggestNameMutation"
 export { useSandboxDeleteMutation } from "./useSandboxDeleteMutation"
 
+export { useUserUsageQuery } from "./useUserUsageQuery"
+export type { UserUsageData, UsageRange as UserUsageRange } from "./useUserUsageQuery"
+
 // Admin
 export { useAdminStatsQuery } from "./useAdminStatsQuery"
 export type { StatsTimeRange, StatsPool } from "./useAdminStatsQuery"

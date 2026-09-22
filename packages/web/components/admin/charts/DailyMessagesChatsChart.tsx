@@ -10,7 +10,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
-import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { chartTooltipProps, lineTooltipCursor } from "@/components/charts/chartTooltip"
 import { ChartEmptyState } from "./ChartEmptyState"
 import {
   formatAxisDate,
@@ -19,7 +19,7 @@ import {
   formatMetricValue,
   metricLabel,
   type StatsMetric,
-} from "./chartFormatters"
+} from "@/components/charts/chartFormatters"
 
 interface SeriesPoint {
   time: string

@@ -10,9 +10,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { chartTooltipProps, lineTooltipCursor } from "@/components/charts/chartTooltip"
 import { ChartEmptyState } from "./ChartEmptyState"
-import { formatAxisDate, formatHour, formatMetricValue, formatTooltipDate } from "./chartFormatters"
+import { formatAxisDate, formatHour, formatMetricValue, formatTooltipDate } from "@/components/charts/chartFormatters"
 import type { PoolSplitPoint, UsageMetric } from "@/lib/query/hooks"
 
 // Shared is our spend, so it takes the primary colour; own-key is muted since it

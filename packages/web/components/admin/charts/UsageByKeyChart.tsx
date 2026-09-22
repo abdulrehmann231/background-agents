@@ -10,14 +10,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { chartTooltipProps, lineTooltipCursor } from "@/components/charts/chartTooltip"
 import {
   CATEGORICAL_COLORS,
   formatAxisDate,
   formatHour,
   formatMetricValue,
   formatTooltipDate,
-} from "./chartFormatters"
+} from "@/components/charts/chartFormatters"
 import type { UsageMetric } from "@/lib/query/hooks"
 
 /** Rows written before per-key attribution shipped carry no fingerprint. */

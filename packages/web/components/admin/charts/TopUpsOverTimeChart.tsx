@@ -9,9 +9,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { chartTooltipProps, lineTooltipCursor } from "@/components/charts/chartTooltip"
 import { ChartEmptyState } from "./ChartEmptyState"
-import { formatAxisDate, formatHour, formatTooltipDate } from "./chartFormatters"
+import { formatAxisDate, formatHour, formatTooltipDate } from "@/components/charts/chartFormatters"
 import type { TopupSeriesPoint } from "@/lib/query/hooks"
 
 const LINE_COLOR = "hsl(152, 60%, 50%)"

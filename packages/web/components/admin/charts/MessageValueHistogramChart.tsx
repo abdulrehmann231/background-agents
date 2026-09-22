@@ -1,8 +1,8 @@
 "use client"
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { chartTooltipProps, barTooltipCursor } from "./chartTooltip"
-import { formatMetricValue } from "./chartFormatters"
+import { chartTooltipProps, barTooltipCursor } from "@/components/charts/chartTooltip"
+import { formatMetricValue } from "@/components/charts/chartFormatters"
 import { ChartEmptyState } from "./ChartEmptyState"
 import type { MessageHistogramBucket, UsageMetric } from "@/lib/query/hooks"
 

@@ -10,9 +10,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts"
-import { chartTooltipProps, barTooltipCursor } from "./chartTooltip"
+import { chartTooltipProps, barTooltipCursor } from "@/components/charts/chartTooltip"
 import { ChartEmptyState } from "./ChartEmptyState"
-import { formatHour, formatMetricValue, metricLabel, type StatsMetric } from "./chartFormatters"
+import { formatHour, formatMetricValue, metricLabel, type StatsMetric } from "@/components/charts/chartFormatters"
 
 interface HourlyActivityData {
   hour: number
