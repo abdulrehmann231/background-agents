@@ -41,7 +41,9 @@ interface ChatUsageModalProps {
 
 /**
  * Per-chat token usage, broken down by provider with a grand total. Opened from
- * the command palette. Links to the Usage settings tab for shared-pool budgets.
+ * the command palette — the quick answer to "what did this conversation cost",
+ * without leaving the chat. The Usage settings tab is the long answer, and this
+ * links into it scoped to this chat.
  */
 export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageModalProps) {
   const modals = useModals()
@@ -153,15 +155,28 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
               </>
             )}
 
-            <button
-              onClick={() => {
-                onClose()
-                modals.openSettingsSection("credits")
-              }}
-              className="text-xs text-primary hover:underline cursor-pointer"
-            >
-              See credits →
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Hands this chat off to the Usage tab as a scope, so the next
+                  question — which model, over what days — is one click away. */}
+              <button
+                onClick={() => {
+                  onClose()
+                  if (chatId) modals.openSettingsSection("usage", `scope=chat:${chatId}`)
+                }}
+                className="text-xs text-primary hover:underline cursor-pointer"
+              >
+                Full usage →
+              </button>
+              <button
+                onClick={() => {
+                  onClose()
+                  modals.openSettingsSection("credits")
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+              >
+                Credits →
+              </button>
+            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

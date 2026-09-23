@@ -25,7 +25,7 @@ export interface ModalContextValue {
   /** Called when Settings is left without providing the highlighted API key. */
   settingsDismissRevert: (() => void) | null
   openSettings: (highlightKey?: HighlightKey, onDismissWithoutKey?: () => void) => void
-  openSettingsSection: (section?: SectionKey) => void
+  openSettingsSection: (section?: SectionKey, query?: string) => void
   /** Clears the one-shot settings state. Navigation away is the caller's job. */
   closeSettings: () => void
 
@@ -132,12 +132,12 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
   // pushState (like the rest of the app's navigation) so no remount happens,
   // and replaceState when Settings is already open so each visited section
   // doesn't add a history entry to step back through.
-  const goToSettings = useCallback((section: SectionKey) => {
+  const goToSettings = useCallback((section: SectionKey, query?: string) => {
     setSettingsSectionState(section)
     const alreadyOpen = sidebar.viewMode === "settings"
     sidebar.setViewMode("settings")
     sidebar.setSelectedScheduledJob(null)
-    const url = ROUTES.settings.build(section)
+    const url = query ? `${ROUTES.settings.build(section)}?${query}` : ROUTES.settings.build(section)
     if (alreadyOpen) window.history.replaceState(null, "", url)
     else window.history.pushState(null, "", url)
     // Close mobile sidebar when opening settings
@@ -156,11 +156,12 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
     goToSettings(highlightKey ? "api-keys" : "general")
   }, [goToSettings])
 
-  // Handler for opening settings to a specific section (used by command palette)
-  const openSettingsSection = useCallback((section?: SectionKey) => {
+  // Handler for opening settings to a specific section (used by the command
+  // palette, and by the per-chat usage modal to hand off its chat as a scope).
+  const openSettingsSection = useCallback((section?: SectionKey, query?: string) => {
     setSettingsHighlightKey(null)
     setSettingsDismissRevert(null)
-    goToSettings(section ?? "general")
+    goToSettings(section ?? "general", query)
   }, [goToSettings])
 
   // Clear the one-shot settings state (highlight + revert callback). The caller

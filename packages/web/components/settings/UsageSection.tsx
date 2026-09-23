@@ -1,23 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useSession } from "next-auth/react"
 import { BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useUserUsageQuery } from "@/lib/query/hooks/useUserUsageQuery"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { fmtBalance, fmtTokens } from "@/lib/format"
 import type { UsageDimension, UsageRange } from "@/lib/db/user-usage"
 import { MobileSectionHeader } from "./shared"
+import { ScopeCombobox, ACCOUNT_SCOPE } from "./ScopeCombobox"
 import { SpendPerDayChart, type UsageMetricKey } from "./charts/SpendPerDayChart"
 import { UsageBreakdown } from "./charts/UsageBreakdown"
 import { TokenMixBar } from "./charts/TokenMixBar"
@@ -41,8 +33,6 @@ const DIMENSIONS: { key: UsageDimension; label: string }[] = [
   { key: "chat", label: "Chat" },
 ]
 
-/** The whole-account scope, as both the select value and the query param. */
-const ACCOUNT_SCOPE = "account"
 
 interface UsageSectionProps {
   isMobile: boolean
@@ -59,7 +49,19 @@ interface UsageSectionProps {
 export function UsageSection({ isMobile }: UsageSectionProps) {
   const [range, setRange] = useState<UsageRange>("30d")
   const [metric, setMetric] = useState<UsageMetricKey>("credits")
-  const [scope, setScope] = useState<string>(ACCOUNT_SCOPE)
+  // In the URL rather than only in state, so a scoped view can be linked to —
+  // which is what lets the per-chat usage modal hand off to this tab.
+  const [scope, setScopeState] = useState<string>(() => {
+    if (typeof window === "undefined") return ACCOUNT_SCOPE
+    return new URLSearchParams(window.location.search).get("scope") || ACCOUNT_SCOPE
+  })
+  const setScope = useCallback((next: string) => {
+    setScopeState(next)
+    const url = new URL(window.location.href)
+    if (next === ACCOUNT_SCOPE) url.searchParams.delete("scope")
+    else url.searchParams.set("scope", next)
+    window.history.replaceState(null, "", url)
+  }, [])
   const [dimension, setDimension] = useState<UsageDimension>("model")
 
   const { status: sessionStatus } = useSession()
@@ -101,7 +103,7 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
           onChange={setMetric}
           ariaLabel="Measure"
         />
-        <ScopePicker
+        <ScopeCombobox
           value={scope}
           onChange={setScope}
           options={data?.scopeOptions}
@@ -261,59 +263,6 @@ function StatTile({ label, value, delta, caption, hero = false }: StatTileProps)
       )}
       {caption && <div className="mt-1.5 text-[11px] text-muted-foreground">{caption}</div>}
     </div>
-  )
-}
-
-/**
- * Scope: the whole account, one repo, or one chat — one control, since they are
- * one idea rather than three independent filters.
- *
- * Options always list the whole account even while a scope is applied, so the
- * control can always get back out of wherever it is.
- */
-function ScopePicker({
-  value,
-  onChange,
-  options,
-  disabled,
-}: {
-  value: string
-  onChange: (next: string) => void
-  options?: { repos: { key: string; label: string }[]; chats: { key: string; label: string }[] }
-  disabled?: boolean
-}) {
-  const repos = options?.repos ?? []
-  const chats = options?.chats ?? []
-
-  return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className="h-8 w-52 text-xs" aria-label="Scope">
-        <SelectValue placeholder="Whole account" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ACCOUNT_SCOPE}>Whole account</SelectItem>
-        {repos.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>Repositories</SelectLabel>
-            {repos.map((repo) => (
-              <SelectItem key={repo.key} value={`repo:${repo.key}`}>
-                {repo.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-        {chats.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>Chats</SelectLabel>
-            {chats.map((chat) => (
-              <SelectItem key={chat.key} value={`chat:${chat.key}`}>
-                {chat.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-      </SelectContent>
-    </Select>
   )
 }
 
