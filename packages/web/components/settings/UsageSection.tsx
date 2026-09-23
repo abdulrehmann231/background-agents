@@ -70,7 +70,8 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
   // The query is disabled when logged out, which leaves it pending forever —
   // so signed-out gets its own branch rather than a skeleton that never fills.
   const isSignedOut = sessionStatus === "unauthenticated"
-  const balanceUsd = settings?.creditBalanceUsd ?? null
+  const balanceUsd = settings?.availableCreditsUsd ?? null
+  const gatedOnCredits = settings?.creditsMode === "balance"
 
   const rangeDays = RANGES.find((r) => r.key === range)?.days ?? 30
   const totals = data?.totals
@@ -83,7 +84,9 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
   const isAccountScope = scope === ACCOUNT_SCOPE
   const dailyBurn = totals && rangeDays > 0 ? totals.creditsUsd / rangeDays : 0
   const runwayDays =
-    isAccountScope && balanceUsd !== null && dailyBurn > 0 ? balanceUsd / dailyBurn : null
+    isAccountScope && gatedOnCredits && balanceUsd !== null && dailyBurn > 0
+      ? balanceUsd / dailyBurn
+      : null
 
   return (
     <div>
@@ -136,9 +139,11 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
               caption={
                 !isAccountScope
                   ? "Whole account"
-                  : runwayDays === null
-                    ? "No spend to project from"
-                    : `≈ ${formatRunway(runwayDays)} at this rate`
+                  : !gatedOnCredits
+                    ? "Not spent on this plan"
+                    : runwayDays === null
+                      ? "No spend to project from"
+                      : `≈ ${formatRunway(runwayDays)} at this rate`
               }
             />
             <StatTile

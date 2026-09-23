@@ -26,6 +26,12 @@ export interface SettingsData {
    */
   creditsMode?: "balance" | "unlimited" | "none"
   /**
+   * The purchased credit balance, always — including for users credits don't
+   * gate. `creditBalanceUsd` answers "should we warn them"; this answers "how
+   * much is in the account", which is what the header shows.
+   */
+  availableCreditsUsd?: number
+  /**
    * Admin-editable pricing multiplier per provider (see lib/db/provider-pricing
    * and the /admin Pricing panel), keyed the same way TokenUsage.provider is.
    * Empty when logged out — the anonymous shared-pool endpoint carries no
@@ -75,6 +81,7 @@ export function useSettingsQuery() {
         planIsPro: response.planIsPro,
         creditBalanceUsd: response.creditBalanceUsd ?? null,
         creditsMode: response.creditsMode,
+        availableCreditsUsd: response.availableCreditsUsd,
         providerMultipliers: response.providerMultipliers ?? {},
       }
     },

@@ -1,6 +1,6 @@
 "use client"
 
-import { Infinity as InfinityIcon, KeyRound, TriangleAlert } from "lucide-react"
+import { TriangleAlert } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
@@ -18,56 +18,46 @@ const LOW_BALANCE_USD = 0.5
  * would be most misleading (a turn finished by the lifecycle cron with no
  * stream attached, the daily refill, a top-up in another tab).
  *
- * Always present for a signed-in user, including at zero and below — running
- * out is exactly when the number matters most. A null balance is not one
- * situation but three, which is what `creditsMode` disentangles: an uncapped
- * plan says "Unlimited", an account on its own keys says so, and only a logged
- * out visitor gets nothing, since there is no account to have a balance.
+ * Always the real number, for every signed-in user, whatever they happen to be
+ * running in the chat — including at zero and below, which is exactly when it
+ * matters most.
+ *
+ * `creditsMode` only decides whether a low balance is *worth warning about*:
+ * an uncapped plan or an account on its own keys can sit at $0.00 all day
+ * without being blocked, so colouring that red would be a false alarm. The
+ * figure still shows; only the alarm is conditional.
  */
 export function CreditBalancePill({ compact = false }: { compact?: boolean }) {
   const modals = useModals()
   const { status } = useSession()
   const { data } = useSettingsQuery()
-  const balanceUsd = data?.creditBalanceUsd
+  const value = data?.availableCreditsUsd
   const mode = data?.creditsMode
 
   if (status !== "authenticated") return null
   // Before the first real response there is nothing trustworthy to show, and a
   // flash of "$0.00" would read as "out of credits" to someone who isn't.
-  if (mode === undefined && (balanceUsd === null || balanceUsd === undefined)) return null
+  if (value === undefined) return null
 
-  if (mode === "unlimited" || mode === "none") {
-    const unlimited = mode === "unlimited"
-    return (
-      <PillButton
-        compact={compact}
-        tone="muted"
-        icon={unlimited ? InfinityIcon : KeyRound}
-        label={unlimited ? "Unlimited" : "Own keys"}
-        title={
-          unlimited
-            ? "Your plan is uncapped — open Usage"
-            : "Running on your own API keys, so credits aren't used — open Usage"
-        }
-        onClick={() => modals.openSettingsSection("usage")}
-      />
-    )
-  }
-
-  const value = balanceUsd ?? 0
-  const isNegative = value < 0
-  const isLow = !isNegative && value < LOW_BALANCE_USD
+  // A balance only bites when credits actually gate this account.
+  const gated = mode === "balance"
+  const isNegative = gated && value < 0
+  const isLow = gated && !isNegative && value < LOW_BALANCE_USD
 
   return (
     <PillButton
       compact={compact}
       tone={isNegative ? "destructive" : isLow ? "warning" : "muted"}
       icon={isNegative || isLow ? TriangleAlert : undefined}
-      label={`${isNegative ? "-" : ""}${fmtBalance(Math.abs(value))}`}
+      label={`${value < 0 ? "-" : ""}${fmtBalance(Math.abs(value))}`}
       title={
-        isNegative
-          ? "Your last turn ran past your balance — open Usage"
-          : "Credits remaining — open Usage"
+        mode === "unlimited"
+          ? "Credits remaining. Your plan is uncapped, so these aren't spent — open Usage"
+          : mode === "none"
+            ? "Credits remaining. You're on your own API keys, so these aren't spent — open Usage"
+            : isNegative
+              ? "Your last turn ran past your balance — open Usage"
+              : "Credits remaining — open Usage"
       }
       onClick={() => modals.openSettingsSection("usage")}
     />

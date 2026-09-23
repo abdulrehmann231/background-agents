@@ -45,6 +45,7 @@ interface SettingsResponse {
    */
   creditBalanceUsd: number | null
   creditsMode: CreditsMode
+  availableCreditsUsd: number
   /**
    * Admin-editable pricing multiplier per provider (see lib/db/provider-pricing
    * and the /admin Pricing panel). Carried here rather than fetched separately
@@ -98,6 +99,7 @@ export async function GET(): Promise<Response> {
       planIsPro: effective.isPro,
       creditBalanceUsd: effective.creditBalanceUsd,
       creditsMode: effective.creditsMode,
+      availableCreditsUsd: effective.availableCreditsUsd,
       providerMultipliers,
     }
     return Response.json(response)
@@ -218,6 +220,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       planIsPro: effective.isPro,
       creditBalanceUsd: effective.creditBalanceUsd,
       creditsMode: effective.creditsMode,
+      availableCreditsUsd: effective.availableCreditsUsd,
       providerMultipliers,
     }
     return Response.json(response)

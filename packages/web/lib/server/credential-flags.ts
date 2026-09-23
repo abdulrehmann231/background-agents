@@ -41,6 +41,13 @@ export interface EffectiveFlags {
    * is nothing.
    */
   creditsMode: CreditsMode
+  /**
+   * The user's purchased credit balance, always — including when credits don't
+   * gate them at all. Unlike `creditBalanceUsd` this is never null for a
+   * signed-in user, because it answers "how much is in the account" rather
+   * than "should we warn them". The header shows this one.
+   */
+  availableCreditsUsd: number
 }
 
 /** See {@link EffectiveCredentialFlags.creditsMode}. */
@@ -158,5 +165,6 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
     plan,
     creditBalanceUsd: gatedOnCredits ? microToUsd(credits) : null,
     creditsMode: gatedOnCredits ? "balance" : !usesSharedPool ? "none" : "unlimited",
+    availableCreditsUsd: microToUsd(credits),
   }
 }
