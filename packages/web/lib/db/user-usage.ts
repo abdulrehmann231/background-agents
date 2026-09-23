@@ -165,6 +165,26 @@ function denseDays(days: number): string[] {
   return out
 }
 
+/**
+ * Display name for a chat, with a date appended when it has no title.
+ *
+ * Untitled chats are common and otherwise identical, which makes a list of
+ * them impossible to pick from. The date is a disambiguator rather than a
+ * precise timestamp, so it is formatted in UTC with a pinned locale: the
+ * point is that two rows differ, and that has to be deterministic regardless
+ * of where the server runs.
+ */
+function chatLabel(displayName: string | null | undefined, createdAt: Date | null): string {
+  if (displayName) return displayName
+  if (!createdAt) return "Untitled chat"
+  const day = createdAt.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  })
+  return `Untitled chat · ${day}`
+}
+
 /** Display name for a repo slug, including the "no repo yet" placeholder. */
 function repoLabel(repo: string): string {
   return repo === NEW_REPOSITORY ? "No repository" : repo
@@ -174,6 +194,7 @@ function repoLabel(repo: string): string {
 interface RawBreakdownRow {
   key: string | null
   label?: string | null
+  createdAt?: Date | null
   tokens: bigint
   turns: bigint
   micro: bigint
@@ -341,12 +362,13 @@ export async function getUserUsageSummary(
        LIMIT 50
     `,
     prisma.$queryRaw<RawBreakdownRow[]>`
-      SELECT tu."chatId" AS key, c."displayName" AS label, ${measures}
+      SELECT tu."chatId" AS key, c."displayName" AS label,
+             c."createdAt" AS "createdAt", ${measures}
         FROM "TokenUsage" tu
         JOIN "Chat" c ON c."id" = tu."chatId"
         ${ledgerJoin}
        WHERE ${usageWindow} ${scopeTu}
-       GROUP BY 1, 2
+       GROUP BY 1, 2, 3
        ORDER BY micro DESC, tokens DESC
        LIMIT 50
     `,
@@ -408,7 +430,7 @@ export async function getUserUsageSummary(
     agent: toBreakdownRows(agentRows, (r) => providerLabel((r.key ?? "") as ProviderName)),
     model: toBreakdownRows(modelRows, (r) => r.key || "Unknown model"),
     repo: toBreakdownRows(repoRows, (r) => repoLabel(r.key ?? "")),
-    chat: toBreakdownRows(chatRows, (r) => r.label || "Untitled chat"),
+    chat: toBreakdownRows(chatRows, (r) => chatLabel(r.label, r.createdAt ?? null)),
   }
 
   // The picker has to list what the account has, not what the current scope
@@ -457,19 +479,22 @@ async function getScopeOptions(
        ORDER BY weight DESC
        LIMIT 50
     `,
-    prisma.$queryRaw<Array<{ key: string; label: string | null; weight: bigint }>>`
+    prisma.$queryRaw<
+      Array<{ key: string; label: string | null; createdAt: Date | null; weight: bigint }>
+    >`
       SELECT tu."chatId" AS key, c."displayName" AS label,
+             c."createdAt" AS "createdAt",
              SUM(tu."totalTokens")::bigint AS weight
         FROM "TokenUsage" tu
         JOIN "Chat" c ON c."id" = tu."chatId"
        WHERE tu."userId" = ${userId} AND tu."createdAt" >= NOW() - ${interval}::interval
-       GROUP BY 1, 2
+       GROUP BY 1, 2, 3
        ORDER BY weight DESC
        LIMIT 50
     `,
   ])
   return {
     repos: repos.map((r) => ({ key: r.key, label: repoLabel(r.key) })),
-    chats: chats.map((c) => ({ key: c.key, label: c.label || "Untitled chat" })),
+    chats: chats.map((c) => ({ key: c.key, label: chatLabel(c.label, c.createdAt) })),
   }
 }

@@ -111,6 +111,7 @@ export function ScopeCombobox({ value, onChange, options, disabled }: ScopeCombo
               <CommandGroup>
                 <ScopeItem
                   icon={Wallet}
+                  value={ACCOUNT_SCOPE}
                   label="Whole account"
                   selected={value === ACCOUNT_SCOPE}
                   onSelect={() => select(ACCOUNT_SCOPE)}
@@ -124,6 +125,7 @@ export function ScopeCombobox({ value, onChange, options, disabled }: ScopeCombo
                   <ScopeItem
                     key={repo.key}
                     icon={FolderGit2}
+                    value={`repo:${repo.key}`}
                     label={repo.label}
                     selected={value === `repo:${repo.key}`}
                     onSelect={() => select(`repo:${repo.key}`)}
@@ -138,6 +140,7 @@ export function ScopeCombobox({ value, onChange, options, disabled }: ScopeCombo
                   <ScopeItem
                     key={chat.key}
                     icon={MessageSquare}
+                    value={`chat:${chat.key}`}
                     label={chat.label}
                     selected={value === `chat:${chat.key}`}
                     onSelect={() => select(`chat:${chat.key}`)}
@@ -154,18 +157,26 @@ export function ScopeCombobox({ value, onChange, options, disabled }: ScopeCombo
 
 function ScopeItem({
   icon: Icon,
+  value,
   label,
   selected,
   onSelect,
 }: {
   icon: typeof FolderGit2
+  /**
+   * cmdk identifies items by `value`, not by React key — so this has to be the
+   * scope id. Labels are not unique: every untitled chat is "Untitled chat",
+   * and sharing a value makes cmdk treat them as one item, highlighting all of
+   * them together.
+   */
+  value: string
   label: string
   selected: boolean
   onSelect: () => void
 }) {
   return (
     <CommandItem
-      value={label}
+      value={value}
       onSelect={onSelect}
       className={cn("flex cursor-pointer items-center gap-2", selected && "bg-accent")}
     >
