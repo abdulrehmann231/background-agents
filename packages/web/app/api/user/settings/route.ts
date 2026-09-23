@@ -26,6 +26,7 @@ import { withUserLock } from "@/lib/server/codex-credentials"
 import { getProviderMultipliers } from "@/lib/db/provider-pricing"
 import type { Settings } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
+import type { CreditsMode } from "@/lib/server/credential-flags"
 
 interface SettingsResponse {
   settings: Settings
@@ -43,6 +44,7 @@ interface SettingsResponse {
    * The Credits tab still uses /api/user/credits, which also returns history.
    */
   creditBalanceUsd: number | null
+  creditsMode: CreditsMode
   /**
    * Admin-editable pricing multiplier per provider (see lib/db/provider-pricing
    * and the /admin Pricing panel). Carried here rather than fetched separately
@@ -95,6 +97,7 @@ export async function GET(): Promise<Response> {
       customEndpoints: decryptUserEndpoints(user?.customEndpoints),
       planIsPro: effective.isPro,
       creditBalanceUsd: effective.creditBalanceUsd,
+      creditsMode: effective.creditsMode,
       providerMultipliers,
     }
     return Response.json(response)
@@ -214,6 +217,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       ),
       planIsPro: effective.isPro,
       creditBalanceUsd: effective.creditBalanceUsd,
+      creditsMode: effective.creditsMode,
       providerMultipliers,
     }
     return Response.json(response)

@@ -20,6 +20,12 @@ export interface SettingsData {
    */
   creditBalanceUsd?: number | null
   /**
+   * Why the balance reads the way it does: a real number, an uncapped plan, or
+   * an account on its own keys throughout. Lets the UI distinguish three very
+   * different situations that all arrive as a null balance.
+   */
+  creditsMode?: "balance" | "unlimited" | "none"
+  /**
    * Admin-editable pricing multiplier per provider (see lib/db/provider-pricing
    * and the /admin Pricing panel), keyed the same way TokenUsage.provider is.
    * Empty when logged out — the anonymous shared-pool endpoint carries no
@@ -68,6 +74,7 @@ export function useSettingsQuery() {
         customEndpoints: response.customEndpoints,
         planIsPro: response.planIsPro,
         creditBalanceUsd: response.creditBalanceUsd ?? null,
+        creditsMode: response.creditsMode,
         providerMultipliers: response.providerMultipliers ?? {},
       }
     },

@@ -56,6 +56,7 @@ export function useUpdateSettingsMutation() {
         customEndpoints: response.customEndpoints,
         planIsPro: response.planIsPro,
         creditBalanceUsd: response.creditBalanceUsd ?? null,
+        creditsMode: response.creditsMode,
       })
     },
     onError: (err, _, context) => {

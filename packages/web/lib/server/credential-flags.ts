@@ -29,7 +29,22 @@ export interface EffectiveFlags {
    * so the number and the boolean can never describe different users.
    */
   creditBalanceUsd: number | null
+  /**
+   * Why `creditBalanceUsd` looks the way it does, so a UI can say something
+   * truthful instead of guessing at a null:
+   *
+   * - "balance"   — a real number, which may be zero or negative
+   * - "unlimited" — the plan is uncapped, so there is nothing to count down
+   * - "none"      — own keys everywhere, so the balance doesn't apply
+   *
+   * Without this, all three arrive as null and the only safe thing to render
+   * is nothing.
+   */
+  creditsMode: CreditsMode
 }
+
+/** See {@link EffectiveCredentialFlags.creditsMode}. */
+export type CreditsMode = "balance" | "unlimited" | "none"
 
 /**
  * Build effective credential flags for a user, including the daily Claude limit status.
@@ -142,5 +157,6 @@ export async function getEffectiveCredentialFlags(userId: string): Promise<Effec
     isPro,
     plan,
     creditBalanceUsd: gatedOnCredits ? microToUsd(credits) : null,
+    creditsMode: gatedOnCredits ? "balance" : !usesSharedPool ? "none" : "unlimited",
   }
 }

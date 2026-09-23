@@ -72,6 +72,8 @@ export interface SettingsResponse {
    * reads the same as null (no tier, no warning) through creditTier.
    */
   creditBalanceUsd?: number | null
+  /** Why the balance reads the way it does — see CreditsMode on the server. */
+  creditsMode?: "balance" | "unlimited" | "none"
   /**
    * Admin-editable pricing multiplier per provider (see lib/db/provider-pricing).
    * Optional for the same reason as creditBalanceUsd — a missing value reads
