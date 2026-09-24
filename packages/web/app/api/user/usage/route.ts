@@ -4,13 +4,14 @@ import {
   getUserUsageSummary,
   parseUsageRange,
   parseUsageScope,
+  parseUsageDimension,
   type UserUsageSummary,
 } from "@/lib/db/user-usage"
 
 export type UserUsageResponse = UserUsageSummary
 
 /**
- * GET /api/user/usage?range=7d|30d|90d&scope=account|repo:<slug>|chat:<id> —
+ * GET /api/user/usage?range=…&scope=…&dimension=agent|model|repo|chat —
  * the authenticated user's own spend and token usage over a window, for the
  * Usage settings tab.
  *
@@ -29,9 +30,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   const params = req.nextUrl.searchParams
   const range = parseUsageRange(params.get("range"), "30d")
   const scope = parseUsageScope(params.get("scope"))
+  const dimension = parseUsageDimension(params.get("dimension"))
 
   try {
-    const summary = await getUserUsageSummary(userId, range, scope)
+    const summary = await getUserUsageSummary(userId, range, scope, dimension)
     return Response.json(summary satisfies UserUsageResponse)
   } catch (error) {
     return internalError(error)

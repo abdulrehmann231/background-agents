@@ -87,6 +87,20 @@ export function singleSeriesColor(isDark: boolean): string {
   return (isDark ? SERIES_DARK : SERIES_LIGHT)[0]
 }
 
+/**
+ * Colour for the Nth series of a dimension with no fixed identity list —
+ * models, repos and chats, which are unbounded and differ per account.
+ *
+ * Assigned by position in the server's ranking for the window, which is stable
+ * across the metric toggle, so flipping credits/tokens never repaints a
+ * series. Changing the window or scope is a different dataset and may reorder
+ * them; agents avoid that entirely by having a fixed map above.
+ */
+export function slotColor(index: number, isDark: boolean): string {
+  const palette = isDark ? SERIES_DARK : SERIES_LIGHT
+  return palette[index % palette.length]
+}
+
 /** Display label for a series keyed by provider name. */
 export function providerSeriesLabel(provider: string): string {
   return provider === OTHER_KEY ? "Other" : providerLabel(provider as ProviderName)

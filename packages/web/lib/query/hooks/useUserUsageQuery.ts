@@ -4,13 +4,19 @@ import { useQuery } from "@tanstack/react-query"
 import { useSession } from "next-auth/react"
 import { queryKeys } from "../keys"
 import type { UserUsageResponse } from "@/app/api/user/usage/route"
-import type { UsageRange } from "@/lib/db/user-usage"
+import type { UsageDimension, UsageRange } from "@/lib/db/user-usage"
 
-export type { UsageRange }
+export type { UsageRange, UsageDimension }
 export type UserUsageData = UserUsageResponse
 
-async function fetchUserUsage(range: UsageRange, scope: string): Promise<UserUsageData> {
-  const res = await fetch(`/api/user/usage?range=${range}&scope=${encodeURIComponent(scope)}`)
+async function fetchUserUsage(
+  range: UsageRange,
+  scope: string,
+  dimension: UsageDimension
+): Promise<UserUsageData> {
+  const res = await fetch(
+    `/api/user/usage?range=${range}&scope=${encodeURIComponent(scope)}&dimension=${dimension}`
+  )
   if (!res.ok) throw new Error(`Failed to load usage (${res.status})`)
   return (await res.json()) as UserUsageData
 }
@@ -22,13 +28,17 @@ async function fetchUserUsage(range: UsageRange, scope: string): Promise<UserUsa
  * Disabled when logged out: the endpoint requires auth, and there is nothing
  * meaningful to show an anonymous visitor.
  */
-export function useUserUsageQuery(range: UsageRange, scope: string = "account") {
+export function useUserUsageQuery(
+  range: UsageRange,
+  scope: string = "account",
+  dimension: UsageDimension = "agent"
+) {
   const { data: session, status } = useSession()
   const isAuthenticated = status === "authenticated" && !!session?.user?.id
 
   return useQuery({
-    queryKey: queryKeys.user.usage(range, scope),
-    queryFn: () => fetchUserUsage(range, scope),
+    queryKey: queryKeys.user.usage(range, scope, dimension),
+    queryFn: () => fetchUserUsage(range, scope, dimension),
     enabled: isAuthenticated,
     // Usage only moves when a turn finishes, and the tab is not a live monitor.
     staleTime: 60 * 1000,

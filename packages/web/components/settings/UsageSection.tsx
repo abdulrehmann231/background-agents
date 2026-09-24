@@ -11,9 +11,6 @@ import type { UsageDimension, UsageRange } from "@/lib/db/user-usage"
 import { MobileSectionHeader } from "./shared"
 import { ScopeCombobox, ACCOUNT_SCOPE } from "./ScopeCombobox"
 import { SpendPerDayChart, type UsageMetricKey } from "./charts/SpendPerDayChart"
-import { UsageBreakdown } from "./charts/UsageBreakdown"
-import { TokenMixBar } from "./charts/TokenMixBar"
-import { ChargedShareMeter } from "./charts/ChargedShareMeter"
 
 const RANGES: { key: UsageRange; label: string; days: number }[] = [
   { key: "7d", label: "7 days", days: 7 },
@@ -26,9 +23,10 @@ const METRICS: { key: UsageMetricKey; label: string }[] = [
   { key: "tokens", label: "Tokens" },
 ]
 
+/** What the daily chart stacks by. */
 const DIMENSIONS: { key: UsageDimension; label: string }[] = [
-  { key: "model", label: "Model" },
   { key: "agent", label: "Agent" },
+  { key: "model", label: "Model" },
   { key: "repo", label: "Repo" },
   { key: "chat", label: "Chat" },
 ]
@@ -62,10 +60,10 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
     else url.searchParams.set("scope", next)
     window.history.replaceState(null, "", url)
   }, [])
-  const [dimension, setDimension] = useState<UsageDimension>("model")
+  const [dimension, setDimension] = useState<UsageDimension>("agent")
 
   const { status: sessionStatus } = useSession()
-  const { data, isPending, isError } = useUserUsageQuery(range, scope)
+  const { data, isPending, isError } = useUserUsageQuery(range, scope, dimension)
   const { data: settings } = useSettingsQuery()
   // The query is disabled when logged out, which leaves it pending forever —
   // so signed-out gets its own branch rather than a skeleton that never fills.
@@ -159,58 +157,30 @@ export function UsageSection({ isMobile }: UsageSectionProps) {
           </div>
 
           <div className="mt-6">
-            <h3 className="text-sm font-medium">
-              {metric === "credits" ? "Credits per day" : "Tokens per day"}
-            </h3>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {metric === "credits"
-                ? "What came off your balance, by agent. Own-key and free-model runs cost nothing and don't appear here."
-                : "Every token recorded, by agent — including runs on your own keys."}
-            </p>
-            <SpendPerDayChart daily={data.daily} providers={data.providers} metric={metric} />
-          </div>
-
-          <div className="mt-8">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h3 className="text-sm font-medium">Where it went</h3>
+                <h3 className="text-sm font-medium">
+                  {metric === "credits" ? "Credits per day" : "Tokens per day"}
+                </h3>
                 <p className="text-xs text-muted-foreground">
-                  Ranked by {metric === "credits" ? "credits charged" : "tokens"}. Pick a repo or
-                  chat row to narrow everything above to it.
+                  {metric === "credits"
+                    ? "What came off your balance. Own-key and free-model runs cost nothing and don't appear here."
+                    : "Every token recorded, including runs on your own keys."}
                 </p>
               </div>
               <SegmentedControl
                 options={DIMENSIONS}
                 value={dimension}
                 onChange={setDimension}
-                ariaLabel="Break down by"
+                ariaLabel="Stack by"
               />
             </div>
-            <UsageBreakdown
-              rows={data.breakdowns[dimension]}
-              dimension={dimension}
+            <SpendPerDayChart
+              daily={data.daily}
+              series={data.series}
+              dimension={data.dimension}
               metric={metric}
-              onScopeTo={(row) =>
-                setScope(dimension === "repo" ? `repo:${row.key}` : `chat:${row.key}`)
-              }
             />
-          </div>
-
-          <div className="mt-8 grid gap-6 sm:grid-cols-2">
-            <section>
-              <h3 className="text-sm font-medium">What the tokens were</h3>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Cache reads are the cheap part; cache writes cost more than fresh input.
-              </p>
-              <TokenMixBar mix={data.tokenMix} />
-            </section>
-            <section>
-              <h3 className="text-sm font-medium">How much you paid for</h3>
-              <p className="mb-3 text-xs text-muted-foreground">
-                The rest ran on your own keys or a free model and cost nothing.
-              </p>
-              <ChargedShareMeter mix={data.tokenMix} />
-            </section>
           </div>
         </>
       )}

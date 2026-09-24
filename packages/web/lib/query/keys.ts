@@ -41,8 +41,8 @@ export const queryKeys = {
   // Current user's own data
   user: {
     all: ["user"] as const,
-    usage: (range: string, scope: string) =>
-      [...queryKeys.user.all, "usage", range, scope] as const,
+    usage: (range: string, scope: string, dimension: string) =>
+      [...queryKeys.user.all, "usage", range, scope, dimension] as const,
   },
 
   // Admin

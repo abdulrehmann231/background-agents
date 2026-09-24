@@ -15,13 +15,8 @@ import {
 } from "recharts"
 import { chartTooltipProps, barTooltipCursor } from "@/components/charts/chartTooltip"
 import { formatAxisDate, formatMetricValue, formatTooltipDate } from "@/components/charts/chartFormatters"
-import {
-  foldSeries,
-  seriesColor,
-  providerSeriesLabel,
-  OTHER_KEY,
-} from "@/components/charts/palette"
-import type { UsageDayPoint } from "@/lib/db/user-usage"
+import { seriesColor, slotColor, OTHER_KEY } from "@/components/charts/palette"
+import type { UsageDayPoint, UsageDimension, UsageSeries } from "@/lib/db/user-usage"
 
 /** Which measure the chart is drawn in. */
 export type UsageMetricKey = "credits" | "tokens"
@@ -36,45 +31,50 @@ type ChartRow = { date: string } & Record<string, number | string>
 
 interface SpendPerDayChartProps {
   daily: UsageDayPoint[]
-  /** Providers present in the window, already ranked. */
-  providers: string[]
+  /** Ranked and already folded by the server, longest-running first. */
+  series: UsageSeries[]
+  dimension: UsageDimension
   metric: UsageMetricKey
 }
 
 /**
- * Daily spend (or tokens), stacked by the agent that incurred it.
+ * Daily spend (or tokens), stacked by whatever dimension is selected — agent,
+ * model, repo or chat.
  *
- * Stacked rather than grouped because the day's total is the thing being read
- * first and the split second. Colour comes from the fixed agent→slot map, so
- * an agent keeps its hue no matter which other agents happen to be present.
+ * Stacked rather than grouped because the day's total is read first and the
+ * split second. Agents colour from a fixed map so one keeps its hue whatever
+ * else is on screen; the other dimensions are unbounded and have no such map,
+ * so they take slots by rank (see slotColor).
  */
-export function SpendPerDayChart({ daily, providers, metric }: SpendPerDayChartProps) {
+export function SpendPerDayChart({ daily, series, dimension, metric }: SpendPerDayChartProps) {
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
-  const colorOf = (provider: string) => seriesColor(provider, isDark)
   const field = metric === "credits" ? "credits" : "tokens"
 
-  // Rank and fold before drawing: past eight series a ninth colour would be
-  // indistinguishable under CVD, so the tail becomes a single grey "Other".
-  const series = useMemo(() => {
-    const weightOf = (provider: string) =>
-      daily.reduce((acc, day) => acc + (day[field][provider] ?? 0), 0)
-    return foldSeries(providers, weightOf)
-  }, [daily, providers, field])
+  const colorAt = (key: string, index: number) => {
+    if (key === OTHER_KEY) return seriesColor(OTHER_KEY, isDark)
+    return dimension === "agent" ? seriesColor(key, isDark) : slotColor(index, isDark)
+  }
+  const labels = useMemo(
+    () => new Map(series.map((entry) => [entry.key, entry.label])),
+    [series]
+  )
+  const labelOf = (key: string) => labels.get(key) ?? key
 
-  const rows = useMemo<ChartRow[]>(() => {
-    const drawn = new Set(series)
-    return daily.map((day) => {
-      const row: ChartRow = { date: day.date }
-      let other = 0
-      for (const [provider, value] of Object.entries(day[field])) {
-        if (drawn.has(provider)) row[provider] = (row[provider] as number ?? 0) + value
-        else other += value
-      }
-      if (drawn.has(OTHER_KEY) && other > 0) row[OTHER_KEY] = other
-      return row
-    })
-  }, [daily, series, field])
+  const keys = useMemo(() => series.map((entry) => entry.key), [series])
+
+  const rows = useMemo<ChartRow[]>(
+    () =>
+      daily.map((day) => {
+        const row: ChartRow = { date: day.date }
+        for (const key of keys) {
+          const value = day[field][key]
+          if (value) row[key] = value
+        }
+        return row
+      }),
+    [daily, keys, field]
+  )
 
   // Which series sits on top of each day's stack — that is the bar whose end
   // gets the rounded cap, so the rounding follows the data rather than whichever
@@ -82,16 +82,16 @@ export function SpendPerDayChart({ daily, providers, metric }: SpendPerDayChartP
   const topSeriesPerRow = useMemo(
     () =>
       rows.map((row) => {
-        for (let i = series.length - 1; i >= 0; i--) {
-          if ((row[series[i]] as number ?? 0) > 0) return series[i]
+        for (let i = keys.length - 1; i >= 0; i--) {
+          if ((row[keys[i]] as number ?? 0) > 0) return keys[i]
         }
         return null
       }),
-    [rows, series]
+    [rows, keys]
   )
 
   const total = rows.reduce(
-    (acc, row) => acc + series.reduce((s, key) => s + (row[key] as number ?? 0), 0),
+    (acc, row) => acc + keys.reduce((sum, key) => sum + (row[key] as number ?? 0), 0),
     0
   )
 
@@ -129,14 +129,16 @@ export function SpendPerDayChart({ daily, providers, metric }: SpendPerDayChartP
             />
             <Tooltip
               cursor={barTooltipCursor}
-              content={(props) => <StackTooltip {...props} metric={metric} />}
+              content={(props) => (
+                <StackTooltip {...props} metric={metric} labelOf={labelOf} />
+              )}
             />
-            {series.map((key) => (
+            {keys.map((key, seriesIndex) => (
               <Bar key={key} dataKey={key} stackId="spend" isAnimationActive={false}>
                 {rows.map((row, i) => (
                   <Cell
                     key={row.date}
-                    fill={colorOf(key)}
+                    fill={colorAt(key, seriesIndex)}
                     // A surface-coloured hairline reads as a gap between
                     // segments without shrinking the bars themselves.
                     stroke="var(--background)"
@@ -159,16 +161,21 @@ export function SpendPerDayChart({ daily, providers, metric }: SpendPerDayChartP
 
       {/* A legend, not just colour: three of the light-mode series steps sit
           under 3:1 against the surface, so identity has to be spelled out. */}
-      {series.length > 1 && (
+      {keys.length > 1 && (
         <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-          {series.map((key) => (
-            <li key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {keys.map((key, seriesIndex) => (
+            <li
+              key={key}
+              className="flex max-w-64 items-center gap-1.5 text-xs text-muted-foreground"
+            >
               <span
                 aria-hidden
                 className="h-2 w-2 shrink-0 rounded-[2px]"
-                style={{ backgroundColor: colorOf(key) }}
+                style={{ backgroundColor: colorAt(key, seriesIndex) }}
               />
-              {providerSeriesLabel(key)}
+              <span className="truncate" title={labelOf(key)}>
+                {labelOf(key)}
+              </span>
             </li>
           ))}
         </ul>
@@ -183,7 +190,8 @@ function StackTooltip({
   payload,
   label,
   metric,
-}: TooltipContentProps & { metric: UsageMetricKey }) {
+  labelOf,
+}: TooltipContentProps & { metric: UsageMetricKey; labelOf: (key: string) => string }) {
   if (!active || !payload?.length) return null
   const entries = payload.filter((p) => Number(p.value ?? 0) > 0)
   if (entries.length === 0) return null
@@ -207,7 +215,7 @@ function StackTooltip({
               flexShrink: 0,
             }}
           />
-          <span style={{ flex: 1 }}>{providerSeriesLabel(String(entry.dataKey))}</span>
+          <span style={{ flex: 1 }}>{labelOf(String(entry.dataKey))}</span>
           <span style={{ fontWeight: 600 }}>{formatValue(metric, Number(entry.value ?? 0))}</span>
         </div>
       ))}

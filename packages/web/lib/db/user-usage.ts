@@ -17,9 +17,7 @@ import { NEW_REPOSITORY } from "@/lib/types"
 //
 // A debit joins 1:1 to the usage row that caused it through `tokenUsageId`
 // (unique), which is how spend gets attributed to a provider, model, repo or
-// chat. That uniqueness is also why the breakdowns can LEFT JOIN the ledger
-// onto TokenUsage without the join fanning out and double-counting tokens.
-// Raw SQL because `tokenUsageId` has no Prisma relation behind it, the same
+// chat. Raw SQL because that column has no Prisma relation behind it, the same
 // reason sumChatCreditsByProvider in lib/db/credits.ts uses it.
 
 /** Ranges the Usage tab offers. */
@@ -35,6 +33,14 @@ export function usageRangeDays(range: UsageRange): number {
 /** Parse the `range` query param, falling back for anything unrecognized. */
 export function parseUsageRange(value: string | null, fallback: UsageRange): UsageRange {
   return value === "7d" || value === "30d" || value === "90d" ? value : fallback
+}
+
+/** What the daily chart stacks by. */
+export type UsageDimension = "agent" | "model" | "repo" | "chat"
+
+/** Parse the `dimension` query param, falling back for anything unrecognized. */
+export function parseUsageDimension(value: string | null): UsageDimension {
+  return value === "model" || value === "repo" || value === "chat" ? value : "agent"
 }
 
 /** What slice of the account the figures describe. */
@@ -71,13 +77,25 @@ export function formatUsageScope(scope: UsageScope): string {
   return "account"
 }
 
-/** One day of the series, provider-keyed. Providers absent that day are omitted. */
+/**
+ * The key everything past the top few is folded under.
+ *
+ * Must match OTHER_KEY in components/charts/palette.ts, which paints it grey:
+ * the chart has eight validated colours and a ninth would be indistinguishable
+ * from one of them under colour-vision deficiency.
+ */
+export const OTHER_SERIES_KEY = "__other__"
+
+/** How many real series a chart draws before the tail becomes "Other". */
+const MAX_SERIES = 8
+
+/** One day of the series, keyed by whatever dimension is being stacked. */
 export interface UsageDayPoint {
   /** Calendar day, YYYY-MM-DD, in UTC. */
   date: string
-  /** Credits debited that day, per provider, in USD. */
+  /** Credits debited that day, per series key, in USD. */
   credits: Record<string, number>
-  /** Tokens recorded that day, per provider. */
+  /** Tokens recorded that day, per series key. */
   tokens: Record<string, number>
 }
 
@@ -91,38 +109,15 @@ export interface UsageTotals {
   prevTurns: number
 }
 
-/** One row of a breakdown: an agent, model, repo or chat, and what it cost. */
-export interface UsageBreakdownRow {
-  /** Stable id — provider name, model id, "owner/repo", or a chat id. */
+/** One stacked series: an agent, model, repo or chat, with its window totals. */
+export interface UsageSeries {
+  /** Provider name, model id, "owner/repo", a chat id, or OTHER_SERIES_KEY. */
   key: string
   label: string
   creditsUsd: number
   tokens: number
   turns: number
 }
-
-/**
- * How the window's tokens were made up, and how much of them reached the
- * balance.
- *
- * The five parts are reported separately by tokscale and don't necessarily add
- * up to `totalTokens`, so anything drawing them as a whole should total the
- * parts rather than assume `totalTokens` is their sum.
- */
-export interface UsageTokenMix {
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  reasoning: number
-  /** Tokens on turns that produced a debit — what the balance actually paid for. */
-  chargedTokens: number
-  /** Every token recorded in the window, charged or not. */
-  totalTokens: number
-}
-
-/** The dimensions a breakdown can be sliced by. */
-export type UsageDimension = "agent" | "model" | "repo" | "chat"
 
 /** An entry the scope picker can offer. */
 export interface UsageScopeOption {
@@ -133,12 +128,11 @@ export interface UsageScopeOption {
 export interface UserUsageSummary {
   range: UsageRange
   scope: string
+  dimension: UsageDimension
   totals: UsageTotals
   daily: UsageDayPoint[]
-  /** Providers with activity in the window, ranked by credits then tokens. */
-  providers: string[]
-  tokenMix: UsageTokenMix
-  breakdowns: Record<UsageDimension, UsageBreakdownRow[]>
+  /** Series to stack, ranked, already folded to at most MAX_SERIES + "Other". */
+  series: UsageSeries[]
   /** Everything the scope picker can offer — always the whole account, so the
    *  picker can still get back out of a scope it is currently inside. */
   scopeOptions: { repos: UsageScopeOption[]; chats: UsageScopeOption[] }
@@ -190,8 +184,8 @@ function repoLabel(repo: string): string {
   return repo === NEW_REPOSITORY ? "No repository" : repo
 }
 
-/** Rows as the breakdown queries return them, before labelling. */
-interface RawBreakdownRow {
+/** Rows as the ranking query returns them, before labelling. */
+interface RawSeriesRow {
   key: string | null
   label?: string | null
   createdAt?: Date | null
@@ -200,21 +194,12 @@ interface RawBreakdownRow {
   micro: bigint
 }
 
-function toBreakdownRows(
-  rows: RawBreakdownRow[],
-  label: (row: RawBreakdownRow) => string
-): UsageBreakdownRow[] {
-  return rows.map((row) => ({
-    key: row.key ?? "",
-    label: label(row),
-    creditsUsd: microToUsd(row.micro),
-    tokens: Number(row.tokens),
-    turns: Number(row.turns),
-  }))
-}
-
 /**
- * Everything the Usage tab needs for one user, one window and one scope.
+ * Everything the Usage tab needs for one user, window, scope and dimension.
+ *
+ * The dimension is a server parameter rather than four parallel rollups: only
+ * one is on screen at a time, and the client caches each per key, so switching
+ * costs one query the first time and nothing after.
  *
  * Each total query covers twice the window so the preceding period comes back
  * in the same pass, splitting on the boundary with a CASE rather than paying
@@ -223,7 +208,8 @@ function toBreakdownRows(
 export async function getUserUsageSummary(
   userId: string,
   range: UsageRange,
-  scope: UsageScope = { kind: "account" }
+  scope: UsageScope = { kind: "account" },
+  dimension: UsageDimension = "agent"
 ): Promise<UserUsageSummary> {
   const days = usageRangeDays(range)
   const interval = `${days} days`
@@ -243,29 +229,40 @@ export async function getUserUsageSummary(
   const scopeUsage = scopeOn(Prisma.sql`"chatId"`)
   const scopeLedger = scopeOn(Prisma.sql`"chatId"`)
 
+  // Repo and chat live on Chat, the other two on TokenUsage — so only those two
+  // dimensions pay for the join.
+  const needsChat = dimension === "repo" || dimension === "chat"
+  const chatJoin = needsChat
+    ? Prisma.sql`JOIN "Chat" c ON c."id" = tu."chatId"`
+    : Prisma.empty
+  const keyExpr =
+    dimension === "agent"
+      ? Prisma.sql`tu."provider"`
+      : dimension === "model"
+        ? Prisma.sql`tu."model"`
+        : dimension === "repo"
+          ? Prisma.sql`c."repo"`
+          : Prisma.sql`tu."chatId"`
+  // Chats need their title to be readable; the others are their own label.
+  const labelCols = dimension === "chat"
+    ? Prisma.sql`, c."displayName" AS label, c."createdAt" AS "createdAt"`
+    : Prisma.empty
+  // Grouped by expression, not by ordinal: the select list interleaves
+  // aggregates with these label columns, so a positional GROUP BY silently
+  // points at SUM()/COUNT() and Postgres rejects the whole query.
+  const labelGroupBy = dimension === "chat"
+    ? Prisma.sql`, c."displayName", c."createdAt"`
+    : Prisma.empty
+
   // Joining the ledger onto usage is safe because CreditTransaction.tokenUsageId
   // is unique: at most one debit per usage row, so tokens can't be doubled.
   const ledgerJoin = Prisma.sql`
     LEFT JOIN "CreditTransaction" ct
            ON ct."tokenUsageId" = tu."id" AND ct."type" = 'debit'`
-  const measures = Prisma.sql`
-    SUM(tu."totalTokens")::bigint AS tokens,
-    COUNT(*)::bigint AS turns,
-    COALESCE(SUM(-ct."amountMicroUsd"), 0)::bigint AS micro`
   const usageWindow = Prisma.sql`
     tu."userId" = ${userId} AND tu."createdAt" >= NOW() - ${interval}::interval`
 
-  const [
-    creditTotals,
-    tokenTotals,
-    creditsByDay,
-    tokensByDay,
-    mixRows,
-    agentRows,
-    modelRows,
-    repoRows,
-    chatRows,
-  ] = await Promise.all([
+  const [creditTotals, tokenTotals, seriesRows, creditsByDay, tokensByDay] = await Promise.all([
     prisma.$queryRaw<Array<{ cur: bigint | null; prev: bigint | null }>>`
       SELECT
         SUM(CASE WHEN "createdAt" >= NOW() - ${interval}::interval
@@ -293,111 +290,98 @@ export async function getUserUsageSummary(
         AND "createdAt" >= NOW() - ${doubleInterval}::interval
         ${scopeUsage}
     `,
-    prisma.$queryRaw<Array<{ day: Date; provider: string; micro: bigint }>>`
-      SELECT date_trunc('day', t."createdAt")::date AS day,
-             tu."provider" AS provider,
-             SUM(-t."amountMicroUsd")::bigint AS micro
-        FROM "CreditTransaction" t
-        JOIN "TokenUsage" tu ON tu."id" = t."tokenUsageId"
-       WHERE t."userId" = ${userId}
-         AND t."type" = 'debit'
-         AND t."createdAt" >= NOW() - ${interval}::interval
+    // The ranking, which decides both stacking order and what gets folded away.
+    prisma.$queryRaw<RawSeriesRow[]>`
+      SELECT ${keyExpr} AS key,
+             SUM(tu."totalTokens")::bigint AS tokens,
+             COUNT(*)::bigint AS turns,
+             COALESCE(SUM(-ct."amountMicroUsd"), 0)::bigint AS micro
+             ${labelCols}
+        FROM "TokenUsage" tu ${chatJoin} ${ledgerJoin}
+       WHERE ${usageWindow} ${scopeTu}
+       GROUP BY ${keyExpr} ${labelGroupBy}
+       ORDER BY micro DESC, tokens DESC
+       LIMIT 200
+    `,
+    prisma.$queryRaw<Array<{ day: Date; key: string | null; micro: bigint }>>`
+      SELECT date_trunc('day', ct."createdAt")::date AS day,
+             ${keyExpr} AS key,
+             SUM(-ct."amountMicroUsd")::bigint AS micro
+        FROM "CreditTransaction" ct
+        JOIN "TokenUsage" tu ON tu."id" = ct."tokenUsageId"
+        ${chatJoin}
+       WHERE ct."userId" = ${userId}
+         AND ct."type" = 'debit'
+         AND ct."createdAt" >= NOW() - ${interval}::interval
          ${scopeTu}
        GROUP BY 1, 2
     `,
-    prisma.$queryRaw<Array<{ day: Date; provider: string; tokens: bigint }>>`
-      SELECT date_trunc('day', "createdAt")::date AS day,
-             "provider" AS provider,
-             SUM("totalTokens")::bigint AS tokens
-        FROM "TokenUsage"
-       WHERE "userId" = ${userId}
-         AND "createdAt" >= NOW() - ${interval}::interval
-         ${scopeUsage}
+    prisma.$queryRaw<Array<{ day: Date; key: string | null; tokens: bigint }>>`
+      SELECT date_trunc('day', tu."createdAt")::date AS day,
+             ${keyExpr} AS key,
+             SUM(tu."totalTokens")::bigint AS tokens
+        FROM "TokenUsage" tu ${chatJoin}
+       WHERE ${usageWindow} ${scopeTu}
        GROUP BY 1, 2
-    `,
-    prisma.$queryRaw<
-      Array<{
-        input: bigint | null
-        output: bigint | null
-        cacheRead: bigint | null
-        cacheWrite: bigint | null
-        reasoning: bigint | null
-        chargedTokens: bigint | null
-        totalTokens: bigint | null
-      }>
-    >`
-      SELECT SUM(tu."inputTokens")::bigint AS input,
-             SUM(tu."outputTokens")::bigint AS output,
-             SUM(tu."cacheReadTokens")::bigint AS "cacheRead",
-             SUM(tu."cacheWriteTokens")::bigint AS "cacheWrite",
-             SUM(tu."reasoningTokens")::bigint AS reasoning,
-             SUM(tu."totalTokens") FILTER (WHERE ct."id" IS NOT NULL)::bigint AS "chargedTokens",
-             SUM(tu."totalTokens")::bigint AS "totalTokens"
-        FROM "TokenUsage" tu ${ledgerJoin}
-       WHERE ${usageWindow} ${scopeTu}
-    `,
-    prisma.$queryRaw<RawBreakdownRow[]>`
-      SELECT tu."provider" AS key, ${measures}
-        FROM "TokenUsage" tu ${ledgerJoin}
-       WHERE ${usageWindow} ${scopeTu}
-       GROUP BY 1
-       ORDER BY micro DESC, tokens DESC
-    `,
-    prisma.$queryRaw<RawBreakdownRow[]>`
-      SELECT tu."model" AS key, ${measures}
-        FROM "TokenUsage" tu ${ledgerJoin}
-       WHERE ${usageWindow} ${scopeTu}
-       GROUP BY 1
-       ORDER BY micro DESC, tokens DESC
-       LIMIT 50
-    `,
-    prisma.$queryRaw<RawBreakdownRow[]>`
-      SELECT c."repo" AS key, ${measures}
-        FROM "TokenUsage" tu
-        JOIN "Chat" c ON c."id" = tu."chatId"
-        ${ledgerJoin}
-       WHERE ${usageWindow} ${scopeTu}
-       GROUP BY 1
-       ORDER BY micro DESC, tokens DESC
-       LIMIT 50
-    `,
-    prisma.$queryRaw<RawBreakdownRow[]>`
-      SELECT tu."chatId" AS key, c."displayName" AS label,
-             c."createdAt" AS "createdAt", ${measures}
-        FROM "TokenUsage" tu
-        JOIN "Chat" c ON c."id" = tu."chatId"
-        ${ledgerJoin}
-       WHERE ${usageWindow} ${scopeTu}
-       GROUP BY 1, 2, 3
-       ORDER BY micro DESC, tokens DESC
-       LIMIT 50
     `,
   ])
 
-  // Index the grouped rows by day so the dense series can be filled in one pass.
-  // The grouping itself is SQL's job; this only densifies a result bounded by
-  // 90 days × the provider count.
+  // Label each ranked key once, here, so the client never has to know that a
+  // repo slug, a model id and a chat title are labelled differently.
+  const labelFor = (row: RawSeriesRow): string => {
+    const key = row.key ?? ""
+    if (dimension === "agent") return providerLabel(key as ProviderName)
+    if (dimension === "model") return key || "Unknown model"
+    if (dimension === "repo") return repoLabel(key)
+    return chatLabel(row.label, row.createdAt ?? null)
+  }
+
+  const ranked = seriesRows.filter((r) => Number(r.tokens) > 0 || r.micro > 0n)
+  const top = ranked.slice(0, MAX_SERIES)
+  const topKeys = new Set(top.map((r) => r.key ?? ""))
+  const tail = ranked.slice(MAX_SERIES)
+
+  const series: UsageSeries[] = top.map((row) => ({
+    key: row.key ?? "",
+    label: labelFor(row),
+    creditsUsd: microToUsd(row.micro),
+    tokens: Number(row.tokens),
+    turns: Number(row.turns),
+  }))
+  if (tail.length > 0) {
+    series.push({
+      key: OTHER_SERIES_KEY,
+      label: `Other (${tail.length})`,
+      creditsUsd: tail.reduce((acc, r) => acc + microToUsd(r.micro), 0),
+      tokens: tail.reduce((acc, r) => acc + Number(r.tokens), 0),
+      turns: tail.reduce((acc, r) => acc + Number(r.turns), 0),
+    })
+  }
+
+  // Index the grouped rows by day so the dense series can be filled in one
+  // pass. The grouping itself is SQL's job; this only densifies a result
+  // bounded by the window length times the key count, and folds the tail.
   const creditsIndex = new Map<string, Record<string, number>>()
   const tokensIndex = new Map<string, Record<string, number>>()
-  const creditsByProvider = new Map<string, number>()
-  const tokensByProvider = new Map<string, number>()
+  const bucketKey = (key: string | null) => {
+    const k = key ?? ""
+    return topKeys.has(k) ? k : OTHER_SERIES_KEY
+  }
+  const add = (
+    index: Map<string, Record<string, number>>,
+    day: Date,
+    key: string | null,
+    value: number
+  ) => {
+    const date = dayKey(day)
+    const bucket = index.get(date) ?? {}
+    const k = bucketKey(key)
+    bucket[k] = (bucket[k] ?? 0) + value
+    index.set(date, bucket)
+  }
 
-  for (const row of creditsByDay) {
-    const key = dayKey(row.day)
-    const bucket = creditsIndex.get(key) ?? {}
-    const usd = microToUsd(row.micro)
-    bucket[row.provider] = (bucket[row.provider] ?? 0) + usd
-    creditsIndex.set(key, bucket)
-    creditsByProvider.set(row.provider, (creditsByProvider.get(row.provider) ?? 0) + usd)
-  }
-  for (const row of tokensByDay) {
-    const key = dayKey(row.day)
-    const bucket = tokensIndex.get(key) ?? {}
-    const tokens = Number(row.tokens)
-    bucket[row.provider] = (bucket[row.provider] ?? 0) + tokens
-    tokensIndex.set(key, bucket)
-    tokensByProvider.set(row.provider, (tokensByProvider.get(row.provider) ?? 0) + tokens)
-  }
+  for (const row of creditsByDay) add(creditsIndex, row.day, row.key, microToUsd(row.micro))
+  for (const row of tokensByDay) add(tokensIndex, row.day, row.key, Number(row.tokens))
 
   const daily: UsageDayPoint[] = denseDays(days).map((date) => ({
     date,
@@ -405,49 +389,15 @@ export async function getUserUsageSummary(
     tokens: tokensIndex.get(date) ?? {},
   }))
 
-  // Rank by spend first, tokens second: a provider the user paid for outranks a
-  // chatty free one. This is the order a caller gets if it doesn't re-rank —
-  // the daily chart does re-rank, by whichever metric is on screen, since
-  // colour is pinned per agent and only the legend order moves.
-  const providers = [...new Set([...creditsByProvider.keys(), ...tokensByProvider.keys()])].sort(
-    (a, b) =>
-      (creditsByProvider.get(b) ?? 0) - (creditsByProvider.get(a) ?? 0) ||
-      (tokensByProvider.get(b) ?? 0) - (tokensByProvider.get(a) ?? 0)
-  )
-
-  const mix = mixRows[0]
-  const tokenMix: UsageTokenMix = {
-    input: Number(mix?.input ?? 0n),
-    output: Number(mix?.output ?? 0n),
-    cacheRead: Number(mix?.cacheRead ?? 0n),
-    cacheWrite: Number(mix?.cacheWrite ?? 0n),
-    reasoning: Number(mix?.reasoning ?? 0n),
-    chargedTokens: Number(mix?.chargedTokens ?? 0n),
-    totalTokens: Number(mix?.totalTokens ?? 0n),
-  }
-
-  const breakdowns: Record<UsageDimension, UsageBreakdownRow[]> = {
-    agent: toBreakdownRows(agentRows, (r) => providerLabel((r.key ?? "") as ProviderName)),
-    model: toBreakdownRows(modelRows, (r) => r.key || "Unknown model"),
-    repo: toBreakdownRows(repoRows, (r) => repoLabel(r.key ?? "")),
-    chat: toBreakdownRows(chatRows, (r) => chatLabel(r.label, r.createdAt ?? null)),
-  }
-
   // The picker has to list what the account has, not what the current scope
   // has — otherwise scoping into a chat would empty the very control needed to
-  // scope back out. Only fetched separately when a scope is actually applied;
-  // unscoped, the breakdowns above already are the whole account.
-  const scopeOptions =
-    scope.kind === "account"
-      ? {
-          repos: breakdowns.repo.map((r) => ({ key: r.key, label: r.label })),
-          chats: breakdowns.chat.map((r) => ({ key: r.key, label: r.label })),
-        }
-      : await getScopeOptions(userId, interval)
+  // scope back out.
+  const scopeOptions = await getScopeOptions(userId, interval)
 
   return {
     range,
     scope: formatUsageScope(scope),
+    dimension,
     totals: {
       creditsUsd: microToUsd(creditTotals[0]?.cur ?? 0n),
       prevCreditsUsd: microToUsd(creditTotals[0]?.prev ?? 0n),
@@ -457,9 +407,7 @@ export async function getUserUsageSummary(
       prevTurns: Number(tokenTotals[0]?.prevTurns ?? 0n),
     },
     daily,
-    providers,
-    tokenMix,
-    breakdowns,
+    series,
     scopeOptions,
   }
 }
