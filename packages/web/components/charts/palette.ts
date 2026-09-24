@@ -1,4 +1,4 @@
-import { ALL_AGENTS, providerToAgent, providerLabel, type Agent, type ProviderName } from "@background-agents/common"
+import { ALL_AGENTS, providerToAgent, type Agent, type ProviderName } from "@background-agents/common"
 
 /**
  * Categorical series colours, in fixed slot order.
@@ -15,7 +15,7 @@ import { ALL_AGENTS, providerToAgent, providerLabel, type Agent, type ProviderNa
  * drawing this palette also carries a legend naming each series: identity is
  * never left to colour alone. Re-validate rather than eyeball if you edit one.
  */
-export const SERIES_LIGHT = [
+const SERIES_LIGHT = [
   "#2a78d6", // blue
   "#eb6834", // orange
   "#1baf7a", // aqua
@@ -26,7 +26,7 @@ export const SERIES_LIGHT = [
   "#e34948", // red
 ] as const
 
-export const SERIES_DARK = [
+const SERIES_DARK = [
   "#3987e5",
   "#d95926",
   "#199e70",
@@ -49,7 +49,7 @@ export const OTHER_KEY = "__other__"
  * indistinguishable from an existing one under colour-vision deficiency.
  * "Other" is not one of the eight, since it is drawn in grey.
  */
-export const MAX_SERIES = SERIES_LIGHT.length
+const MAX_SERIES = SERIES_LIGHT.length
 
 /**
  * Agent → colour slot, fixed for the life of the product.
@@ -78,16 +78,6 @@ export function seriesColor(provider: string, isDark: boolean): string {
 }
 
 /**
- * The colour for a chart with a single series — slot 1.
- *
- * Nominal categories (models, repos, chats) all share this one hue: shading
- * them by value would re-encode the bar length as colour.
- */
-export function singleSeriesColor(isDark: boolean): string {
-  return (isDark ? SERIES_DARK : SERIES_LIGHT)[0]
-}
-
-/**
  * Colour for the Nth series of a dimension with no fixed identity list —
  * models, repos and chats, which are unbounded and differ per account.
  *
@@ -99,27 +89,4 @@ export function singleSeriesColor(isDark: boolean): string {
 export function slotColor(index: number, isDark: boolean): string {
   const palette = isDark ? SERIES_DARK : SERIES_LIGHT
   return palette[index % palette.length]
-}
-
-/** Display label for a series keyed by provider name. */
-export function providerSeriesLabel(provider: string): string {
-  return provider === OTHER_KEY ? "Other" : providerLabel(provider as ProviderName)
-}
-
-/**
- * Rank `providers` by `weight` and fold everything past MAX_SERIES into a
- * single "Other" key, so a chart never needs a ninth colour.
- *
- * Returns the keys to draw, in descending weight order. "Other" always sorts
- * last regardless of its size — it is a remainder, not a competitor.
- */
-export function foldSeries(
-  providers: string[],
-  weight: (provider: string) => number
-): string[] {
-  const ranked = [...providers]
-    .filter((p) => weight(p) > 0)
-    .sort((a, b) => weight(b) - weight(a))
-  if (ranked.length <= MAX_SERIES) return ranked
-  return [...ranked.slice(0, MAX_SERIES), OTHER_KEY]
 }

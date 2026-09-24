@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -34,6 +34,8 @@ const DIMENSIONS: { key: UsageDimension; label: string }[] = [
 
 interface UsageSectionProps {
   isMobile: boolean
+  /** Scope to open with — the per-chat usage modal hands its chat through here. */
+  initialScope?: string
 }
 
 /**
@@ -44,22 +46,10 @@ interface UsageSectionProps {
  * Tokens come from the usage ledger — they are the only story for own-key and
  * free-model runs, which spend nothing.
  */
-export function UsageSection({ isMobile }: UsageSectionProps) {
+export function UsageSection({ isMobile, initialScope = ACCOUNT_SCOPE }: UsageSectionProps) {
   const [range, setRange] = useState<UsageRange>("30d")
   const [metric, setMetric] = useState<UsageMetricKey>("credits")
-  // In the URL rather than only in state, so a scoped view can be linked to —
-  // which is what lets the per-chat usage modal hand off to this tab.
-  const [scope, setScopeState] = useState<string>(() => {
-    if (typeof window === "undefined") return ACCOUNT_SCOPE
-    return new URLSearchParams(window.location.search).get("scope") || ACCOUNT_SCOPE
-  })
-  const setScope = useCallback((next: string) => {
-    setScopeState(next)
-    const url = new URL(window.location.href)
-    if (next === ACCOUNT_SCOPE) url.searchParams.delete("scope")
-    else url.searchParams.set("scope", next)
-    window.history.replaceState(null, "", url)
-  }, [])
+  const [scope, setScope] = useState<string>(initialScope)
   const [dimension, setDimension] = useState<UsageDimension>("agent")
 
   const { status: sessionStatus } = useSession()

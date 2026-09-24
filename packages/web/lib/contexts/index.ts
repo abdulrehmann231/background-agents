@@ -18,4 +18,4 @@ export {
   COLLAPSED_WIDTH,
   COLLAPSE_THRESHOLD,
 } from "./SidebarContext"
-export type { SidebarContextValue, ViewMode } from "./SidebarContext"
+export type { SidebarContextValue } from "./SidebarContext"

@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from "react"
 import { CreateRepoModal } from "@/components/modals/CreateRepoModal"
+import { SettingsModal } from "@/components/modals/SettingsModal"
 import { SignInModal } from "@/components/modals/SignInModal"
 import { ReAuthBanner } from "@/components/modals/ReAuthBanner"
 import { HelpModal } from "@/components/modals/HelpModal"
@@ -44,6 +45,9 @@ interface AppModalsProps {
   // Create-repo modal — called with the newly-created repo + default branch.
   onRepoSelect: ComponentProps<typeof CreateRepoModal>["onSelect"]
 
+  // Settings
+  onSaveSettings: ComponentProps<typeof SettingsModal>["onSave"]
+
   // Environment variables
   onSaveEnvVars: ComponentProps<typeof EnvironmentVariablesModal>["onSave"]
   envVarsChatEnvVars: Record<string, string>
@@ -73,6 +77,7 @@ export function AppModals({
   githubTokenInvalid,
   onDismissReAuthBanner,
   onRepoSelect,
+  onSaveSettings,
   onSaveEnvVars,
   envVarsChatEnvVars,
   envVarsRepoEnvVars,
@@ -87,7 +92,7 @@ export function AppModals({
 }: AppModalsProps) {
   const modals = useModals()
   const gitDialogs = useGit()
-  const { currentChat, currentChatId, chats, renameChat } = useChat()
+  const { currentChat, currentChatId, chats, settings, credentialFlags, renameChat } = useChat()
 
   return (
     <>
@@ -97,6 +102,19 @@ export function AppModals({
         onSelect={onRepoSelect}
         isMobile={isMobile}
         suggestedName={currentChat?.displayName ?? null}
+      />
+
+      <SettingsModal
+        open={modals.settingsOpen}
+        onClose={modals.closeSettings}
+        settings={settings}
+        credentialFlags={credentialFlags}
+        onSave={onSaveSettings}
+        highlightKey={modals.settingsHighlightKey}
+        defaultSection={modals.settingsDefaultSection}
+        usageScope={modals.settingsUsageScope}
+        onDismissWithoutKey={modals.settingsDismissRevert}
+        isMobile={isMobile}
       />
 
       <EnvironmentVariablesModal

@@ -31,8 +31,10 @@ export function WelcomeView({
         isMobile ? "p-4 pb-safe" : "p-4"
       )}>
         <div className="absolute top-3 right-3 flex items-center gap-1">
-          {/* The balance matters most here, before anything has been spent. */}
-          <CreditBalancePill />
+          {/* The balance matters most here, before anything has been spent —
+              but on mobile the header above already carries it, and two would
+              be two. */}
+          {!isMobile && <CreditBalancePill />}
           {onOpenCommandPalette && (
             <button
               onClick={onOpenCommandPalette}

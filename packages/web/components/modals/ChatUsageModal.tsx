@@ -161,7 +161,7 @@ export function ChatUsageModal({ chatId, onClose, isMobile = false }: ChatUsageM
               <button
                 onClick={() => {
                   onClose()
-                  if (chatId) modals.openSettingsSection("usage", `scope=chat:${chatId}`)
+                  if (chatId) modals.openSettingsSection("usage", `chat:${chatId}`)
                 }}
                 className="text-xs text-primary hover:underline cursor-pointer"
               >

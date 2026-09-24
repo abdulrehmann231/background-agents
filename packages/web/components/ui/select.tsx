@@ -99,18 +99,3 @@ export const SelectItem = React.forwardRef<
   </SelectPrimitive.Item>
 ))
 SelectItem.displayName = SelectPrimitive.Item.displayName
-
-export const SelectGroup = SelectPrimitive.Group
-
-/** Heading for a SelectGroup. Indented to clear the items' check-mark gutter. */
-export const SelectLabel = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Label>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>
->(({ className, ...props }, ref) => (
-  <SelectPrimitive.Label
-    ref={ref}
-    className={cn("px-7 py-1.5 text-xs font-medium text-muted-foreground", className)}
-    {...props}
-  />
-))
-SelectLabel.displayName = SelectPrimitive.Label.displayName

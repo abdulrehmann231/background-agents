@@ -2,7 +2,7 @@
  * Shared types for search palette components
  */
 
-import type { SectionKey } from "@/components/settings/sections"
+import type { SectionKey } from "@/components/modals/SettingsModal"
 
 /**
  * Minimal chat interface for search palette components

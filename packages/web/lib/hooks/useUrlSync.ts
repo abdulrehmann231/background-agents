@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef } from "react"
 import { type Agent, resolveAgentSlug } from "@background-agents/common"
 import { ROUTES, matchRoute } from "@/lib/hooks/useUrlNavigation"
-import type { ViewMode } from "@/lib/contexts"
 
 // =============================================================================
 // useUrlSync — keeps app state in sync with the URL for initial load and
@@ -26,10 +25,8 @@ interface UseUrlSyncOptions {
   // Enter a fresh draft chat with the given agent preselected. Used by the
   // /agent/:slug deep link so the agent is baked into the draft at creation.
   startAgentDraft: (agent: Agent) => void
-  setViewMode: (mode: ViewMode) => void
+  setViewMode: (mode: "chat" | "scheduled-jobs") => void
   setSelectedScheduledJob: (job: { id: string; name: string } | null) => void
-  /** Show the settings page at the section from the URL (unknown ids -> general). */
-  setSettingsSection: (section: string | null) => void
 }
 
 export function useUrlSync({
@@ -41,7 +38,6 @@ export function useUrlSync({
   startAgentDraft,
   setViewMode,
   setSelectedScheduledJob,
-  setSettingsSection,
 }: UseUrlSyncOptions) {
   // Sync URL to state - used for initial load and browser back/forward
   const syncUrlToState = useCallback(
@@ -71,14 +67,6 @@ export function useUrlSync({
           // Set selected job with ID (name will be updated when job data loads)
           setSelectedScheduledJob({ id: matched.jobId, name: matched.jobId })
           // TODO: Handle run selection when runs view is implemented
-          break
-
-        case "settings":
-          // The settings page keeps whatever chat is selected, so leaving it
-          // (back button, sidebar click) lands back on that chat.
-          setViewMode("settings")
-          setSelectedScheduledJob(null)
-          setSettingsSection(matched.section)
           break
 
         case "newChat":
@@ -146,7 +134,7 @@ export function useUrlSync({
           break
       }
     },
-    [currentChatId, isDraftChatId, selectChat, startNewChat, startAgentDraft, setViewMode, setSelectedScheduledJob, setSettingsSection]
+    [currentChatId, isDraftChatId, selectChat, startNewChat, startAgentDraft, setViewMode, setSelectedScheduledJob]
   )
 
   // Track if we've done initial sync
