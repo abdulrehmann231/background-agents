@@ -52,6 +52,8 @@ const GEMINI_API_KEY =
   process.env.TEST_GOOGLE_API_KEY ||
   process.env.GEMINI_API_KEY ||
   process.env.GOOGLE_API_KEY
+const COMMAND_CODE_API_KEY =
+  process.env.TEST_COMMAND_CODE_API_KEY || process.env.COMMAND_CODE_API_KEY
 const KIMI_API_KEY =
   process.env.TEST_KIMI_API_KEY ||
   process.env.KIMI_API_KEY ||
@@ -126,6 +128,13 @@ const providers: ProviderConfig[] = [
     name: "pi",
     apiKeyEnvVar: "ANTHROPIC_API_KEY",
     apiKey: ANTHROPIC_API_KEY,
+  },
+  {
+    // Command Code routes every model through the user's plan on one key.
+    name: "commandcode",
+    apiKeyEnvVar: "COMMAND_CODE_API_KEY",
+    apiKey: COMMAND_CODE_API_KEY,
+    model: "xiaomi/mimo-v2.6-pro",
   },
   {
     name: "kimi",

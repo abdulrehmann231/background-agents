@@ -27,6 +27,25 @@ export function ClaudeCodeIcon({ className }: AgentIconProps) {
   )
 }
 
+// Command Code icon - the ⌘ command glyph the product is named for
+// Path from Lucide's "command" icon (ISC licensed)
+export function CommandCodeIcon({ className }: AgentIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("h-4 w-4", className)}
+    >
+      <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
+    </svg>
+  )
+}
+
 // Codex icon - Official OpenAI logo
 // Source: https://www.svgrepo.com/show/306500/openai.svg
 export function CodexIcon({ className }: AgentIconProps) {
@@ -292,6 +311,8 @@ export function AgentIcon({ agent, className }: { agent: Agent; className?: stri
       return <ClaudeCodeIcon className={className} />
     case "codex":
       return <CodexIcon className={className} />
+    case "command-code":
+      return <CommandCodeIcon className={className} />
     case "copilot":
       return <CopilotIcon className={className} />
     case "droid":

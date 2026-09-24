@@ -7,6 +7,7 @@ import type { ProviderName } from "../types/index"
 const PROVIDER_PACKAGES: Record<ProviderName, string> = {
   claude: "@anthropic-ai/claude-code",
   codex: "@openai/codex",
+  commandcode: "command-code",
   copilot: "@github/copilot",
   droid: "", // droid uses a shell script installer, not npm
   eliza: "", // eliza is built-in, no installation needed

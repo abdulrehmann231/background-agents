@@ -70,6 +70,7 @@ export const SNAPSHOT_RESOURCES = {
 export const AGENT_PACKAGES = {
   claude: "@anthropic-ai/claude-code",
   codex: "@openai/codex",
+  commandcode: "command-code",
   copilot: "@github/copilot",
   kilo: "@kilocode/cli",
   kimi: "", // kimi uses a shell script installer, not npm
@@ -98,6 +99,7 @@ export const TOKSCALE_VERSION = "3.1.2"
  * Pre-installed agents:
  * - Claude (@anthropic-ai/claude-code)
  * - Codex (@openai/codex)
+ * - Command Code (command-code)
  * - Copilot (@github/copilot)
  * - Kilo (@kilocode/cli)
  * - OpenCode (opencode-ai)
@@ -127,6 +129,12 @@ export function getAgentSandboxImage(): Image {
       .runCommands(
         // Install Codex CLI
         "npm install -g @openai/codex"
+      )
+      .runCommands(
+        // Install Command Code CLI. Ships `cmd`/`cmdc`/`commandcode`/
+        // `command-code` bins; we invoke the unambiguous `commandcode` one.
+        // Requires Node 22+, which the base image provides.
+        "npm install -g command-code"
       )
       .runCommands(
         // Install Gemini CLI

@@ -261,6 +261,14 @@ export function AgentModelSelector({
       return "OpenCode"
     }
 
+    if (currentAgent === "command-code") {
+      // One provider key, many vendors — group by the catalog id's shape.
+      if (model.value.startsWith("claude-")) return "Anthropic"
+      if (model.value.startsWith("gpt-")) return "OpenAI"
+      if (model.value.startsWith("google/")) return "Google"
+      return "Open Models"
+    }
+
     if (currentAgent === "kilo") {
       if (model.value.includes("/anthropic/")) return "Anthropic"
       if (model.value.includes("/openai/")) return "OpenAI"
@@ -275,6 +283,7 @@ export function AgentModelSelector({
       case "gemini": return "Google"
       case "github": return "GitHub"
       case "kimi": return "Moonshot"
+      case "commandcode": return "Command Code"
       case "factory": return "Factory"
       case "kilo": return "Kilo"
       case "opencode": return "OpenCode"

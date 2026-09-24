@@ -7,6 +7,7 @@
 import { registry } from "../core/registry"
 import { claudeAgent } from "./claude/index"
 import { codexAgent } from "./codex/index"
+import { commandCodeAgent } from "./commandcode/index"
 import { copilotAgent } from "./copilot/index"
 import { droidAgent } from "./droid/index"
 import { elizaAgent } from "./eliza/index"
@@ -20,6 +21,7 @@ import { piAgent } from "./pi/index"
 // Register all built-in agents
 registry.register(claudeAgent)
 registry.register(codexAgent)
+registry.register(commandCodeAgent)
 registry.register(copilotAgent)
 registry.register(droidAgent)
 registry.register(elizaAgent)
@@ -33,6 +35,7 @@ registry.register(piAgent)
 // Export agent definitions for direct import if needed
 export { claudeAgent } from "./claude/index"
 export { codexAgent } from "./codex/index"
+export { commandCodeAgent } from "./commandcode/index"
 export { copilotAgent } from "./copilot/index"
 export { droidAgent } from "./droid/index"
 export { elizaAgent } from "./eliza/index"
@@ -46,6 +49,7 @@ export { piAgent } from "./pi/index"
 // Re-export tool mappings for testing
 export { CLAUDE_TOOL_MAPPINGS } from "./claude/tools"
 export { CODEX_TOOL_MAPPINGS } from "./codex/tools"
+export { COMMAND_CODE_TOOL_MAPPINGS } from "./commandcode/tools"
 export { COPILOT_TOOL_MAPPINGS } from "./copilot/tools"
 export { DROID_TOOL_MAPPINGS } from "./droid/tools"
 export { ELIZA_TOOL_MAPPINGS } from "./eliza/tools"
@@ -59,6 +63,7 @@ export { PI_TOOL_MAPPINGS } from "./pi/tools"
 // Re-export parsers for testing
 export { parseClaudeLine } from "./claude/parser"
 export { parseCodexLine } from "./codex/parser"
+export { parseCommandCodeLine } from "./commandcode/parser"
 export { parseCopilotLine } from "./copilot/parser"
 export { parseDroidLine } from "./droid/parser"
 export { parseElizaLine } from "./eliza/parser"

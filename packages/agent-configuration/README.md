@@ -4,8 +4,8 @@ A translation layer between coding agents' configuration formats.
 
 ## Overview
 
-Every coding agent (Claude Code, Codex, Gemini, OpenCode, Goose, Copilot, Kilo,
-Kimi, Droid) loads MCP servers and command-permission rules from a different file, in a
+Every coding agent (Claude Code, Codex, Command Code, Gemini, OpenCode, Goose,
+Copilot, Kilo, Kimi, Droid) loads MCP servers and command-permission rules from a different file, in a
 different schema, with a different transport convention. This package takes
 **agent-agnostic inputs** and renders the correct **native config** for whichever
 agent is running, then installs it into the sandbox.
@@ -85,8 +85,8 @@ run headlessly.
 ## MCP setup
 
 Writes per-agent MCP server configs into the sandbox before the agent CLI
-starts. Supported agents: `claude-code`, `codex`, `gemini`, `opencode`, `goose`,
-`copilot`, `kilo`, `kimi`, `droid`. It's a no-op for agents that don't support MCP.
+starts. Supported agents: `claude-code`, `codex`, `command-code`, `gemini`, `opencode`,
+`goose`, `copilot`, `kilo`, `kimi`, `droid`. It's a no-op for agents that don't support MCP.
 
 ```ts
 import { setupMcpForAgent } from "@background-agents/agent-configuration/mcp"

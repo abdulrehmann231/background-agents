@@ -176,6 +176,7 @@ React components for displaying agent icons.
 import {
   ClaudeCodeIcon,
   CodexIcon,
+  CommandCodeIcon,
   CopilotIcon,
   DroidIcon,
   OpenCodeIcon,
