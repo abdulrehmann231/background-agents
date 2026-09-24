@@ -231,27 +231,6 @@ export async function createPullRequest(
 }
 
 /**
- * Create or update a file in a repository via the Contents API.
- * This creates a commit with the file content.
- */
-export async function createFileCommit(
-  token: string,
-  owner: string,
-  repo: string,
-  options: { path: string; message: string; content: string }
-): Promise<void> {
-  // Use btoa for base64 encoding (works in both Node.js and browser)
-  const base64Content = btoa(options.content)
-  await githubFetch(`/repos/${owner}/${repo}/contents/${options.path}`, token, {
-    method: "PUT",
-    body: JSON.stringify({
-      message: options.message,
-      content: base64Content,
-    }),
-  })
-}
-
-/**
  * Fork a repository to the authenticated user's account.
  * Returns the forked repository info. Note: forking is async on GitHub's side,
  * so the returned repo may not be immediately ready for cloning.

@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { lineTooltipCursor, SingleAreaTooltipContent, useSingleAreaHover } from "./chartTooltip"
+import { ChartEmptyState } from "./ChartEmptyState"
 import {
   formatAxisDate,
   formatTooltipDate,
@@ -128,9 +129,9 @@ export function MessagesByModelChart({
       </div>
 
       {!hasData ? (
-        <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-          No {viewMode === "agents" ? "agent" : "model"} usage data available
-        </div>
+        <ChartEmptyState
+          message={`No ${viewMode === "agents" ? "agent" : "model"} usage data available`}
+        />
       ) : (
         <div className="h-[250px] w-full">
           <ResponsiveContainer width="100%" height="100%">

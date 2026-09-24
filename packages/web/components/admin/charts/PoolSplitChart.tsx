@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts"
 import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
+import { ChartEmptyState } from "./ChartEmptyState"
 import { formatAxisDate, formatHour, formatMetricValue, formatTooltipDate } from "./chartFormatters"
 import type { PoolSplitPoint, UsageMetric } from "@/lib/query/hooks"
 
@@ -40,11 +41,7 @@ export function PoolSplitChart({ data, metric, isHourly = false }: PoolSplitChar
   const total = sharedTotal + userTotal
 
   if (total <= 0) {
-    return (
-      <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-        No usage recorded in this range
-      </div>
-    )
+    return <ChartEmptyState message="No usage recorded in this range" />
   }
 
   return (
