@@ -1,0 +1,26 @@
+{
+  "name": "background-agents-promo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion promo video for Daytona Background Agents",
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render src/index.ts PromoPortrait out/promo.mp4",
+    "render:landscape": "remotion render src/index.ts PromoLandscape out/promo-landscape.mp4",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.401",
+    "@remotion/google-fonts": "4.0.401",
+    "@remotion/transitions": "4.0.401",
+    "@remotion/zod-types": "4.0.401",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.401",
+    "zod": "3.22.3"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.0",
+    "typescript": "5.7.3"
+  }
+}
