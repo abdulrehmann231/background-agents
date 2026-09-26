@@ -124,6 +124,7 @@ export {
 export {
   ClaudeCodeIcon,
   CodexIcon,
+  CommandCodeIcon,
   CopilotIcon,
   DroidIcon,
   OpenCodeIcon,

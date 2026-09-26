@@ -190,6 +190,7 @@ export function buildRecordCommand(sockets: ListeningSocket[]): string {
     `  case "$u" in`,
     `    *claude-code*|*opencode*|*openai/codex*|*gemini-cli*|*kimi-code*) return 0 ;;`,
     `    *github/copilot*|*kilocode*|*pi-coding-agent*|*/droid*|*/goose*) return 0 ;;`,
+    `    *command-code*|*commandcode*) return 0 ;;`,
     `    */opt/pty-server*|*sandbox-jobs*) return 0 ;;`,
     `  esac`,
     // A shell operator in the cmdline means this ancestor is the LAUNCHER that

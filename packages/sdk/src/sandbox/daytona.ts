@@ -101,7 +101,9 @@ export function adaptDaytonaSandbox(
         return
       }
 
-      const installCommand = shellInstaller ?? `npm install -g ${packageName}`
+      // The sandbox runs as the non-root daytona user, which can't write to the
+      // global npm prefix (/usr/local/lib/node_modules); it has passwordless sudo.
+      const installCommand = shellInstaller ?? `sudo -n npm install -g ${packageName}`
 
       const installResult = await sandbox.process.executeCommand(
         installCommand, undefined, undefined, 120

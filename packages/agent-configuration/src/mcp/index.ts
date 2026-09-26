@@ -37,6 +37,7 @@ interface McpConfigFile {
 const MCP_SUPPORTED_AGENTS = [
   "claude-code",
   "codex",
+  "command-code",
   "gemini",
   "opencode",
   "goose",
@@ -264,6 +265,31 @@ function generateDroidConfig(servers: AgentMcpServer[]): McpConfigFile {
   }
 }
 
+/**
+ * Command Code: ~/.commandcode/mcp.json (the "user" scope, loaded for every
+ * project) — `mcpServers.<name>` with `transport: "http"` and bearer `headers`.
+ * The CLI also infers HTTP from the presence of `url`, and accepts `type` as an
+ * alias for `transport`; we write `transport` because that is the field its own
+ * `cmd mcp add` writes. Separate file from auth.json/providers.json, so nothing
+ * else we write collides with it.
+ */
+function generateCommandCodeConfig(servers: AgentMcpServer[]): McpConfigFile {
+  const mcpServers: Record<string, unknown> = {}
+  for (const s of servers) {
+    mcpServers[s.name] = {
+      transport: "http",
+      url: s.url,
+      headers: { Authorization: `Bearer ${s.bearerToken}` },
+      enabled: true,
+    }
+  }
+  return {
+    filePath: "/home/daytona/.commandcode/mcp.json",
+    content: JSON.stringify({ mcpServers }, null, 2),
+    format: "json",
+  }
+}
+
 function generateMcpConfigForAgent(
   agent: string,
   servers: AgentMcpServer[]
@@ -276,6 +302,8 @@ function generateMcpConfigForAgent(
       return generateClaudeConfig(servers)
     case "codex":
       return generateCodexConfig(servers)
+    case "command-code":
+      return generateCommandCodeConfig(servers)
     case "gemini":
       return generateGeminiConfig(servers)
     case "opencode":

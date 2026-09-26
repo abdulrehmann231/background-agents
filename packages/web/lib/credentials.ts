@@ -52,6 +52,14 @@ export const CREDENTIAL_KEYS: readonly CredentialField[] = [
     description: "Claude Code only.",
   },
   {
+    id: "COMMAND_CODE_API_KEY",
+    provider: "commandcode",
+    label: "Command Code",
+    helpUrl: "https://commandcode.ai/studio",
+    description:
+      "Create a key in Command Code Studio. Every Command Code model runs on it — the CLI refuses to start headless without one.",
+  },
+  {
     id: "COPILOT_GITHUB_TOKEN",
     provider: "github",
     label: "GitHub PAT (Copilot)",

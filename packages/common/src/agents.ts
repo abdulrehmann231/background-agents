@@ -7,23 +7,24 @@
 // Agent Types
 // =============================================================================
 
-export type Agent = "claude-code" | "opencode" | "codex" | "copilot" | "droid" | "eliza" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
+export type Agent = "claude-code" | "opencode" | "codex" | "command-code" | "copilot" | "droid" | "eliza" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
 
 /**
  * All agent ids, in display order. Agents backed by a server shared pool
  * (claude-code, opencode, gemini) lead, with Kilo (free models, no shared
  * pool) placed ahead of Gemini, then the remaining providers.
  */
-export const ALL_AGENTS: Agent[] = ["claude-code", "opencode", "kilo", "gemini", "droid", "pi", "codex", "copilot", "goose", "kimi", "eliza"]
+export const ALL_AGENTS: Agent[] = ["claude-code", "opencode", "kilo", "gemini", "droid", "command-code", "pi", "codex", "copilot", "goose", "kimi", "eliza"]
 
 /** SDK provider names (must match ProviderName from SDK) */
-export type ProviderName = "claude" | "codex" | "copilot" | "droid" | "eliza" | "opencode" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
+export type ProviderName = "claude" | "codex" | "commandcode" | "copilot" | "droid" | "eliza" | "opencode" | "gemini" | "goose" | "kilo" | "kimi" | "pi"
 
 /** Display labels for each agent */
 export const agentLabels: Record<Agent, string> = {
   "claude-code": "Claude Code",
   "opencode": "OpenCode",
   "codex": "Codex",
+  "command-code": "Command Code",
   "copilot": "GitHub Copilot",
   "droid": "Factory Droid",
   "eliza": "Eliza",
@@ -39,6 +40,7 @@ export const agentToProvider: Record<Agent, ProviderName> = {
   "claude-code": "claude",
   "opencode": "opencode",
   "codex": "codex",
+  "command-code": "commandcode",
   "copilot": "copilot",
   "droid": "droid",
   "eliza": "eliza",
@@ -68,7 +70,7 @@ export function providerLabel(provider: string): string {
 // =============================================================================
 
 /** Provider an API key is associated with. */
-export type ProviderId = "anthropic" | "github" | "openai" | "opencode" | "gemini" | "kilo" | "kimi" | "factory"
+export type ProviderId = "anthropic" | "commandcode" | "github" | "openai" | "opencode" | "gemini" | "kilo" | "kimi" | "factory"
 
 /**
  * Credential identifiers. The id doubles as the env var name we inject
@@ -78,6 +80,7 @@ export type CredentialId =
   | "ANTHROPIC_API_KEY"
   | "CLAUDE_CODE_CREDENTIALS"
   | "CODEX_CREDENTIALS"
+  | "COMMAND_CODE_API_KEY"
   | "COPILOT_GITHUB_TOKEN"
   | "OPENAI_API_KEY"
   | "OPENCODE_API_KEY"
@@ -165,6 +168,7 @@ export function findEndpoint(
 /** Env vars to inject for a given provider. */
 const PROVIDER_ENV: Record<ProviderId, CredentialId[]> = {
   anthropic: ["ANTHROPIC_API_KEY"],
+  commandcode: ["COMMAND_CODE_API_KEY"],
   github: ["COPILOT_GITHUB_TOKEN"],
   openai: ["OPENAI_API_KEY"],
   opencode: ["OPENCODE_API_KEY"],
@@ -341,6 +345,44 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "openai/o3-pro", label: "o3 Pro", requiresKey: "openai" },
     { value: "openai/o4-mini", label: "o4 Mini", requiresKey: "openai" },
   ],
+  "command-code": [
+    // Command Code's own catalog, routed through the user's Command Code plan
+    // on COMMAND_CODE_API_KEY. Ids are the catalog's EXACT ids (the CLI rejects
+    // anything else). No priceUsdPerM: usage bills against the user's own
+    // Command Code plan, not ours, so the picker shows no price.
+    //
+    // Every model needs the one key: print mode refuses to start without a
+    // Command Code credential, even for BYOK providers, so there is no
+    // requiresKey: "none" tier here. The `Min plan` column of the catalog also
+    // gates these — the open models below are the widest-available tier, which
+    // is why they lead and why the default model is one of them.
+    //
+    // ── Open models ──
+    { value: "xiaomi/mimo-v2.6-pro", label: "MiMo v2.6 Pro", requiresKey: "commandcode" },
+    { value: "xiaomi/mimo-v2.6-flash", label: "MiMo v2.6 Flash", requiresKey: "commandcode" },
+    { value: "zai-org/GLM-5.3", label: "GLM-5.3", requiresKey: "commandcode" },
+    { value: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", requiresKey: "commandcode" },
+    { value: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "commandcode" },
+    { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "commandcode" },
+    { value: "moonshotai/Kimi-K3", label: "Kimi K3", requiresKey: "commandcode" },
+    { value: "moonshotai/Kimi-K2.7-Code", label: "Kimi K2.7 Code", requiresKey: "commandcode" },
+    { value: "MiniMaxAI/MiniMax-M3", label: "MiniMax M3", requiresKey: "commandcode" },
+    { value: "Qwen/Qwen3.8-Flash", label: "Qwen 3.8 Flash", requiresKey: "commandcode" },
+    { value: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", requiresKey: "commandcode" },
+    { value: "poolside/laguna-s-2.1-free", label: "Laguna S 2.1", requiresKey: "commandcode" },
+    // ── Anthropic (Pro plan and above) ──
+    { value: "claude-sonnet-5", label: "Claude Sonnet 5", requiresKey: "commandcode" },
+    { value: "claude-opus-5-5", label: "Claude Opus 5.5", requiresKey: "commandcode" },
+    { value: "claude-fable-5-1", label: "Claude Fable 5.1", requiresKey: "commandcode" },
+    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", requiresKey: "commandcode" },
+    // ── OpenAI (Pro plan and above) ──
+    { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "commandcode" },
+    { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "commandcode" },
+    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "commandcode" },
+    // ── Google (Pro plan and above) ──
+    { value: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "commandcode" },
+    { value: "google/gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "commandcode" },
+  ],
   "codex": [
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "openai" },
     { value: "gpt-5.6-sol", label: "GPT-5.6 Sol", requiresKey: "openai" },
@@ -498,6 +540,7 @@ export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "sonnet",
   "opencode": "opencode-go/mimo-v2.5-pro",
   "codex": "gpt-5.5",
+  "command-code": "xiaomi/mimo-v2.6-pro", // widest plan availability of the catalog tiers
   "copilot": "gpt-5-mini",
   "droid": "claude-sonnet-4-5-20250929", // BYOK default (user's ANTHROPIC_API_KEY)
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
@@ -513,6 +556,7 @@ export const agentSupportsPlanMode: Record<Agent, boolean> = {
   "claude-code": true,
   "opencode": false,
   "codex": true,
+  "command-code": true,
   "copilot": false,
   "droid": false,
   "eliza": false,
@@ -546,6 +590,7 @@ export const agentSlugs: Record<string, Agent> = {
   "claude-code": "claude-code",
   "opencode": "opencode",
   "codex": "codex",
+  "command-code": "command-code",
   "copilot": "copilot",
   "droid": "droid",
   "eliza": "eliza",
@@ -556,6 +601,8 @@ export const agentSlugs: Record<string, Agent> = {
   "pi": "pi",
   // Friendly aliases
   "claude": "claude-code",
+  "commandcode": "command-code",
+  "cmd": "command-code",
   "factory": "droid",
 }
 

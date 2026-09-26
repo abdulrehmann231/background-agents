@@ -1,7 +1,7 @@
 {
   "name": "@background-agents/sdk",
   "version": "0.1.2",
-  "description": "A TypeScript SDK for interacting with various AI coding agents (Claude, Codex, Copilot, Droid, Gemini, Goose, Kilo, Kimi, OpenCode, Pi)",
+  "description": "A TypeScript SDK for interacting with various AI coding agents (Claude, Codex, Command Code, Copilot, Droid, Gemini, Goose, Kilo, Kimi, OpenCode, Pi)",
   "publishConfig": {
     "access": "public"
   },
@@ -39,6 +39,7 @@
     "coding-agent",
     "claude",
     "codex",
+    "commandcode",
     "copilot",
     "droid",
     "gemini",

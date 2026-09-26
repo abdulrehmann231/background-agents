@@ -10,6 +10,7 @@ Pre-installed agents:
 
 - **Claude Code** (`@anthropic-ai/claude-code`)
 - **Codex** (`@openai/codex`)
+- **Command Code** (`command-code`)
 - **Copilot** (`@github/copilot`)
 - **Kilo** (`@kilocode/cli`)
 - **OpenCode** (`opencode-ai`)
