@@ -348,7 +348,8 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   "command-code": [
     // Command Code's own catalog, routed through the user's Command Code plan
     // on COMMAND_CODE_API_KEY. Ids are the catalog's EXACT ids (the CLI rejects
-    // anything else) and priceUsdPerM is its published input $/M rate.
+    // anything else). No priceUsdPerM: usage bills against the user's own
+    // Command Code plan, not ours, so the picker shows no price.
     //
     // Every model needs the one key: print mode refuses to start without a
     // Command Code credential, even for BYOK providers, so there is no
@@ -357,30 +358,30 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // is why they lead and why the default model is one of them.
     //
     // ── Open models ──
-    { value: "xiaomi/mimo-v2.6-pro", label: "MiMo v2.6 Pro", requiresKey: "commandcode", priceUsdPerM: 0.435 },
-    { value: "xiaomi/mimo-v2.6-flash", label: "MiMo v2.6 Flash", requiresKey: "commandcode", priceUsdPerM: 0.14 },
-    { value: "zai-org/GLM-5.3", label: "GLM-5.3", requiresKey: "commandcode", priceUsdPerM: 1.4 },
-    { value: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", requiresKey: "commandcode", priceUsdPerM: 0.15 },
-    { value: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "commandcode", priceUsdPerM: 0.66 },
-    { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "commandcode", priceUsdPerM: 0.15 },
-    { value: "moonshotai/Kimi-K3", label: "Kimi K3", requiresKey: "commandcode", priceUsdPerM: 3 },
-    { value: "moonshotai/Kimi-K2.7-Code", label: "Kimi K2.7 Code", requiresKey: "commandcode", priceUsdPerM: 0.95 },
-    { value: "MiniMaxAI/MiniMax-M3", label: "MiniMax M3", requiresKey: "commandcode", priceUsdPerM: 0.3 },
-    { value: "Qwen/Qwen3.8-Flash", label: "Qwen 3.8 Flash", requiresKey: "commandcode", priceUsdPerM: 0.16 },
-    { value: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", requiresKey: "commandcode", priceUsdPerM: 0.6 },
-    { value: "poolside/laguna-s-2.1-free", label: "Laguna S 2.1", requiresKey: "commandcode", priceUsdPerM: 0 },
+    { value: "xiaomi/mimo-v2.6-pro", label: "MiMo v2.6 Pro", requiresKey: "commandcode" },
+    { value: "xiaomi/mimo-v2.6-flash", label: "MiMo v2.6 Flash", requiresKey: "commandcode" },
+    { value: "zai-org/GLM-5.3", label: "GLM-5.3", requiresKey: "commandcode" },
+    { value: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", requiresKey: "commandcode" },
+    { value: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "commandcode" },
+    { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "commandcode" },
+    { value: "moonshotai/Kimi-K3", label: "Kimi K3", requiresKey: "commandcode" },
+    { value: "moonshotai/Kimi-K2.7-Code", label: "Kimi K2.7 Code", requiresKey: "commandcode" },
+    { value: "MiniMaxAI/MiniMax-M3", label: "MiniMax M3", requiresKey: "commandcode" },
+    { value: "Qwen/Qwen3.8-Flash", label: "Qwen 3.8 Flash", requiresKey: "commandcode" },
+    { value: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", requiresKey: "commandcode" },
+    { value: "poolside/laguna-s-2.1-free", label: "Laguna S 2.1", requiresKey: "commandcode" },
     // ── Anthropic (Pro plan and above) ──
-    { value: "claude-sonnet-5", label: "Claude Sonnet 5", requiresKey: "commandcode", priceUsdPerM: 2 },
-    { value: "claude-opus-5-5", label: "Claude Opus 5.5", requiresKey: "commandcode", priceUsdPerM: 4 },
-    { value: "claude-fable-5-1", label: "Claude Fable 5.1", requiresKey: "commandcode", priceUsdPerM: 10 },
-    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", requiresKey: "commandcode", priceUsdPerM: 1 },
+    { value: "claude-sonnet-5", label: "Claude Sonnet 5", requiresKey: "commandcode" },
+    { value: "claude-opus-5-5", label: "Claude Opus 5.5", requiresKey: "commandcode" },
+    { value: "claude-fable-5-1", label: "Claude Fable 5.1", requiresKey: "commandcode" },
+    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", requiresKey: "commandcode" },
     // ── OpenAI (Pro plan and above) ──
-    { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "commandcode", priceUsdPerM: 2 },
-    { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "commandcode", priceUsdPerM: 0.1 },
-    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "commandcode", priceUsdPerM: 2 },
+    { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "commandcode" },
+    { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "commandcode" },
+    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "commandcode" },
     // ── Google (Pro plan and above) ──
-    { value: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "commandcode", priceUsdPerM: 1.5 },
-    { value: "google/gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "commandcode", priceUsdPerM: 0.3 },
+    { value: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "commandcode" },
+    { value: "google/gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "commandcode" },
   ],
   "codex": [
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "openai" },
