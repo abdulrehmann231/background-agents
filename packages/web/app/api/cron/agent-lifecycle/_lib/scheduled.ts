@@ -17,6 +17,7 @@ import { meterTurnNow } from "./meter-turn"
 import { buildUsageMeta } from "@/lib/server/shared-pool"
 import { toSecretMarker } from "@/lib/server/opencode-pool"
 import {
+  ensureSharedOpencodeSecret,
   mountSharedOpencodeSecret,
   sharedOpencodeSecretForRun,
   applySecretToAgentEnv,
@@ -162,6 +163,7 @@ export async function startJobExecution(
   // mounted at creation (see lib/server/opencode-secrets).
   let credentials = await getUserCredentials(job.userId)
   const opencodeSecret = sharedOpencodeSecretForRun(credentials, job.agent as Agent, job.model ?? undefined)
+  if (opencodeSecret) await ensureSharedOpencodeSecret(daytona, opencodeSecret)
 
   // 5. Create fresh sandbox. createSandboxForChat detects NEW_REPOSITORY and
   //    skips the clone path, so we don't need the GitHub token in that case.
@@ -220,7 +222,7 @@ export async function startJobExecution(
   // 7. Create background session
   const repoPath = `${PATHS.SANDBOX_HOME}/project`
   const env = getEnvForModel(job.model ?? undefined, job.agent as Agent, credentials, customEndpoints)
-  // Shared OpenCode in secrets mode: the secret was mounted at creation (this
+  // Shared OpenCode: the secret was mounted at creation (this
   // resolves it without API calls), and OpenCode is pointed at its
   // placeholder instead of the marker. No detach needed: the sandbox is
   // deleted when the run ends.
