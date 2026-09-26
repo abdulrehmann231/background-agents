@@ -20,7 +20,14 @@ export interface ModalContextValue {
   /** Called when Settings is dismissed without providing the highlighted API key. */
   settingsDismissRevert: (() => void) | null
   openSettings: (highlightKey?: HighlightKey, onDismissWithoutKey?: () => void) => void
-  openSettingsSection: (section?: SectionKey) => void
+  /**
+   * Open Settings on a section, optionally narrowing the Usage tab to one repo
+   * or chat ("repo:<slug>" / "chat:<id>"). The scope rides in state rather than
+   * the URL because Settings is a modal — there is no address to put it in.
+   */
+  openSettingsSection: (section?: SectionKey, usageScope?: string) => void
+  /** Scope the Usage tab opens with; "account" unless something handed it one. */
+  settingsUsageScope: string
   closeSettings: () => void
 
   // Help & Sign-in modals
@@ -83,6 +90,7 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
   // Revert callback invoked if Settings is dismissed without the highlighted key
   // (e.g. the user picked an agent that needs a key, then closed without one).
   const [settingsDismissRevert, setSettingsDismissRevert] = useState<(() => void) | null>(null)
+  const [settingsUsageScope, setSettingsUsageScope] = useState("account")
 
   // Help & Sign-in modals
   const [helpOpen, setHelpOpen] = useState(false)
@@ -128,10 +136,11 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
   }, [isMobile, onMobileSidebarClose])
 
   // Handler for opening settings to a specific section (used by command palette)
-  const openSettingsSection = useCallback((section?: SectionKey) => {
+  const openSettingsSection = useCallback((section?: SectionKey, usageScope?: string) => {
     setSettingsHighlightKey(null)
     setSettingsDismissRevert(null)
     setSettingsDefaultSection(section ?? "general")
+    setSettingsUsageScope(usageScope ?? "account")
     setSettingsOpen(true)
     if (isMobile) {
       onMobileSidebarClose?.()
@@ -155,6 +164,7 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
     setSettingsOpen,
     settingsHighlightKey,
     settingsDefaultSection,
+    settingsUsageScope,
     settingsDismissRevert,
     openSettings,
     openSettingsSection,

@@ -11,14 +11,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { lineTooltipCursor, SingleAreaTooltipContent, useSingleAreaHover } from "./chartTooltip"
+import { lineTooltipCursor, SingleAreaTooltipContent, useSingleAreaHover } from "@/components/charts/chartTooltip"
 import {
   CATEGORICAL_COLORS,
   formatAxisDate,
   formatHour,
   formatMetricValue,
   formatTooltipDate,
-} from "./chartFormatters"
+} from "@/components/charts/chartFormatters"
 
 interface UserLabel {
   userId: string

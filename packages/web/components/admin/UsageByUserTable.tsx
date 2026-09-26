@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { formatMetricValue } from "./charts/chartFormatters"
+import { formatMetricValue } from "@/components/charts/chartFormatters"
 import { UserModelBreakdownModal } from "./UserModelBreakdownModal"
 import type { TopupUser, UserBalance, UserUsage } from "@/lib/query/hooks"
 

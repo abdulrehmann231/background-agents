@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FolderDown, Bell, CreditCard, Server, Wrench } from "lucide-react"
+import { X, Key, Sun, Bot, Settings as SettingsIcon, GitBranch, FolderDown, Bell, CreditCard, Server, Wrench, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusChatPrompt } from "@/components/ui/modal-header"
 import { useDragToClose } from "@/lib/hooks/useDragToClose"
@@ -26,6 +26,7 @@ import {
   LocalSyncSection,
   AppearanceSection,
   DeveloperSection,
+  UsageSection,
   initialCredValues,
   MASK,
   type HighlightKey,
@@ -35,7 +36,7 @@ import {
 export type { HighlightKey }
 
 /** Settings modal section identifier */
-export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "credits" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
+export type SectionKey = "general" | "api-keys" | "custom-endpoints" | "credits" | "usage" | "git" | "notifications" | "local-sync" | "appearance" | "developer"
 
 interface SettingsModalProps {
   open: boolean
@@ -53,6 +54,8 @@ interface SettingsModalProps {
   defaultSection?: SectionKey
   /** Called if the modal is dismissed without providing the highlighted key. */
   onDismissWithoutKey?: (() => void) | null
+  /** Scope the Usage tab opens with ("account", "repo:…", "chat:…"). */
+  usageScope?: string
   isMobile?: boolean
 }
 
@@ -63,6 +66,7 @@ const baseSections: SectionDef[] = [
   { key: "api-keys", label: "API Keys", icon: Key },
   { key: "custom-endpoints", label: "Custom endpoints", icon: Server },
   { key: "credits", label: "Credits", icon: CreditCard },
+  { key: "usage", label: "Usage", icon: BarChart3 },
   { key: "appearance", label: "Appearance", icon: Sun },
   { key: "git", label: "Git", icon: GitBranch },
   { key: "notifications", label: "Notifications", icon: Bell },
@@ -80,7 +84,7 @@ function getSections(isDesktopApp: boolean): SectionDef[] {
   return out
 }
 
-export function SettingsModal({ open, onClose, settings, credentialFlags, onSave, highlightKey, defaultSection = "general", onDismissWithoutKey, isMobile = false }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, settings, credentialFlags, onSave, highlightKey, defaultSection = "general", onDismissWithoutKey, usageScope = "account", isMobile = false }: SettingsModalProps) {
   const { setTheme } = useTheme()
   const { isDesktopApp, getClaudeLicenseAutoDetect, getLicenseDetectSettings, setLicenseDetectSettings } = useElectron()
 
@@ -410,6 +414,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
         )
       case "credits":
         return <CreditsSection isMobile={isMobile} />
+      case "usage":
+        return <UsageSection isMobile={isMobile} initialScope={usageScope} />
       case "git":
         return (
           <GitSection
@@ -467,7 +473,10 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile
               ? "inset-x-0 bottom-0 top-0 rounded-none"
-              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl h-[600px] max-h-[85vh] border border-border rounded-xl shadow-xl",
+              // Wider and taller than the old form-only dialog: the Usage tab
+              // carries a time-series chart, and a 768px box squeezed it to the
+              // point where the day axis stopped being readable.
+              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-5xl h-[680px] max-h-[88vh] border border-border rounded-xl shadow-xl",
             !isDragging && isMobile && "transition-transform duration-300"
           )}
           style={isMobile ? {

@@ -38,6 +38,13 @@ export const queryKeys = {
       [...queryKeys.sandbox.all, "files", sandboxId, filePath] as const,
   },
 
+  // Current user's own data
+  user: {
+    all: ["user"] as const,
+    usage: (range: string, scope: string, dimension: string) =>
+      [...queryKeys.user.all, "usage", range, scope, dimension] as const,
+  },
+
   // Admin
   admin: {
     all: ["admin"] as const,

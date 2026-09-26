@@ -9,8 +9,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { chartTooltipProps, lineTooltipCursor } from "./chartTooltip"
-import { formatAxisDate, formatTooltipDate } from "./chartFormatters"
+import { chartTooltipProps, lineTooltipCursor } from "@/components/charts/chartTooltip"
+import { formatAxisDate, formatTooltipDate } from "@/components/charts/chartFormatters"
 import { ChartEmptyState } from "./ChartEmptyState"
 
 interface WeeklyActiveUsersData {

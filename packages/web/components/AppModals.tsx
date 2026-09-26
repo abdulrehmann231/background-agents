@@ -112,6 +112,7 @@ export function AppModals({
         onSave={onSaveSettings}
         highlightKey={modals.settingsHighlightKey}
         defaultSection={modals.settingsDefaultSection}
+        usageScope={modals.settingsUsageScope}
         onDismissWithoutKey={modals.settingsDismissRevert}
         isMobile={isMobile}
       />

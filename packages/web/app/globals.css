@@ -157,6 +157,7 @@
   --sidebar: oklch(0.11 0.005 285);
   --sidebar-foreground: oklch(0.93 0 0);
   --sidebar-border: oklch(0.25 0.005 285);
+
 }
 
 @theme inline {

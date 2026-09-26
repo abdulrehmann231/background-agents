@@ -12,7 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
-import { lineTooltipCursor, SingleAreaTooltipContent, useSingleAreaHover } from "./chartTooltip"
+import { lineTooltipCursor, SingleAreaTooltipContent, useSingleAreaHover } from "@/components/charts/chartTooltip"
 import { ChartEmptyState } from "./ChartEmptyState"
 import {
   formatAxisDate,
@@ -20,7 +20,7 @@ import {
   formatHour,
   formatMetricValue,
   type StatsMetric,
-} from "./chartFormatters"
+} from "@/components/charts/chartFormatters"
 
 // Refined color palette that works in both light and dark modes
 const COLORS = [

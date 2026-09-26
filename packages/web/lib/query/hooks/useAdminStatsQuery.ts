@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useSession } from "next-auth/react"
 import { queryKeys } from "../keys"
 import { adminRetry, fetchAdminJson } from "./adminQuery"
-import type { StatsMetric } from "@/components/admin/charts/chartFormatters"
+import type { StatsMetric } from "@/components/charts/chartFormatters"
 
 export type StatsTimeRange = "24h" | "7d" | "30d" | "all"
 export type { StatsMetric }

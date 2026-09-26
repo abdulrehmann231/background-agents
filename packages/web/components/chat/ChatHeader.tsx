@@ -9,6 +9,7 @@ import { useRepoFolderButton } from "@/lib/hooks/useLocalSync"
 import { useModals, useGit } from "@/lib/contexts"
 import { Input } from "../ui/input"
 import { ShareButton } from "./ShareButton"
+import { CreditBalancePill } from "./CreditBalancePill"
 import type { Chat } from "@/lib/types"
 import type { RebaseConflictState } from "@background-agents/common"
 
@@ -192,6 +193,7 @@ export function ChatHeader({
         className="flex items-center gap-1"
         style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
       >
+        <CreditBalancePill />
         <FolderSyncButton repo={chat.repo} />
         <ShareButton key={chat.id} chatId={chat.id} initialShareId={chat.shareId} />
         {onOpenCommandPalette && (

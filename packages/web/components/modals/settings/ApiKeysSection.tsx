@@ -263,7 +263,9 @@ export function ApiKeysSection({
         }
 
         return (
-          <SettingsRow key={field.id} label={field.label} description={description}>
+          // Stacked on phones: inline, a 224px field leaves the label ~110px,
+          // which truncates the name and wraps the description to four lines.
+          <SettingsRow key={field.id} label={field.label} description={description} stacked={isMobile}>
             <PasswordInput
               value={value}
               onChange={(v) => setCredValue(field.id, v)}

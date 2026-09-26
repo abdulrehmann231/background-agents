@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog"
 import { ModalHeader } from "@/components/ui/modal-header"
 import { cn } from "@/lib/utils"
-import { formatMetricValue } from "./charts/chartFormatters"
+import { formatMetricValue } from "@/components/charts/chartFormatters"
 import type { UserModelUsage } from "@/lib/query/hooks"
 
 interface BreakdownUser {
