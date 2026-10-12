@@ -14,9 +14,11 @@ import {
   MAX_BONUS_CREDIT_USD,
   bonusReasonLabel,
   type BonusCreditReason,
+  type BonusCreditRequest,
 } from "@/lib/bonus-credits"
 import { fmtBalance } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 
 interface PickedUser {
   id: string
@@ -44,6 +46,10 @@ export function BonusCredits() {
   const [note, setNote] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
   const [result, setResult] = useState<GrantBonusCreditsResult | null>(null)
+  const [pendingGrant, setPendingGrant] = useState<{
+    request: BonusCreditRequest
+    who: string
+  } | null>(null)
 
   const searchQuery = useAdminUsersQuery({ page: 1, limit: 8, search: search.trim() || undefined })
   // Unfiltered count, for the "all users" confirmation.
@@ -84,12 +90,9 @@ export function BonusCredits() {
       target === "all"
         ? `ALL${totalUsers !== null ? ` ${totalUsers}` : ""} users`
         : `${picked.length} user${picked.length === 1 ? "" : "s"}`
-    if (!window.confirm(`Grant ${fmtBalance(amountUsd)} to ${who} for "${bonusReasonLabel(reason)}"?`)) {
-      return
-    }
-
-    mutation.mutate(
-      {
+    setPendingGrant({
+      who,
+      request: {
         target,
         userIds: target === "users" ? picked.map((u) => u.id) : [],
         amountUsd,
@@ -97,6 +100,13 @@ export function BonusCredits() {
         note: note.trim() || null,
         reference: reference.trim() || null,
       },
+    })
+  }
+
+  function confirmGrant() {
+    if (!pendingGrant || mutation.isPending) return
+    mutation.mutate(
+      pendingGrant.request,
       {
         onSuccess: (r) => {
           setResult(r)
@@ -114,6 +124,16 @@ export function BonusCredits() {
 
   return (
     <section className="space-y-6">
+      <ConfirmDialog
+        open={pendingGrant !== null}
+        onClose={() => setPendingGrant(null)}
+        onConfirm={confirmGrant}
+        title="Grant bonus credits?"
+        description={pendingGrant &&
+          `Grant ${fmtBalance(pendingGrant.request.amountUsd)} to ${pendingGrant.who} for "${bonusReasonLabel(pendingGrant.request.reason)}"?`
+        }
+        confirmLabel="Grant credits"
+      />
       <div>
         <h2 className="text-lg font-semibold md:text-xl">Bonus credits</h2>
         <p className="text-xs text-muted-foreground">
