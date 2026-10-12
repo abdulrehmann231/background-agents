@@ -4,9 +4,10 @@ import { useCallback, useRef, useEffect } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
-import { Key, Wallet } from "lucide-react"
+import { Key, Star, Wallet } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { fmtBalance } from "@/lib/format"
+import { GITHUB_REPO_URL } from "@/lib/bonus-credits"
 
 interface LimitReachedDialogProps {
   open: boolean
@@ -112,7 +113,8 @@ export function LimitReachedDialog({
               ) : (
                 "You're out of credits."
               )}{" "}
-              Top up to continue — your balance is shared across Claude, OpenCode and Gemini.
+              Top up to continue, or star our repo on GitHub to get free credits — your
+              balance is shared across Claude, OpenCode and Gemini.
             </div>
 
             <div className="space-y-2">
@@ -142,6 +144,34 @@ export function LimitReachedDialog({
                   </div>
                 </div>
               </button>
+
+              {/* Star the repo for free credits. Granted by an admin from the
+                  /admin Credits panel (see lib/bonus-credits), not instantly —
+                  so this opens GitHub in a new tab and leaves the dialog up. */}
+              <a
+                href={GITHUB_REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-lg border border-border hover:bg-accent/50 transition-colors p-3 text-left cursor-pointer",
+                  "focus:outline-none focus:ring-2 focus:ring-ring"
+                )}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+                  <Star className="h-5 w-5 text-amber-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground">
+                    Star our repo on GitHub
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Get free credits for starring Backgrounder
+                  </div>
+                </div>
+                <div className="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded bg-amber-500/10">
+                  Free credits
+                </div>
+              </a>
 
               {/* Option 2: OpenCode's free models, which never draw the balance. */}
               {canSwitchToOpenCode && (
