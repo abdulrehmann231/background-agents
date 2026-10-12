@@ -29,7 +29,7 @@ export function adaptDaytonaSandbox(
       .join("; ")
     const fullCommand = envExports ? `${envExports}; ${command}` : command
     const result = await sandbox.process.executeCommand(fullCommand, undefined, undefined, timeout)
-    return { exitCode: result.exitCode ?? 0, output: result.result ?? "" }
+    return { exitCode: result.exitCode ?? -1, output: result.result ?? "" }
   }
 
   // Long-running-process runner, wired to @background-agents/sandbox-jobs.

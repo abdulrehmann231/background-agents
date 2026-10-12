@@ -229,7 +229,28 @@ Returns `true` while the agent is running.
 
 ### `session.cancel()`
 
-Kills the running agent process.
+Prevents a prepared attempt from starting later and stops an already-running
+process. It resolves only after cancellation is confirmed. A transport or
+metadata error is not proof that the agent stopped; retain the session id and
+retry inspection/cancellation rather than starting a replacement concurrently.
+
+New sessions save a known launch identity before their first command starts.
+If startup fails or its response is lost, reattach using the same session id.
+An `idle` snapshot with `launchPreparedAt` means a known attempt was prepared
+but has no observable process yet. Calling `cancel()` safely fences that
+attempt, including after a server restart. Legacy sessions without this
+metadata cannot be declared stopped merely because their process is missing.
+
+A cold session's `start()` retries its known prepared attempt; it does not
+silently create another execution. A warm session can start its next turn once
+its acknowledged prior turn has actually exited. After cancellation, or when
+starting new work from a cold caller, create a new session (pass the provider's
+resumable `sessionId` when appropriate). `TurnHandle.executionId` identifies the
+durable job attempt. Custom sandbox adapters must implement the updated
+`SandboxJobs.abort()` / `isAborted()` contract.
+
+`running` describes process liveness, not only the presence of an agent `end`
+event. The final event can arrive before process cleanup is finished.
 
 ### `getSession(sessionId, options)`
 

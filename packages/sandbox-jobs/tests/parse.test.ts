@@ -32,9 +32,21 @@ describe("deriveStatus", () => {
   it("exit file wins even if a zombie lingers", () => {
     expect(deriveStatus("0", "Z")).toEqual({ state: "exited", exitCode: 0, alive: false })
   })
+  it("does not treat ps zombie modifiers as a live process", () => {
+    expect(deriveStatus("143", "Zs Z+")).toEqual({ state: "exited", exitCode: 143, alive: false })
+    expect(deriveStatus("", "Zsl+Z")).toEqual({ state: "crashed", exitCode: null, alive: false })
+    expect(deriveStatus("143", "ZsS+")).toEqual({ state: "running", exitCode: null, alive: true })
+  })
+  it("does not report terminal while an owned process remains alive", () => {
+    expect(deriveStatus("0", "S")).toEqual({ state: "running", exitCode: null, alive: true })
+  })
 })
 
 describe("parseRead", () => {
+  it("rejects missing status/output acknowledgement rather than inferring a crash", () => {
+    expect(() => parseRead("", 0)).toThrow(/incomplete/)
+    expect(() => parseRead("@@SBJ-DATA@@\n", 0)).toThrow(/incomplete/)
+  })
   it("returns only complete lines and advances the cursor past them", () => {
     const r = read("EXIT:\nSTATE:S\n", "a\nb\nc")
     expect(r.raw).toBe("a\nb\n") // trailing partial "c" withheld

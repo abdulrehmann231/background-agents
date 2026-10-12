@@ -24,6 +24,35 @@ function runningSnapshot(overrides: Partial<AgentSnapshot> = {}): AgentSnapshot 
 }
 
 describe("snapshotBackgroundAgent", () => {
+  it.each([true, false])("waits for execution exit after a successful end event (alive=%s)", async (alive) => {
+    vi.mocked(getSession).mockResolvedValueOnce({
+      getSnapshot: async () => ({ events: [{ type: "end" }], sessionId: "provider", cursor: "1", running: alive }),
+    } as unknown as Awaited<ReturnType<typeof getSession>>)
+    expect((await snapshotBackgroundAgent(sandbox, "finishing", { repoPath: "/repo" })).status)
+      .toBe(alive ? "running" : "completed")
+  })
+
+  it("distinguishes a durably prepared launch from an unreadable legacy session", async () => {
+    const preparedAt = new Date().toISOString()
+    vi.mocked(getSession).mockResolvedValueOnce({
+      getSnapshot: async () => ({ events: [], sessionId: null, cursor: "0", running: false, runPhase: "idle", launchPreparedAt: preparedAt }),
+    } as unknown as Awaited<ReturnType<typeof getSession>>)
+    const snap = await snapshotBackgroundAgent(sandbox, "prepared", { repoPath: "/repo" })
+    expect(snap).toMatchObject({ status: "running", startupPending: true, startupPreparedAt: Date.parse(preparedAt) })
+    expect(snap.transientReadFailure).not.toBe(true)
+  })
+
+  it("keeps an unstarted session pending while its job metadata is being written", async () => {
+    vi.mocked(getSession).mockResolvedValueOnce({
+      getSnapshot: async () => ({ events: [], sessionId: null, cursor: "0", running: false, runPhase: "idle" }),
+    } as unknown as Awaited<ReturnType<typeof getSession>>)
+
+    const snap = await snapshotBackgroundAgent(sandbox, "bg-starting", { repoPath: "/repo" })
+
+    expect(snap.status).toBe("running")
+    expect(snap.transientReadFailure).toBe(true)
+  })
+
   it("preserves the previous snapshot's content when a read fails mid-turn, instead of wiping it", async () => {
     // Reproduces the bug: a transient failure reading/parsing the session
     // (sandbox blip, brief file-read race — notably possible right as the

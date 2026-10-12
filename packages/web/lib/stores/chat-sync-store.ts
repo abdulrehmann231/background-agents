@@ -44,6 +44,8 @@ export interface LimitReachedState {
     content: string
     files?: File[]
     planMode?: boolean
+    /** The server explicitly rejected this attempt before running it. */
+    rejectedMessageId?: string
   }
   /** Shared-pool provider the blocked run would have used. */
   provider?: string
@@ -105,7 +107,9 @@ export const useChatSyncStore = create<ChatSyncStore>((set, get) => ({
         previewStates: s.previewStates,
         queuedMessages: s.queuedMessages,
         queuePaused: s.queuePaused,
-        drafts: s.drafts,
+        // Remounts can hydrate again after a device write failed. The open
+        // tab's newer draft (including an intentional clear) must win then.
+        drafts: get().isHydrated ? get().localChatState.drafts : s.drafts,
       },
       draftChatConfig: s.draftChatConfig,
       isHydrated: true,

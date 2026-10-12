@@ -224,6 +224,10 @@ export interface AgentSnapshot {
    *  broadcasting/persisting this as a real terminal state. See
    *  snapshotBackgroundAgent's `previous` param. */
   transientReadFailure?: boolean
+  /** A known, durably prepared execution has not launched yet. Unlike an
+   * unreadable legacy session, the SDK can atomically abort this attempt. */
+  startupPending?: boolean
+  startupPreparedAt?: number
 }
 
 /**
@@ -282,7 +286,9 @@ function summarizeEvents(
     }
   }
 
-  const isCompleted = !!endEvent
+  // A provider can flush its final reply before the wrapper has exited.
+  // Retain ownership until execution stops, even though the reply is visible.
+  const isCompleted = !!endEvent && !running
 
   if (!running && !endEvent) {
     const hasOutput = !!content?.trim() || toolCalls.length > 0
@@ -341,7 +347,8 @@ export async function finalizeTurn(
 export async function cancelBackgroundAgent(
   sandbox: DaytonaSandbox,
   backgroundSessionId: string,
-  options: AgentSessionOptions
+  options: AgentSessionOptions,
+  strict = false,
 ): Promise<void> {
   try {
     const bgSession = await getBackgroundSession(
@@ -353,6 +360,7 @@ export async function cancelBackgroundAgent(
     await bgSession.cancel()
   } catch (err) {
     console.error("[cancelBackgroundAgent] Error:", err)
+    if (strict) throw err
     // Don't rethrow - cancellation is best-effort
   }
 }
@@ -392,6 +400,24 @@ export async function snapshotBackgroundAgent(
       sessionId: string | null
       cursor: string
       running?: boolean
+      runPhase?: "idle" | "starting" | "running" | "stopped"
+      launchPreparedAt?: string
+    }
+
+    // persistTurn makes the chat visible before bgSession.start has finished
+    // writing the first job handle. A second browser/cron can observe the
+    // initial session metadata in that gap. It is not a failed agent turn.
+    if (result.runPhase === "idle") {
+      const preparedAt = result.launchPreparedAt ? Date.parse(result.launchPreparedAt) : NaN
+      if (Number.isFinite(preparedAt)) {
+        return {
+          status: "running", content: "", toolCalls: [], contentBlocks: [],
+          startupPending: true, startupPreparedAt: preparedAt,
+        }
+      }
+      return previous
+        ? { ...previous, transientReadFailure: true }
+        : { status: "running", content: "", toolCalls: [], contentBlocks: [], transientReadFailure: true }
     }
 
     const running =

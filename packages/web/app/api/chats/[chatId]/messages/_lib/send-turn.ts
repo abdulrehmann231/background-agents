@@ -182,25 +182,23 @@ export async function sendChatTurn({
     return Response.json(response)
   } catch (error) {
     console.error("[chats/messages] Error:", error)
-    if (state.createdSandbox && state.sandboxId) {
-      await deleteSandboxQuietly(daytona, state.sandboxId)
-      try {
-        await prisma.chat.update({
-          where: { id: chatId },
-          data: {
-            sandboxId: null, branch: null, previewUrlPattern: null,
-            status: "error", queueDispatchId: !turnPersisted ? claimedPromptId ?? null : null,
-          },
-        })
-      } catch { /* best effort */ }
-    } else {
-      try {
-        await prisma.chat.update({
-          where: { id: chatId },
-          data: { status: "error", queueDispatchId: !turnPersisted ? claimedPromptId ?? null : null },
-        })
-      } catch { /* best effort */ }
-    }
+    // Once persisted, a failed start response does not prove the process
+    // failed to launch. Keep its durable identity and sandbox so Stop/cron
+    // can recover or fence the same attempt before another one is admitted.
+    if (turnPersisted) return internalError(error)
+    try {
+      const changed = await prisma.chat.updateMany({
+        where: { id: chatId, status: "creating", queueDispatchId: claimedPromptId ?? null },
+        data: {
+          status: "error",
+          queueDispatchId: claimedPromptId ?? null,
+          ...(state.createdSandbox && { sandboxId: null, branch: null, previewUrlPattern: null }),
+        },
+      })
+      if (changed.count === 1 && state.createdSandbox && state.sandboxId) {
+        await deleteSandboxQuietly(daytona, state.sandboxId)
+      }
+    } catch { /* best effort; cron can recover a persisted turn */ }
     return internalError(error)
   } finally {
     // A pre-run rejection must not strand a direct send in "creating".
