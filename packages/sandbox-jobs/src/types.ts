@@ -49,9 +49,9 @@ export interface JobHandle {
 
 /** Lifecycle state of a job, derived from the filesystem on each poll. */
 export type JobState =
-  /** An owned process-group or cgroup member is alive (not a zombie). */
+  /** Command execution is active or unconfirmed; cancellation checks all descendants. */
   | "running"
-  /** No owned process is alive; the exit file holds the real `$?`. */
+  /** Command completion is confirmed; background services may remain alive. */
   | "exited"
   /**
    * The process group is gone but no exit file was ever written — the wrapper
@@ -65,7 +65,7 @@ export interface JobStatus {
   readonly state: JobState
   /** The real `$?`, present iff `state === "exited"`; otherwise null. */
   readonly exitCode: number | null
-  /** Convenience: `state === "running"`. */
+  /** Command liveness (`state === "running"`), not background-service liveness. */
   readonly alive: boolean
 }
 
@@ -126,7 +126,9 @@ export interface StartJobOptions {
  * <root>/<jobId>/
  *   meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version }
  *   output.log    combined stdout+stderr, byte-exact, append-only
- *   exit          integer $?, present ONLY once the process finishes
+ *   exit          integer $?, also written after confirmed cancellation
+ *   command-exit  wrapper-only foreground exit code (atomic publication)
+ *   cancelling    retain full descendant liveness during explicit cancellation
  * ```
  */
 export interface SandboxJobs {

@@ -5,7 +5,7 @@
  *   1. `start` launches the command detached with `setsid` (own process group)
  *      and `nohup`-style redirection, capturing the leader pid synchronously.
  *      The command's combined output appends to `output.log`; when it finishes,
- *      the wrapper writes the real `$?` to `exit`. The leader also joins a
+ *      the wrapper records the real `$?` in `command-exit` and `exit`. The leader also joins a
  *      per-job cgroup so `cancel` can reap EVERY descendant — including ones
  *      that escape the process group via `setsid()` (e.g. a daemonized MCP
  *      server) — by writing the cgroup's `cgroup.kill`.
@@ -113,7 +113,7 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
     })).digest("hex")
     const metaPrefix = Buffer.from(JSON.stringify({
       jobId, processName: opts.processName, outputFile, exitFile, dir,
-      createdAt: new Date().toISOString(), version: 2, commandFingerprint,
+      createdAt: new Date().toISOString(), version: 3, commandFingerprint,
     }).slice(0, -1), "utf8").toString("base64")
     // The detached wrapper owns the launch lock. It writes its own stable pid
     // before running user code, so even a lost launch response is recoverable.
@@ -125,7 +125,13 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
       `{ printf %s ${q(metaPrefix)} | base64 -d || exit 1; printf ',"pgid":%s}\\n' "$$"; } > ${q(metaFile)}."$$" && ` +
       `mv ${q(metaFile)}."$$" ${q(metaFile)} || exit 1; ` +
       `flock -u 9 || exit 1; exec 9>&-; ` +
-      `${cd}${envExports}${userCmd} >> ${q(outputFile)} 2>&1; echo $? > ${q(exitFile)}`
+      `${cd}${envExports}${userCmd} >> ${q(outputFile)} 2>&1; RC=$?; ` +
+      // Only the foreground-command wrapper writes this completion record.
+      // Unlike `exit`, cancel() never synthesizes it. Publish atomically so a
+      // reader cannot confuse a partial write with successful completion.
+      `printf '%s\\n' "$RC" > ${q(`${dir}/command-exit.tmp`)} && ` +
+      `mv ${q(`${dir}/command-exit.tmp`)} ${q(`${dir}/command-exit`)}; ` +
+      `printf '%s\\n' "$RC" > ${q(exitFile)}`
     // CRITICAL: the backgrounded part must be a SIMPLE command so the shell
     // exec-replaces it into a single detached process whose std fds are all on
     // /dev/null. If we instead background a COMPOUND like `mkdir && setsid …`,
@@ -145,21 +151,30 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
     return parseHandle(result, jobId, root, commandFingerprint)
   }
 
-  /** Shell that prints the `EXIT:`/`STATE:` status header (see parseHeader).
-   *  Also cleans up the job cgroup when the process has exited, preventing
-   *  page-cache charges from accumulating in orphaned cgroups. */
+  /** Reconstruct command liveness separately from descendant ownership.
+   * A completed command may intentionally leave a server in its cgroup. That
+   * group stays available for explicit cleanup, but must not hold the next
+   * agent turn. Without confirmed completion, retain the full liveness guard. */
   function statusHeader(handle: JobHandle): string {
+    const completionFile = q(`${handle.dir}/command-exit`)
     return (
-      `EC=''; if [ -f ${q(handle.exitFile)} ]; then EC=$(cat ${q(handle.exitFile)}) || exit 1; fi; ` +
-      `PS=$(ps -eo pgid=,stat=) || exit 1; ` +
-      `ST=$(printf '%s\\n' "$PS" | awk '$1 == ${handle.pgid} { print substr($2, 1, 1) }' | tr -d ' \\n'); ` +
+      // Observe processes before exit records: a wrapper that disappears while
+      // being observed must already have published its completion to qualify.
+      `PS=$(ps -eo pid=,pgid=,stat=) || exit 1; ` +
+      `ST=$(printf '%s\\n' "$PS" | awk '$2 == ${handle.pgid} { print substr($3, 1, 1) }' | tr -d ' \\n'); ` +
+      `LEADER=$(printf '%s\\n' "$PS" | awk '$1 == ${handle.pgid} && $3 !~ /^Z/ { print $1 }'); ` +
       `if [ -d ${q(handle.cgroup)} ]; then ` +
       `CG=$(cat ${q(`${handle.cgroup}/cgroup.events`)}) || exit 1; ` +
       `case "$CG" in *'populated 1'*) ST="$ST"S ;; *'populated 0'*) ;; *) exit 1 ;; esac; fi; ` +
+      `GROUP_STATE="$ST"; ` +
+      `EC=''; if [ -f ${q(handle.exitFile)} ]; then EC=$(cat ${q(handle.exitFile)}) || exit 1; fi; ` +
+      `if [ -n "$EC" ] && [ -z "$LEADER" ] && [ -f ${completionFile} ] && ` +
+      `[ ! -e ${q(`${handle.dir}/cancelling`)} ] && [ ! -e ${q(`${handle.dir}/aborted`)} ]; then ` +
+      `COMMAND_EC=$(cat ${completionFile}) || exit 1; ` +
+      `[ "$COMMAND_EC" = "$EC" ] && ST=''; fi; ` +
       `printf 'EXIT:%s\\nSTATE:%s\\n' "$EC" "$ST"; ` +
-      // When the exit file exists the job is terminal — remove the cgroup so
-      // its page-cache charge doesn't accumulate as a persistent RAM floor.
-      `[ -n "$EC" ] && [ -z "$ST" ] && sudo -n rmdir ${q(handle.cgroup)} 2>/dev/null; true; `
+      // Never remove a populated service cgroup just because the command ended.
+      `[ -n "$EC" ] && [ -z "$GROUP_STATE" ] && sudo -n rmdir ${q(handle.cgroup)} 2>/dev/null; true; `
     )
   }
 
@@ -204,6 +219,9 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
       `[ -z "$LIVE" ] && break; sleep 0.1; done; ` +
       `[ -z "$LIVE" ] || exit 1; `
     const result = await sandbox.process.executeCommand(
+      // A terminating command can record an exit while a child still runs.
+      // Readers must keep the full group guard throughout cancellation.
+      `printf 'cancelling\\n' > ${q(`${handle.dir}/cancelling`)} || exit 1; ` +
       `kill -TERM -- -${handle.pgid} 2>/dev/null || true; ` +
         `sleep 0.5; ` +
         `echo 1 | sudo -n tee ${q(`${handle.cgroup}/cgroup.kill`)} >/dev/null 2>&1; ` +
@@ -257,8 +275,9 @@ export function createSandboxJobs(sandbox: Sandbox): SandboxJobs {
  *   - no exit file, group gone/zombie → crashed (killed before writing $?).
  */
 export function deriveStatus(exitRaw: string, stateRaw: string): JobStatus {
-  // A provider may emit its end event or exit sentinel before every owned
-  // process actually stops. Do not release the next turn while any is alive.
+  // statusHeader removes completed-command descendants from this execution
+  // signal only after authoritative completion. An exit file alone never
+  // overrides a live/uncertain execution or a cancellation in progress.
   // ps STAT may append modifiers (for example Zs or Z+). Those describe the
   // zombie, not an additional running process. Unknown states remain live.
   const alive = stateRaw.replace(/Z[<NLsl+]*|\s/g, "").length > 0
