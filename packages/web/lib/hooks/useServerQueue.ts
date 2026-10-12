@@ -7,7 +7,7 @@ import { getDefaultModelForAgent, type Agent } from "@background-agents/common"
 import { queryKeys } from "@/lib/query"
 import { useChatSyncStore } from "@/lib/stores/chat-sync-store"
 import { useToastStore } from "@/lib/stores/toast-store"
-import { setQueuedMessages, setQueuePaused } from "@/lib/storage"
+import { loadLocalState, setQueuedMessages, setQueuePaused } from "@/lib/storage"
 import { applyQueueSnapshot, loadQueueMessages, needsQueueMessages, queueSyncFailure } from "@/lib/queue-sync"
 import {
   dispatchQueuedPromptApi,
@@ -30,10 +30,14 @@ function updateLocalQueue(chatId: string, update: (items: QueuedMessage[]) => Qu
   try {
     items = setQueuedMessages(chatId, items.length ? items : undefined, previous)
   } catch (error) {
+    items = loadLocalState().queuedMessages[chatId] ?? []
     // Still retain the prompt in memory and attempt the network send, but do
     // not promise it will survive closing the tab when device storage failed.
     console.error("Failed to persist the local prompt queue:", error)
-    useToastStore.getState().addToast({ title: "Could not save on this device", body: "Keep this tab open until the prompt is saved on the server.", chatId })
+    if (items.some((item) => item.deviceStorage === "memory-only" &&
+      !previous.some((old) => old.id === item.id && old.deviceStorage === "memory-only"))) {
+      useToastStore.getState().addToast({ title: "Could not save on this device", body: "Keep this tab open until the prompt is saved on the server.", chatId })
+    }
   }
   useChatSyncStore.getState().setLocalChatState((prev) => ({
     ...prev, queuedMessages: { ...prev.queuedMessages, [chatId]: items.length ? items : undefined },

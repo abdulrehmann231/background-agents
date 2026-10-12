@@ -94,6 +94,19 @@ describe("chat execution presentation", () => {
     expect(html).toContain(">Reload</button>")
     expect(html).not.toContain(">Retry</button>")
   })
+  it.each(["", "partial answer"])("uses the failed assistant output, not the cron notice, to choose recovery for %j", content => {
+    const html = renderWarning(0, false, { status: "error", messages: [
+      { id: "user", role: "user", content: "Please reply", timestamp: 1 },
+      { id: "reply", role: "assistant", content, timestamp: 2, metadata: { turnFinalization: {
+        state: "error", executionStopped: true, assistantMessageId: "reply", backgroundSessionId: "run",
+        reason: "ProviderModelNotFoundError: model is not available",
+      } } },
+      { id: "reply:error", role: "assistant", content: "Agent stopped", timestamp: 3, isError: true },
+    ] })
+    expect(html).toContain("This model is no longer available. Choose another model before retrying.")
+    expect(html).toContain(content ? ">Reload</button>" : ">Retry</button>")
+    expect(html).not.toContain("The last run stopped before it finished.")
+  })
   it("shows one honest direct-send recovery notice without a retry, queue, or fake agent error", () => {
     const html = renderWarning(0, false, { status: "error", errorMessage: "Quota exceeded",
       directSendRecovery: [{ id: "u1", userMessageId: "u1", content: "Keep original", syncFailed: true,
@@ -108,6 +121,16 @@ describe("chat execution presentation", () => {
     expect(html).not.toContain("The last run stopped")
     expect(html).not.toContain(">Retry</button>")
     expect(html).not.toContain('data-testid="prompt-queue"')
+  })
+  it("never describes a memory-only recovery copy as durably saved", () => {
+    const html = renderWarning(0, false, { status: "error", directSendRecovery: [
+      { id: "user", content: "Copy me", deviceStorage: "memory-only", directSend: { assistantMessageId: "reply", timestamp: 1 } },
+    ] })
+    expect(html).toContain("This copy is only in this open tab")
+    expect(html).toContain("Copy the prompt before refreshing or closing")
+    expect(html).not.toContain("This is a copy saved on this device")
+    expect(html).toContain("Copy prompt")
+    expect(html).not.toContain(">Retry</button>")
   })
   it("offers explicit continuation only for a server-confirmed terminal error", () => {
     const failed = { status: "error", recoverableAssistantMessageId: "failed-reply",

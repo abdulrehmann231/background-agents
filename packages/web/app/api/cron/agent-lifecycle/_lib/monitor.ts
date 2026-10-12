@@ -125,12 +125,14 @@ export async function stopInteractiveAgent(
   backgroundSessionId: string,
   daytona: Daytona,
   beforeCancel?: () => Promise<void>,
+  onlyIfStartupPending = false,
 ): Promise<{ snapshot: AgentSnapshot; cancelled: boolean }> {
   const sandbox = await daytona.get(sandboxId)
   const options = { repoPath: `${PATHS.SANDBOX_HOME}/project` }
   const before = await snapshotBackgroundAgent(sandbox, backgroundSessionId, options)
   if (before.transientReadFailure) throw new Error("Cannot read agent output before cancellation")
   if (before.status !== "running") return { snapshot: before, cancelled: false }
+  if (onlyIfStartupPending && !before.startupPending) return { snapshot: before, cancelled: false }
   await beforeCancel?.()
   await cancelBackgroundAgent(sandbox, backgroundSessionId, options, true)
   const after = await snapshotBackgroundAgent(sandbox, backgroundSessionId, options)

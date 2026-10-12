@@ -49,6 +49,16 @@ describe("queue presentation across server transitions", () => {
     expect(needsChatListMessages({ ...unopened, messages: [{ id: "old", role: "user", content: "old", timestamp: 1 }] }, server)).toBe(true)
   })
 
+  it("refreshes failure metadata on a newer error revision without polling unchanged history", () => {
+    const failed = { ...chat, status: "error", updatedAt: 10, queuedMessages: [], messageCount: 2,
+      messages: [{ id: "reply", role: "assistant", content: "", timestamp: 1 }] } as Chat
+    const snapshot = { status: "error" as const, updatedAt: 11, queuedMessages: [], messageCount: 2, lastMessageId: "reply" }
+    expect(needsQueueMessages(failed, snapshot)).toBe(true)
+    expect(needsQueueMessages(failed, { ...snapshot, updatedAt: 10 })).toBe(false)
+    expect(needsQueueMessages(failed, { ...snapshot, status: "ready" })).toBe(false)
+    expect(needsChatListMessages({ ...failed, messages: [] }, snapshot)).toBe(false)
+  })
+
   it("does not repeatedly load history merely because an unsaved prompt is failing", () => {
     const ready = { ...chat, status: "ready", queuedMessages: [], messageCount: 0 } as Chat
     const server = { queuedMessages: [], messageCount: 0 }

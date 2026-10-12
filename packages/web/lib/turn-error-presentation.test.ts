@@ -21,6 +21,14 @@ describe("persisted provider failure presentation", () => {
     expect(persistedProviderFailure(failed("ProviderModelNotFoundError: Model not found: private/model"))).toBe(
       "This model is no longer available. Choose another model before retrying.")
   })
+  it("explains the known startup timeout only after the matching attempt is confirmed stopped", () => {
+    const reason = "Agent startup timed out. Please send your prompt again."
+    const chat = failed(reason)
+    expect(persistedProviderFailure(chat)).toBe(reason)
+    chat.messages[1].metadata!.turnFinalization!.executionStopped = false
+    expect(persistedProviderFailure(chat)).toBeUndefined()
+    expect(persistedProviderFailure(failed(`${reason} private process logs`))).toBeUndefined()
+  })
   it.each(["running", "creating", "ready", "disconnected"])("does not leak the previous error into %s", status => {
     expect(persistedProviderFailure({ ...failed(), status: status as Chat["status"] })).toBeUndefined()
   })
@@ -40,5 +48,24 @@ describe("persisted provider failure presentation", () => {
   })
   it("does not turn arbitrary logs into a UI error", () => {
     expect(persistedProviderFailure(failed("secret execution details"))).toBeUndefined()
+  })
+  it.each([undefined, "error" as const])("reads the matching failure before the finalizer's error notice (%s)", messageType => {
+    const chat = failed()
+    chat.messages.push({ id: "reply:error", role: "assistant", content: "Agent stopped: private logs", timestamp: 3, isError: true, messageType })
+    expect(persistedProviderFailure(chat)).toContain("model provider did not respond in time")
+  })
+  it.each(["different:error", "reply:error:error"])("does not search past an unrelated error notice: %s", id => {
+    const chat = failed()
+    chat.messages.push({ id, role: "assistant", content: "Agent stopped", timestamp: 3, isError: true })
+    expect(persistedProviderFailure(chat)).toBeUndefined()
+  })
+  it("does not expose an earlier turn's failure when its late notice follows a newer turn", () => {
+    const chat = failed()
+    chat.messages.push(
+      { id: "new-user", role: "user", content: "next prompt", timestamp: 3 },
+      { id: "new-reply", role: "assistant", content: "", timestamp: 4 },
+      { id: "reply:error", role: "assistant", content: "Agent stopped", timestamp: 5, isError: true },
+    )
+    expect(persistedProviderFailure(chat)).toBeUndefined()
   })
 })

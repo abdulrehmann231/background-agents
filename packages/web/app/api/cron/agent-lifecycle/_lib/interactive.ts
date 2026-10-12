@@ -187,7 +187,7 @@ export async function markChatError(
 }
 
 /** Own the timeout/credit decision before touching the process. */
-export async function stopInteractiveChat(chat: ChatWithMessages, reason: string, daytona: Daytona) {
+export async function stopInteractiveChat(chat: ChatWithMessages, reason: string, daytona: Daytona, options?: { onlyIfStartupPending: boolean }) {
   const turn = activeTurn(chat)
   if (!turn || !chat.sandboxId) return false
   const claimId = await claimTurnFinalization(turn)
@@ -195,7 +195,8 @@ export async function stopInteractiveChat(chat: ChatWithMessages, reason: string
   try {
     const stopped = await stopInteractiveAgent(chat.sandboxId, turn.backgroundSessionId, daytona, async () => {
       if (!await recordTurnFailure(turn, claimId, reason, false)) throw new Error("Turn changed before cancellation")
-    })
+    }, options?.onlyIfStartupPending)
+    if (!stopped.cancelled && stopped.snapshot.status === "running") return false
     if (!stopped.cancelled && stopped.snapshot.status === "completed") {
       await abandonFinalization(turn, claimId)
       return finalizeInteractiveChat(chat, stopped.snapshot, daytona)

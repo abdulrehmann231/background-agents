@@ -16,6 +16,11 @@ import { finalizeInteractiveChat, markChatError, stopInteractiveChat } from "./_
 // plan allows up to 5 minutes for cron jobs.
 export const maxDuration = 300
 
+// Only applies to an SDK-confirmed prepared execution, not to unreadable
+// metadata. Expiry invokes the fenced stop finalizer; it never resets the DB
+// owner on the assumption that a slow start cannot still arrive.
+const PREPARED_LAUNCH_TIMEOUT_MS = 2 * 60 * 1000
+
 // =============================================================================
 // Main Handler
 // =============================================================================
@@ -186,6 +191,17 @@ export async function GET(req: Request) {
         // An unreadable or terminal session must not fall through into timeout
         // teardown, including when its final snapshot could not yet be saved.
         if (!snapshot || snapshot.status !== "running") continue
+
+        if (snapshot.startupPending) {
+          const preparedAt = snapshot.startupPreparedAt
+          if (typeof preparedAt === "number" && Number.isFinite(preparedAt) &&
+              now.getTime() - preparedAt >= PREPARED_LAUNCH_TIMEOUT_MS) {
+            if (await stopInteractiveChat(chat, "Agent startup timed out. Please send your prompt again.", daytona, { onlyIfStartupPending: true })) {
+              results.timedOutInteractive++
+            }
+          }
+          continue
+        }
 
         if (totalMinutes > hardTimeout) {
           if (await stopInteractiveChat(chat, `Run exceeded ${hardTimeout} minute limit`, daytona)) {

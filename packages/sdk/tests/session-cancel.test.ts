@@ -20,7 +20,7 @@ describe("background session cancellation", () => {
       jobs,
       executeCommand: async (command: string) => {
         if (command.startsWith("cat ")) return { exitCode: 0, output: JSON.stringify(meta) }
-        const encoded = command.match(/printf %s '([^']+)'/)?.[1]
+        const encoded = [...command.matchAll(/printf %s '([^']+)'/g)].at(-1)?.[1]
         if (!encoded) throw new Error("Unexpected metadata command")
         meta = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"))
         return { exitCode: 0, output: "" }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { acknowledgeDirectSends, dismissDirectSend, markDirectSendUnconfirmed, retainDirectSend } from "./direct-send-recovery"
 import { loadLocalState } from "./storage"
 import { useChatSyncStore } from "./stores/chat-sync-store"
+import { useToastStore } from "./stores/toast-store"
 import { getPendingSubmission, hasActiveQueue, mergeLocalState } from "./chat-state"
 import type { Chat, QueuedMessage } from "./types"
 
@@ -17,9 +18,9 @@ beforeEach(() => {
     key: (index: number) => [...stored.keys()][index] ?? null,
     get length() { return stored.size },
   })
-  useChatSyncStore.setState({ localChatState: { previewStates: {}, drafts: {}, queuePaused: {}, queuedMessages: {} } })
+  useChatSyncStore.setState({ isHydrated: false, localChatState: { previewStates: {}, drafts: {}, queuePaused: {}, queuedMessages: {} } })
 })
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe("direct send retention is not a retry queue", () => {
   it("retains text and attachment names across hydration without changing a newer draft", () => {
@@ -60,6 +61,50 @@ describe("direct send retention is not a retry queue", () => {
   it("reports failed durable storage while retaining text in memory", () => {
     vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("Storage quota exceeded") })
     expect(retainDirectSend("chat", intent)).toBe(false)
-    expect(useChatSyncStore.getState().localChatState.queuedMessages.chat).toEqual([intent])
+    expect(useChatSyncStore.getState().localChatState.queuedMessages.chat?.[0]).toMatchObject(intent)
+  })
+  it.each([false, true])("retains a failed direct send across error updates and hydration (storage restored=%s)", (restored) => {
+    const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("Storage quota exceeded") })
+    expect(retainDirectSend("chat", intent)).toBe(false)
+    if (restored) write.mockRestore()
+    markDirectSendUnconfirmed("chat", intent.id, "The send failed")
+    useChatSyncStore.getState().hydrate()
+    const kept = useChatSyncStore.getState().localChatState.queuedMessages.chat?.[0]
+    expect(kept).toMatchObject({ ...intent, directSend: { ...intent.directSend, error: "The send failed" } })
+    expect(kept?.deviceStorage).toBe(restored ? undefined : "memory-only")
+  })
+  it("clears only an exactly acknowledged memory-only prompt and never replays it", () => {
+    const fetch = vi.fn()
+    vi.stubGlobal("fetch", fetch)
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("Storage quota exceeded") })
+    retainDirectSend("chat", intent)
+    retainDirectSend("chat", { ...intent, id: "other", userMessageId: "other", content: "Other prompt" })
+    acknowledgeDirectSends("chat", [{ id: intent.id, role: "user" }])
+    useChatSyncStore.getState().hydrate()
+    expect(useChatSyncStore.getState().localChatState.queuedMessages.chat?.map((item) => item.id)).toEqual(["other"])
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it("preserves a newer unsaved draft and an intentional clear across in-tab rehydration", () => {
+    useChatSyncStore.getState().hydrate()
+    useChatSyncStore.getState().setDraftText("chat", "Older saved draft")
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("Storage quota exceeded") })
+    retainDirectSend("chat", intent)
+    useChatSyncStore.getState().setDraftText("chat", "Newer unsaved draft")
+    markDirectSendUnconfirmed("chat", intent.id, "Network failed")
+    useChatSyncStore.getState().hydrate()
+    expect(useChatSyncStore.getState().localChatState.drafts.chat).toBe("Newer unsaved draft")
+    useChatSyncStore.getState().setDraftText("chat", undefined)
+    useChatSyncStore.getState().hydrate()
+    expect(useChatSyncStore.getState().localChatState.drafts.chat).toBeUndefined()
+    expect(useChatSyncStore.getState().localChatState.queuedMessages.chat?.[0].content).toBe(intent.content)
+  })
+  it("warns once for a new memory-only copy, not for repeated error updates or acknowledgement", () => {
+    const toast = vi.spyOn(useToastStore.getState(), "addToast")
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("Full") })
+    retainDirectSend("chat", intent)
+    markDirectSendUnconfirmed("chat", intent.id, "Network failed")
+    markDirectSendUnconfirmed("chat", intent.id, "Still unconfirmed")
+    acknowledgeDirectSends("chat", [{ id: intent.id, role: "user" }])
+    expect(toast).toHaveBeenCalledTimes(1)
   })
 })

@@ -13,6 +13,7 @@ vi.mock("@/lib/storage", () => ({ DEFAULT_SETTINGS: {} }))
 import { useStreaming } from "./useStreaming"
 import { useChatMessageSync } from "./useChatMessageSync"
 import { useStreamStore } from "@/lib/stores/stream-store"
+import { persistedProviderFailure } from "@/lib/turn-error-presentation"
 
 class FakeEventSource {
   static instances: FakeEventSource[] = []
@@ -86,5 +87,23 @@ describe("chat recovery across asynchronous turn changes", () => {
     mocks.fetchChat.mockResolvedValue(remote({ updatedAt: 2, status: "ready", backgroundSessionId: null, activeAssistantMessageId: null, queuePaused: true }))
     await messageSync().reloadChat("chat")
     expect(cache[0]).toMatchObject({ status: "ready", backgroundSessionId: undefined, activeAssistantMessageId: undefined, queuePaused: true, updatedAt: 2 })
+  })
+
+  it("receives metadata-only failure details through Reload and preserves them through an older read", async () => {
+    const reply = { id: "assistant-A", role: "assistant" as const, content: "", timestamp: 2 }
+    cache = [{ ...chat("A"), status: "error", backgroundSessionId: undefined, activeAssistantMessageId: undefined,
+      messages: [reply] }]
+    const detail = remote({ status: "error", backgroundSessionId: null, activeAssistantMessageId: null,
+      messages: [{ ...reply, agent: null, model: null, messageType: null, isError: false,
+        uploadedFiles: null, linkBranch: null, toolCalls: null, contentBlocks: null, metadata: { turnFinalization: {
+          state: "error", executionStopped: true, assistantMessageId: reply.id, backgroundSessionId: "A",
+          reason: "ProviderModelNotFoundError: Model is not available",
+        } } }] })
+    mocks.fetchChat.mockResolvedValue(detail)
+    await messageSync().reloadChat("chat")
+    expect(persistedProviderFailure(cache[0])).toContain("This model is no longer available")
+    mocks.fetchChat.mockResolvedValue({ ...detail, messages: [{ ...detail.messages[0], metadata: null }] })
+    await messageSync().reloadChat("chat")
+    expect(persistedProviderFailure(cache[0])).toContain("This model is no longer available")
   })
 })

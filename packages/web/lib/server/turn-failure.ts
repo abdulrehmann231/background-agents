@@ -2,22 +2,14 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db/prisma"
 import type { ActiveTurn } from "./turn-ownership"
 import { stripNullBytes } from "@/lib/db/pg-sanitize"
+import { mergeFailureMarkers, readFailureMarker, type TurnFailureMarker } from "@/lib/turn-failure-marker"
 
-export type TurnFailure = {
-  state: "error"
-  executionStopped: boolean
-  backgroundSessionId: string
-  assistantMessageId: string
-  reason: string
-}
+export type TurnFailure = TurnFailureMarker
 
 export async function readTurnFailure(turn: ActiveTurn): Promise<TurnFailure | null> {
   const message = await prisma.message.findUnique({ where: { id: turn.assistantMessageId }, select: { metadata: true } })
   const metadata = message?.metadata as Record<string, unknown> | null
-  const value = metadata?.turnFinalization as TurnFailure | undefined
-  return value?.state === "error" && value.backgroundSessionId === turn.backgroundSessionId &&
-    value.assistantMessageId === turn.assistantMessageId && typeof value.reason === "string"
-    ? value : null
+  return readFailureMarker(metadata?.turnFinalization, turn.assistantMessageId, turn.backgroundSessionId) ?? null
 }
 
 /** Save the decision before cancellation, then confirm it only after the final
@@ -38,7 +30,10 @@ export async function recordTurnFailure(
     const message = await tx.message.findUniqueOrThrow({ where: { id: turn.assistantMessageId }, select: { metadata: true } })
     const metadata = message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata) ? message.metadata : {}
     const outcome: TurnFailure = { state: "error", executionStopped, backgroundSessionId: turn.backgroundSessionId, assistantMessageId: turn.assistantMessageId, reason: stripNullBytes(reason) }
-    await tx.message.update({ where: { id: turn.assistantMessageId }, data: { metadata: { ...metadata, turnFinalization: outcome } as Prisma.InputJsonValue } })
+    const previous = readFailureMarker(metadata.turnFinalization, turn.assistantMessageId, turn.backgroundSessionId)
+    await tx.message.update({ where: { id: turn.assistantMessageId }, data: { metadata: {
+      ...metadata, turnFinalization: mergeFailureMarkers(previous, outcome),
+    } as Prisma.InputJsonValue } })
     return true
   })
 }

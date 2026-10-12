@@ -114,6 +114,15 @@ describe("stopAgent", () => {
 })
 
 describe("interactive cancellation confirmation", () => {
+  it("does not abort a launch that became active since the startup timeout snapshot", async () => {
+    snapshot = { ...snapshot, status: "running", error: undefined }
+    const beforeCancel = vi.fn()
+    expect(await stopInteractiveAgent("sandbox", BACKGROUND_SESSION_ID, daytona, beforeCancel, true))
+      .toEqual({ snapshot, cancelled: false })
+    expect(beforeCancel).not.toHaveBeenCalled()
+    expect(cancelBackgroundAgent).not.toHaveBeenCalled()
+  })
+
   it("does not cancel a turn that completed before the timeout stop arrived", async () => {
     snapshot = { ...snapshot, status: "completed" }
     expect(await stopInteractiveAgent("sandbox", BACKGROUND_SESSION_ID, daytona)).toEqual({ snapshot, cancelled: false })

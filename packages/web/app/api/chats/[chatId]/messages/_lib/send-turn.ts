@@ -90,7 +90,6 @@ export async function sendChatTurn({
     createdSandbox: false,
   }
   let turnPersisted = false
-  let startedBackgroundSessionId: string | null = null
 
   try {
     const ensured = await ensureSandboxForChat({
@@ -143,7 +142,6 @@ export async function sendChatTurn({
       mcpServers,
       skills: discoveredSkills.length > 0 ? discoveredSkills : undefined,
     })
-    startedBackgroundSessionId = bgSession.backgroundSessionId
 
     const storedUser = await prisma.user.findUnique({
       where: { id: userId }, select: { credentials: true },
@@ -179,16 +177,16 @@ export async function sendChatTurn({
     return Response.json(response)
   } catch (error) {
     console.error("[chats/messages] Error:", error)
+    // Once persisted, a failed start response does not prove the process
+    // failed to launch. Keep its durable identity and sandbox so Stop/cron
+    // can recover or fence the same attempt before another one is admitted.
+    if (turnPersisted) return internalError(error)
     try {
       const changed = await prisma.chat.updateMany({
-        where: turnPersisted
-          ? { id: chatId, status: "running", backgroundSessionId: startedBackgroundSessionId, activeAssistantMessageId: payload.assistantMessageId, finalizationClaimId: null }
-          : { id: chatId, status: "creating", queueDispatchId: claimedPromptId ?? null },
+        where: { id: chatId, status: "creating", queueDispatchId: claimedPromptId ?? null },
         data: {
           status: "error",
-          backgroundSessionId: turnPersisted ? null : undefined,
-          activeAssistantMessageId: turnPersisted ? null : undefined,
-          queueDispatchId: !turnPersisted ? claimedPromptId ?? null : null,
+          queueDispatchId: claimedPromptId ?? null,
           ...(state.createdSandbox && { sandboxId: null, branch: null, previewUrlPattern: null }),
         },
       })

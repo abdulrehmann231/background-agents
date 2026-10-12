@@ -19,7 +19,7 @@
  * cursor) a cold caller needs to read, poll, or cancel a running job.
  */
 export interface JobHandle {
-  /** Unique, time-sortable job id (`<unix-ms>-<random>`). */
+  /** Unique attempt id (generated unless the caller supplied a stable id). */
   readonly jobId: string
   /** Job directory in the sandbox: `<root>/<jobId>`. */
   readonly dir: string
@@ -29,7 +29,7 @@ export interface JobHandle {
   readonly exitFile: string
   /**
    * Process-group id of the detached job (== leader pid, thanks to `setsid`).
-   * Used for liveness/crash detection (`ps` on the leader); NOT for killing.
+   * Used with the cgroup for liveness checks and scoped cancellation.
    */
   readonly pgid: number
   /**
@@ -49,9 +49,9 @@ export interface JobHandle {
 
 /** Lifecycle state of a job, derived from the filesystem on each poll. */
 export type JobState =
-  /** Process group is alive (and not a zombie). */
+  /** An owned process-group or cgroup member is alive (not a zombie). */
   | "running"
-  /** Finished cleanly: the exit file is present and holds the real `$?`. */
+  /** No owned process is alive; the exit file holds the real `$?`. */
   | "exited"
   /**
    * The process group is gone but no exit file was ever written — the wrapper
@@ -93,6 +93,8 @@ export interface JobRead {
 }
 
 export interface StartJobOptions {
+  /** Stable attempt id. Retrying it reattaches; an aborted id cannot launch. */
+  readonly jobId?: string
   /** Shell command line to run (its stdout+stderr are captured combined). */
   readonly command: string
   /** Working directory to run the command in. */
@@ -146,10 +148,17 @@ export interface SandboxJobs {
    * on command/verification failure. The cgroup is removed when empty.
    */
   cancel(handle: JobHandle): Promise<void>
+  /** Fence a known attempt against late launch, then confirm any job stopped.
+   * Safe even if start never happened or its response was lost. */
+  abort(jobId: string, root?: string): Promise<void>
+  /** Whether the durable no-future-launch fence exists. A launched job must
+   * still be checked/cancelled before treating it as stopped. */
+  isAborted(jobId: string, root?: string): Promise<boolean>
   /**
    * Rebuild a handle from just the job id, by reading its `meta.json`. Use when
    * a cold caller persisted only the id. Returns null if the job dir is absent
-   * or its meta is unreadable.
+   * absent. Malformed/unreadable metadata or transport failure rejects; it is
+   * not proof that no process exists.
    */
   attach(jobId: string, root?: string): Promise<JobHandle | null>
 }

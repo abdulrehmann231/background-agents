@@ -1,5 +1,5 @@
 import type { QueuedMessage } from "./types"
-import { setQueuedMessages } from "./storage"
+import { loadLocalState, setQueuedMessages } from "./storage"
 import { useChatSyncStore } from "./stores/chat-sync-store"
 import { useToastStore } from "./stores/toast-store"
 
@@ -13,8 +13,12 @@ function updateRecovery(chatId: string, update: (items: QueuedMessage[]) => Queu
     next = setQueuedMessages(chatId, next.length ? next : undefined, previous)
   } catch (error) {
     persisted = false
+    next = loadLocalState().queuedMessages[chatId] ?? []
     console.error("Could not retain direct send on this device:", error)
-    useToastStore.getState().addToast({ title: "Could not save this prompt on this device", body: "Keep this tab open and copy the prompt before reloading.", chatId })
+    if (next.some((item) => item.deviceStorage === "memory-only" &&
+      !previous.some((old) => old.id === item.id && old.deviceStorage === "memory-only"))) {
+      useToastStore.getState().addToast({ title: "Could not save this prompt on this device", body: "Keep this tab open and copy the prompt before reloading.", chatId })
+    }
   }
   useChatSyncStore.getState().setLocalChatState((local) => ({
     ...local, queuedMessages: { ...local.queuedMessages, [chatId]: next.length ? next : undefined },

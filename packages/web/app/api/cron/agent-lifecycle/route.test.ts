@@ -31,6 +31,21 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllEnvs() })
 describe("interactive lifecycle recovery", () => {
+  it("recovers an expired prepared launch through the claimed stop finalizer", async () => {
+    mocks.monitor.mockResolvedValue({ ...snapshot, status: "running", startupPending: true, startupPreparedAt: Date.now() - 180_000 })
+    mocks.stopInteractive.mockResolvedValue(true)
+    await GET(new Request("http://localhost/api/cron/agent-lifecycle"))
+    expect(mocks.stopInteractive).toHaveBeenCalledWith(chat, expect.stringContaining("startup timed out"), expect.anything(), { onlyIfStartupPending: true })
+    expect(mocks.credit).not.toHaveBeenCalled()
+  })
+
+  it.each([Date.now(), Date.now() + 60_000, NaN, undefined])("does not expire an unproven startup deadline %s", async (preparedAt) => {
+    mocks.monitor.mockResolvedValue({ ...snapshot, status: "running", startupPending: true, startupPreparedAt: preparedAt })
+    await GET(new Request("http://localhost/api/cron/agent-lifecycle"))
+    expect(mocks.stopInteractive).not.toHaveBeenCalled()
+    expect(mocks.credit).not.toHaveBeenCalled()
+  })
+
   it.each([true, false])("reads completed output before timeout, even when saving succeeds=%s", async (saved) => {
     mocks.finalize.mockResolvedValue(saved)
     mocks.monitor.mockImplementation(async (_s, _b, _d, handlers) => {

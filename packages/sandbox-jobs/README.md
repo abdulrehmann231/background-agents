@@ -19,6 +19,8 @@ One job = one process = one directory:
   meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version }
   output.log    combined stdout+stderr, byte-exact, append-only
   exit          integer $?, present ONLY once the process finishes
+  launch.lock   shared by launch and abort
+  aborted       permanent no-future-launch marker for this attempt
 ```
 
 - **Detached + fully reapable.** Launched with `setsid` and placed in its own
@@ -35,6 +37,20 @@ One job = one process = one directory:
   splits a multi-byte character and you never re-read the whole log.
 - **Cold reconnect.** Everything needed to reattach is the serializable
   `JobHandle` + an integer cursor, or just the job id via `attach()`.
+- **Recoverable startup.** Pass a stable `jobId` before calling `start()`.
+  The detached wrapper saves its identity before running the command. A retry
+  with that id reattaches instead of running the command again, including when
+  the original response was lost. Reusing an id with a different command,
+  working directory, or timeout is rejected rather than pretending new work
+  ran. `abort(jobId, root)` prevents a delayed
+  launcher from starting and confirms any existing process stopped. This also
+  works for an attempt that never launched. Keep the attempt's files until no
+  delayed caller can retry it; deleting its abort marker removes that fence.
+
+These operations require `flock` in addition to `setsid` and the cgroup-v2
+permissions described above. Missing or unreadable status is an error, not a
+successful cancellation. An `exit` file does not make a job terminal while an
+owned process remains alive.
 
 ## Why not Daytona's session API (`executeSessionCommand`)?
 
@@ -98,6 +114,20 @@ for (;;) {
 // Or reattach later from just the id:
 const reattached = await jobs.attach(handle.jobId)
 ```
+
+For recoverable launch, save an attempt id with your application state first:
+
+```ts
+await jobs.start({ jobId: savedAttemptId, command: "your-command" })
+// If launch throws, its outcome may be unknown. Retain ownership and inspect
+// that same id, or fence/cancel it before allowing a replacement attempt:
+await jobs.abort(savedAttemptId)
+```
+
+Without an explicit `jobId`, `start()` still generates a fresh id. `attach()`
+returns `null` only for an absent record; corrupt records and failed reads
+throw. Custom `SandboxJobs` implementations must provide `abort()` and
+`isAborted()` with the same launch-fencing guarantees.
 
 ## Tests
 

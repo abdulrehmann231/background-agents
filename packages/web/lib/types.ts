@@ -271,6 +271,8 @@ export type ChatStatus =
 export interface QueuedMessage {
   id: string
   content: string
+  /** This tab's fallback could not be saved durably; never serialized to storage. */
+  deviceStorage?: "memory-only"
   agent?: string
   model?: string
   clientId?: string

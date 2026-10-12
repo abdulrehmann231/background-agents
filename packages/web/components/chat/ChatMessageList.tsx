@@ -6,7 +6,7 @@ import type { GitContextValue } from "@/lib/contexts/GitContext"
 import { ErrorBanner } from "./ErrorBanner"
 import { MessageBubble } from "../MessageBubble"
 import { getPendingSubmission } from "@/lib/chat-state"
-import { persistedProviderFailure } from "@/lib/turn-error-presentation"
+import { latestFailedAssistant, persistedProviderFailure } from "@/lib/turn-error-presentation"
 import { dismissDirectSend } from "@/lib/direct-send-recovery"
 import { useToastStore } from "@/lib/stores/toast-store"
 import {
@@ -190,7 +190,9 @@ export function ChatMessageList({
               )}
               <div>
                 <ErrorBanner
-                  message="Send status is unconfirmed. This is a copy saved on this device. Reload to check whether the server received it. It will not be resent automatically."
+                  message={item.deviceStorage === "memory-only"
+                    ? "Send status is unconfirmed. This copy is only in this open tab. Copy the prompt before refreshing or closing it. It will not be resent automatically."
+                    : "Send status is unconfirmed. This is a copy saved on this device. Reload to check whether the server received it. It will not be resent automatically."}
                   isMobile={isMobile}
                   onRetry={onReload ? () => onReload(chat.id) : undefined}
                   actionLabel="Reload"
@@ -241,7 +243,8 @@ export function ChatMessageList({
             // "incomplete" means the turn ended with no terminal event: the agent
             // may still be running in the background, so always Reload (refresh
             // history) rather than resending and risking a duplicate run.
-            const lastAssistant = [...chat.messages].reverse().find((m) => m.role === "assistant")
+            const lastAssistant = providerFailure ? latestFailedAssistant(chat)
+              : [...chat.messages].reverse().find((m) => m.role === "assistant")
             const recoveredOutput =
               !!lastAssistant?.content?.trim() || (lastAssistant?.toolCalls?.length ?? 0) > 0
             const useReload =
@@ -285,6 +288,7 @@ export function ChatMessageList({
                       {!m.syncFailed && " — retrying when the connection recovers."}
                     </div>}
                     {m.lastError && <div className="text-xs text-destructive">Paused: {m.lastError}</div>}
+                    {m.deviceStorage === "memory-only" && <div className="text-xs text-destructive">This copy is only in this open tab. Copy it before refreshing or closing.</div>}
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

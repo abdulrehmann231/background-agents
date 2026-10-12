@@ -14,11 +14,16 @@ export function queueSyncFailure(error: unknown) {
 }
 
 /** A queue item must not vanish before its user/assistant rows arrive. */
-type QueueSnapshot = Pick<Chat, "queuedMessages" | "activeAssistantMessageId" | "backgroundSessionId" | "messageCount" | "lastMessageId">
+type QueueSnapshot = Pick<Chat, "queuedMessages" | "activeAssistantMessageId" | "backgroundSessionId" | "messageCount" | "lastMessageId"> &
+  Partial<Pick<Chat, "status" | "updatedAt">>
 export function needsQueueMessages(previous: Chat | undefined, next: QueueSnapshot, local: QueuedMessage[] = []): boolean {
   if (!previous) return false
   const ids = new Set(next.queuedMessages?.map((item) => item.id))
   return !!previous.queuedMessages?.some((item) => !ids.has(item.id)) ||
+    // A finalizer can add the useful failure reason without adding a message
+    // or changing its content. Fetch that newer error revision once, not on
+    // every unchanged queue poll.
+    (next.status === "error" && next.updatedAt !== undefined && next.updatedAt > previous.updatedAt) ||
     (next.messageCount !== undefined && next.messageCount !== previous.messageCount) ||
     (!!next.lastMessageId && !previous.messages.some((message) => message.id === next.lastMessageId)) ||
     local.some((item) => !item.directSend && !item.cancelRequested && !!item.userMessageId &&

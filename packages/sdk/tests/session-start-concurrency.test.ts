@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest"
 import { createBackgroundSession } from "../src/background/session"
 import type { AgentDefinition } from "../src/core/agent"
 import type { CodeAgentSandbox } from "../src/types/provider"
-import type { JobHandle, SandboxJobs } from "@background-agents/sandbox-jobs"
+import type { JobHandle, SandboxJobs, StartJobOptions } from "@background-agents/sandbox-jobs"
 
 describe("background session startup", () => {
   it("does not expose a job handle to concurrent readers before its metadata is durable", async () => {
-    const handle: JobHandle = {
+    let handle: JobHandle = {
       jobId: "job-1", dir: "/tmp/codeagent-test/job-1", outputFile: "/tmp/codeagent-test/job-1/output.log",
       exitFile: "/tmp/codeagent-test/job-1/exit", pgid: 1, cgroup: "/test",
     }
@@ -18,7 +18,7 @@ describe("background session startup", () => {
     let reads = 0
 
     const jobs = {
-      start: async () => handle,
+      start: async (options: StartJobOptions) => { handle = { ...handle, jobId: options.jobId! }; return handle },
       read: async () => {
         reads++
         return { raw: "", cursor: 0, bytesFetched: 0, status: { state: "running", exitCode: null, alive: true } }
@@ -29,7 +29,7 @@ describe("background session startup", () => {
       jobs,
       executeCommand: async (command: string) => {
         if (command.startsWith("cat ")) return { exitCode: 0, output: JSON.stringify(meta) }
-        const encoded = command.match(/printf %s '([^']+)'/)?.[1]
+        const encoded = [...command.matchAll(/printf %s '([^']+)'/g)].at(-1)?.[1]
         if (!encoded) throw new Error(`Unexpected command: ${command}`)
         const next = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as Record<string, unknown>
         if (next.jobId) {

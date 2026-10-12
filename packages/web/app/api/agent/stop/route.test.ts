@@ -41,6 +41,25 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe("explicit Stop preserves output before releasing the owned turn", () => {
+  it("fences a prepared launch before saving its confirmed stopped state", async () => {
+    mocks.snapshot.mockResolvedValueOnce({ ...output, status: "running", content: "", startupPending: true })
+    mocks.persist.mockImplementation(async () => {
+      expect(mocks.cancel).toHaveBeenCalledTimes(1)
+      return { persisted: true }
+    })
+    expect((await POST(request())).status).toBe(200)
+    expect(mocks.persist).toHaveBeenCalledTimes(1)
+    expect(mocks.release).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps a prepared turn owned when its abort fence cannot be confirmed", async () => {
+    mocks.snapshot.mockResolvedValue({ ...output, status: "running", content: "", startupPending: true })
+    mocks.cancel.mockRejectedValueOnce(new Error("abort response lost"))
+    expect((await POST(request())).status).toBe(500)
+    expect(mocks.persist).not.toHaveBeenCalled()
+    expect(mocks.release).not.toHaveBeenCalled()
+  })
+
   it.each([null, {}, { ...turn, chatId: 123 }, { ...turn, assistantMessageId: [] }])("rejects an invalid turn identity before database access: %j", async (body) => {
     const req = new Request("http://localhost/api/agent/stop", { method: "POST", body: JSON.stringify(body) })
     expect((await POST(req)).status).toBe(400)

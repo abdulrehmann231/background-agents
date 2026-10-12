@@ -114,11 +114,24 @@ export function writeJSON(key: string, value: unknown, label: string): void {
 // Local State (Device-Specific)
 // =============================================================================
 
+let storedStateOwner: Storage | undefined
+let lastStoredState = DEFAULT_LOCAL_STATE
+
 function loadStoredLocalState(): LocalState {
-  return {
-    ...DEFAULT_LOCAL_STATE,
-    ...readJSON<LocalState>(LOCAL_STATE_KEY, DEFAULT_LOCAL_STATE, "local state"),
+  if (typeof window === "undefined") return DEFAULT_LOCAL_STATE
+  try {
+    const storage = localStorage
+    if (storage !== storedStateOwner) {
+      storedStateOwner = storage
+      lastStoredState = DEFAULT_LOCAL_STATE
+    }
+    const raw = storage.getItem(LOCAL_STATE_KEY)
+    lastStoredState = { ...DEFAULT_LOCAL_STATE, ...(raw ? JSON.parse(raw) as LocalState : {}) }
+  } catch (error) {
+    // A failed legacy-queue read must not look like another tab removed it.
+    console.error("Failed to load local state; retaining the last readable copy:", error)
   }
+  return lastStoredState
 }
 
 export function loadLocalState(): LocalState {

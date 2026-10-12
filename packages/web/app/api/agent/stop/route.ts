@@ -93,9 +93,11 @@ export async function POST(req: Request) {
     // turn, leaving the user with a visible reply that vanishes on refresh.
     const before = await snapshotBackgroundAgent(sandbox, backgroundSessionId, sessionOpts)
     if (before.transientReadFailure) throw new Error("Cannot read the agent output; retry Stop")
-    if (!(await persistAgentSnapshot({ prisma, turn, snapshot: before, finalizationClaimId: claimId })).persisted) {
+    if (!before.startupPending && !(await persistAgentSnapshot({ prisma, turn, snapshot: before, finalizationClaimId: claimId })).persisted) {
       throw new Error("Cannot save the agent output; retry Stop")
     }
+    // Prepared launches have no output yet. The SDK must fence that exact
+    // attempt before release, so a delayed start cannot run after Stop.
     await cancelBackgroundAgent(sandbox, backgroundSessionId, sessionOpts, true)
     const after = await snapshotBackgroundAgent(sandbox, backgroundSessionId, sessionOpts, before)
     if (after.transientReadFailure) throw new Error("Agent stopped but final output could not be read; retry Stop")
