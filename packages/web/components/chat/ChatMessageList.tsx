@@ -138,9 +138,6 @@ export function ChatMessageList({
                 message={{ id: pending.userMessageId ?? pending.id, role: "user", content: pending.content, timestamp: 0 }}
                 isMobile={isMobile}
               />
-              <div className="text-xs text-muted-foreground text-right mt-1">
-                {pending.pendingSync && !pending.userMessageId ? "Sending…" : "Starting…"}
-              </div>
             </div>
           )}
           {/* A single placeholder until the active assistant row is available. */}

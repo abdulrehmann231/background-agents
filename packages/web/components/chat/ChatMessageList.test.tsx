@@ -138,13 +138,17 @@ describe("chat execution presentation", () => {
     expect(html.match(/animate-pulse/g)).toHaveLength(1)
   })
 
-  it("renders the first idle submission as a message, not as waiting in the queue", () => {
+  it.each([true, false])("renders an idle submission with one loader and no extra progress label (pendingSync=%s)", (pendingSync) => {
     const html = renderWarning(0, false, {
       messages: [{ id: "old", role: "assistant", content: "Previous reply", timestamp: 1 }],
-      queuedMessages: [{ id: "pending", content: "Next prompt", pendingSync: true }],
+      queuedMessages: [{ id: "pending", content: "Next prompt", pendingSync }],
     })
     expect(html).toContain('data-testid="user-message"')
     expect(html).not.toContain("Saving to queue")
+    expect(html.match(/data-testid="user-message"/g)).toHaveLength(1)
+    expect(html.match(/animate-pulse/g)).toHaveLength(1)
+    expect(html).not.toContain("Sending…")
+    expect(html).not.toContain("Starting…")
   })
 
   it("shows rejected submissions and pending removals without a running loader", () => {
