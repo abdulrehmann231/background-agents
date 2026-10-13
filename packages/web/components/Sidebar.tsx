@@ -360,11 +360,19 @@ export function Sidebar({
           <div className="flex items-center justify-between px-4 pt-safe">
             <div className="flex items-center gap-2">
               <Image
-                src="/mask-icon.svg"
+                src="/mask-icon-light.svg"
                 alt="Background Agents"
                 width={16}
                 height={16}
-                className="h-4 w-4"
+                className="h-4 w-4 dark:hidden"
+                priority
+              />
+              <Image
+                src="/mask-icon-dark.svg"
+                alt="Background Agents"
+                width={16}
+                height={16}
+                className="hidden h-4 w-4 dark:block"
                 priority
               />
               <h1 className="text-base font-semibold text-foreground">
@@ -603,25 +611,43 @@ export function Sidebar({
         style={isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
       >
         {collapsed ? (
-          <Image
-            src="/mask-icon.svg"
-            alt="Background Agents"
-            width={16}
-            height={16}
-            className="h-4 w-4"
-            priority
-          />
+          <>
+            <Image
+              src="/mask-icon-light.svg"
+              alt="Background Agents"
+              width={16}
+              height={16}
+              className="h-4 w-4 dark:hidden"
+              priority
+            />
+            <Image
+              src="/mask-icon-dark.svg"
+              alt="Background Agents"
+              width={16}
+              height={16}
+              className="hidden h-4 w-4 dark:block"
+              priority
+            />
+          </>
         ) : (
           <div className={cn(
             "flex items-center gap-2",
             isDesktopApp && "invisible" // Hide text but keep space for window controls
           )}>
             <Image
-              src="/mask-icon.svg"
+              src="/mask-icon-light.svg"
               alt="Background Agents"
               width={14}
               height={14}
-              className="h-3.5 w-3.5"
+              className="h-3.5 w-3.5 dark:hidden"
+              priority
+            />
+            <Image
+              src="/mask-icon-dark.svg"
+              alt="Background Agents"
+              width={14}
+              height={14}
+              className="hidden h-3.5 w-3.5 dark:block"
               priority
             />
             <h1 className="text-sm font-semibold text-foreground truncate">
