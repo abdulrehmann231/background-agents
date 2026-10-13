@@ -4,6 +4,7 @@ import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "next-themes"
 import { QueryProvider } from "@/components/providers/QueryProvider"
 import { Toaster } from "@/components/Toaster"
+import { Favicon } from "@/components/Favicon"
 
 interface ProvidersProps {
   children: React.ReactNode
@@ -20,6 +21,7 @@ export function Providers({ children }: ProvidersProps) {
           disableTransitionOnChange
         >
           {children}
+          <Favicon />
           <Toaster />
         </ThemeProvider>
       </QueryProvider>

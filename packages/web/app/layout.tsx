@@ -46,6 +46,11 @@ export default function RootLayout({
         />
         {/* Prevent iOS text size adjustment */}
         <meta name="x-apple-disable-message-reformatting" />
+        {/* Favicon: picks light/dark mask icon from OS preference before JS
+            runs. <Favicon /> (in Providers) takes over after hydration so a
+            manual in-app theme override is reflected too. */}
+        <link rel="icon" type="image/svg+xml" href="/mask-icon-light.svg" media="(prefers-color-scheme: light)" />
+        <link rel="icon" type="image/svg+xml" href="/mask-icon-dark.svg" media="(prefers-color-scheme: dark)" />
       </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased overflow-hidden`}>
         <Providers>{children}</Providers>
