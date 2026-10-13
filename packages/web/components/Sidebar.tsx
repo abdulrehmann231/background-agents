@@ -362,17 +362,17 @@ export function Sidebar({
               <Image
                 src="/mask-icon-light.svg"
                 alt="Background Agents"
-                width={16}
-                height={16}
-                className="h-4 w-4 dark:hidden"
+                width={18}
+                height={18}
+                className="h-[18px] w-[18px] dark:hidden"
                 priority
               />
               <Image
                 src="/mask-icon-dark.svg"
                 alt="Background Agents"
-                width={16}
-                height={16}
-                className="hidden h-4 w-4 dark:block"
+                width={18}
+                height={18}
+                className="hidden h-[18px] w-[18px] dark:block"
                 priority
               />
               <h1 className="text-base font-semibold text-foreground">
@@ -615,17 +615,17 @@ export function Sidebar({
             <Image
               src="/mask-icon-light.svg"
               alt="Background Agents"
-              width={16}
-              height={16}
-              className="h-4 w-4 dark:hidden"
+              width={18}
+              height={18}
+              className="h-[18px] w-[18px] dark:hidden"
               priority
             />
             <Image
               src="/mask-icon-dark.svg"
               alt="Background Agents"
-              width={16}
-              height={16}
-              className="hidden h-4 w-4 dark:block"
+              width={18}
+              height={18}
+              className="hidden h-[18px] w-[18px] dark:block"
               priority
             />
           </>
@@ -637,17 +637,17 @@ export function Sidebar({
             <Image
               src="/mask-icon-light.svg"
               alt="Background Agents"
-              width={14}
-              height={14}
-              className="h-3.5 w-3.5 dark:hidden"
+              width={16}
+              height={16}
+              className="h-4 w-4 dark:hidden"
               priority
             />
             <Image
               src="/mask-icon-dark.svg"
               alt="Background Agents"
-              width={14}
-              height={14}
-              className="hidden h-3.5 w-3.5 dark:block"
+              width={16}
+              height={16}
+              className="hidden h-4 w-4 dark:block"
               priority
             />
             <h1 className="text-sm font-semibold text-foreground truncate">
