@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
 import { Plus, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
+import Image from "next/image"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
@@ -357,9 +358,19 @@ export function Sidebar({
         >
           {/* Header with close button */}
           <div className="flex items-center justify-between px-4 pt-safe">
-            <h1 className="text-base font-semibold text-foreground">
-              Background Agents
-            </h1>
+            <div className="flex items-center gap-2">
+              <Image
+                src="/mask-icon.svg"
+                alt="Background Agents"
+                width={16}
+                height={16}
+                className="h-4 w-4"
+                priority
+              />
+              <h1 className="text-base font-semibold text-foreground">
+                Background Agents
+              </h1>
+            </div>
             <button
               onClick={onMobileClose}
               className="p-2 -mr-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors touch-target"
@@ -591,13 +602,32 @@ export function Sidebar({
         )}
         style={isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
       >
-        {!collapsed && (
-          <h1 className={cn(
-            "text-sm font-semibold text-foreground truncate",
+        {collapsed ? (
+          <Image
+            src="/mask-icon.svg"
+            alt="Background Agents"
+            width={16}
+            height={16}
+            className="h-4 w-4"
+            priority
+          />
+        ) : (
+          <div className={cn(
+            "flex items-center gap-2",
             isDesktopApp && "invisible" // Hide text but keep space for window controls
           )}>
-            Background Agents
-          </h1>
+            <Image
+              src="/mask-icon.svg"
+              alt="Background Agents"
+              width={14}
+              height={14}
+              className="h-3.5 w-3.5"
+              priority
+            />
+            <h1 className="text-sm font-semibold text-foreground truncate">
+              Background Agents
+            </h1>
+          </div>
         )}
         <button
           onClick={handleToggleCollapse}
