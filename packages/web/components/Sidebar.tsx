@@ -359,22 +359,6 @@ export function Sidebar({
           {/* Header with close button */}
           <div className="flex items-center justify-between px-4 pt-safe">
             <div className="flex items-center gap-2">
-              <Image
-                src="/mask-icon-light.svg"
-                alt="Background Agents"
-                width={18}
-                height={18}
-                className="h-[18px] w-[18px] dark:hidden"
-                priority
-              />
-              <Image
-                src="/mask-icon-dark.svg"
-                alt="Background Agents"
-                width={18}
-                height={18}
-                className="hidden h-[18px] w-[18px] dark:block"
-                priority
-              />
               <h1 className="text-base font-semibold text-foreground">
                 Background Agents
               </h1>
@@ -645,22 +629,6 @@ export function Sidebar({
               "flex items-center gap-2",
               isDesktopApp && "invisible" // Hide text but keep space for window controls
             )}>
-              <Image
-                src="/mask-icon-light.svg"
-                alt="Background Agents"
-                width={16}
-                height={16}
-                className="h-4 w-4 dark:hidden"
-                priority
-              />
-              <Image
-                src="/mask-icon-dark.svg"
-                alt="Background Agents"
-                width={16}
-                height={16}
-                className="hidden h-4 w-4 dark:block"
-                priority
-              />
               <h1 className="text-sm font-semibold text-foreground truncate">
                 Background Agents
               </h1>
