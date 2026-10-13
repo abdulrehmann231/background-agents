@@ -611,13 +611,22 @@ export function Sidebar({
         style={isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
       >
         {collapsed ? (
-          <>
+          // Collapsed: the logo doubles as the expand control. It shows the
+          // mask icon by default and swaps to the panel-toggle icon on hover,
+          // instead of showing both side by side (too cramped at this width).
+          <button
+            onClick={handleToggleCollapse}
+            className="group relative flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+            style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
             <Image
               src="/mask-icon-light.svg"
               alt="Background Agents"
               width={18}
               height={18}
-              className="h-[18px] w-[18px] dark:hidden"
+              className="h-[18px] w-[18px] transition-opacity group-hover:opacity-0 dark:hidden"
               priority
             />
             <Image
@@ -625,43 +634,47 @@ export function Sidebar({
               alt="Background Agents"
               width={18}
               height={18}
-              className="hidden h-[18px] w-[18px] dark:block"
+              className="hidden h-[18px] w-[18px] transition-opacity group-hover:opacity-0 dark:block"
               priority
             />
-          </>
+            <PanelLeft className="absolute h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
+          </button>
         ) : (
-          <div className={cn(
-            "flex items-center gap-2",
-            isDesktopApp && "invisible" // Hide text but keep space for window controls
-          )}>
-            <Image
-              src="/mask-icon-light.svg"
-              alt="Background Agents"
-              width={16}
-              height={16}
-              className="h-4 w-4 dark:hidden"
-              priority
-            />
-            <Image
-              src="/mask-icon-dark.svg"
-              alt="Background Agents"
-              width={16}
-              height={16}
-              className="hidden h-4 w-4 dark:block"
-              priority
-            />
-            <h1 className="text-sm font-semibold text-foreground truncate">
-              Background Agents
-            </h1>
-          </div>
+          <>
+            <div className={cn(
+              "flex items-center gap-2",
+              isDesktopApp && "invisible" // Hide text but keep space for window controls
+            )}>
+              <Image
+                src="/mask-icon-light.svg"
+                alt="Background Agents"
+                width={16}
+                height={16}
+                className="h-4 w-4 dark:hidden"
+                priority
+              />
+              <Image
+                src="/mask-icon-dark.svg"
+                alt="Background Agents"
+                width={16}
+                height={16}
+                className="hidden h-4 w-4 dark:block"
+                priority
+              />
+              <h1 className="text-sm font-semibold text-foreground truncate">
+                Background Agents
+              </h1>
+            </div>
+            <button
+              onClick={handleToggleCollapse}
+              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+              style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          </>
         )}
-        <button
-          onClick={handleToggleCollapse}
-          className="p-1.5 rounded-md hover:bg-accent text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
-          style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
-        >
-          <PanelLeft className="h-4 w-4" />
-        </button>
       </div>
 
       {/* Action Buttons - grouped together */}
