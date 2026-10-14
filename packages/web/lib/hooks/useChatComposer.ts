@@ -34,6 +34,7 @@ import { useToastStore } from "@/lib/stores/toast-store"
 import { NAVIGATE_TO_CHAT_EVENT, type NavigateToChatEventDetail } from "@/lib/notify"
 import { hasActiveQueue } from "@/lib/chat-state"
 import { queuedSendNotice } from "@/lib/composer-queue"
+import { exhaustedCreditProvider } from "@/lib/credit-limit"
 
 interface UseChatComposerArgs {
   chat: Chat | null
@@ -44,6 +45,7 @@ interface UseChatComposerArgs {
   isMobile: boolean
   isSending: boolean
   isAuthenticated: boolean
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
   onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
   onEnqueueMessage?: (message: string, agent?: string, model?: string) => void
   onResumeQueue?: () => void
@@ -60,6 +62,7 @@ export function useChatComposer({
   isMobile,
   isSending,
   isAuthenticated,
+  showCreditDialog,
   onSendMessage,
   onEnqueueMessage,
   onResumeQueue,
@@ -141,6 +144,22 @@ export function useChatComposer({
   const { data: settingsData } = useSettingsQuery()
   const customEndpoints = settingsData?.customEndpoints
   const currentModel = resolveChatModel(currentAgent, chat?.model, credentialFlags, settings.defaultModel, customEndpoints)
+  const balanceUsd = settingsData?.creditBalanceUsd ?? null
+  const creditGate = { agent: currentAgent, credentialFlags, balanceUsd, providerMultipliers: settingsData?.providerMultipliers }
+  const blockedProvider = exhaustedCreditProvider({ ...creditGate, model: currentModel })
+  // Inspect the stored selection too: model resolution can fall back to a free
+  // model as soon as the settings query reports an exhausted shared balance.
+  const depletedProvider = exhaustedCreditProvider({ ...creditGate, model: chat?.model ?? currentModel })
+  const notifiedOfDepletion = useRef(false)
+  useEffect(() => {
+    if (balanceUsd !== null && balanceUsd > 0 && !credentialFlags.SHARED_BALANCE_EXHAUSTED) {
+      notifiedOfDepletion.current = false
+    }
+    if (depletedProvider && !notifiedOfDepletion.current) {
+      notifiedOfDepletion.current = true
+      showCreditDialog(depletedProvider, balanceUsd)
+    }
+  }, [depletedProvider, balanceUsd, credentialFlags.SHARED_BALANCE_EXHAUSTED, showCreditDialog])
 
   // Check if the selected model has required credentials
   const availableModels = agentModels[currentAgent] ?? []
@@ -283,7 +302,11 @@ export function useChatComposer({
       useToastStore.getState().addToast({ title: "Message is too long", body: "Shorten your message to 100,000 characters or fewer. Your draft has been kept." })
       return
     }
-    // Don't send if credentials are missing - the UI shows a warning instead
+    if (blockedProvider) {
+      showCreditDialog(blockedProvider, balanceUsd)
+      return
+    }
+    // A missing personal key still requires setup rather than a credit top-up.
     if (!hasRequiredCredentials) return
 
     // Reset scroll state so we snap to bottom when sending
@@ -337,6 +360,10 @@ export function useChatComposer({
   // holding one of those modifiers while clicking the send button.
   const handleBranchSend = () => {
     if (git.canBranch && input.trim()) {
+      if (blockedProvider) {
+        showCreditDialog(blockedProvider, balanceUsd)
+        return
+      }
       git.handleBranchWithMessage(input.trim(), currentAgent, currentModel)
       setInput("")
       clearFiles()

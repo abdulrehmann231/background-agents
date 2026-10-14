@@ -45,6 +45,7 @@ export function LimitReachedDialog({
   isMobile = false,
 }: LimitReachedDialogProps) {
   const providerLabel = PROVIDER_LABEL[provider ?? ""] ?? "shared model"
+  const hasCredits = typeof creditBalance === "number" && creditBalance > 0
   // Always offer it, even when OpenCode was the pool that ran the user out: the
   // balance is pooled, and this routes to OpenCode's *free* models, which never
   // draw it down and so stay available at zero.
@@ -54,10 +55,13 @@ export function LimitReachedDialog({
   const [starRewarded, setStarRewarded] = useState(false)
   const [starred, setStarred] = useState(false)
   const [starPending, setStarPending] = useState(false)
+  const [starStatusLoaded, setStarStatusLoaded] = useState(false)
   const [starError, setStarError] = useState<string | null>(null)
 
   useEffect(() => {
+    setStarStatusLoaded(false)
     if (!open) return
+    setStarError(null)
     let cancelled = false
     fetch("/api/user/star-reward")
       .then(async (response) => {
@@ -69,6 +73,7 @@ export function LimitReachedDialog({
           setStarRewarded(status.rewarded)
           setStarred(status.starred)
           setStarError(null)
+          setStarStatusLoaded(true)
         }
       })
       .catch((error: unknown) => {
@@ -78,6 +83,7 @@ export function LimitReachedDialog({
   }, [open])
 
   const handleStarReward = useCallback(async () => {
+    if (!starStatusLoaded || starRewarded || starPending) return
     setStarPending(true)
     setStarError(null)
     try {
@@ -92,7 +98,7 @@ export function LimitReachedDialog({
     } finally {
       setStarPending(false)
     }
-  }, [queryClient])
+  }, [queryClient, starStatusLoaded, starRewarded, starPending])
 
   // Focus the primary button when modal opens
   useEffect(() => {
@@ -144,10 +150,12 @@ export function LimitReachedDialog({
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-xl shadow-xl"
           )}
         >
-          <ModalHeader title="Out of Credits" />
+          <ModalHeader title={hasCredits ? "Add Credits" : "Out of Credits"} />
           <div className="px-4 pt-3 pb-4 space-y-4">
             <div className="text-sm text-muted-foreground">
-              {typeof creditBalance === "number" && creditBalance < 0 ? (
+              {hasCredits ? (
+                <>You have {fmtBalance(creditBalance)} in credits remaining.</>
+              ) : typeof creditBalance === "number" && creditBalance < 0 ? (
                 <>
                   Your last turn ran{" "}
                   <span className="font-medium text-foreground">
@@ -163,10 +171,7 @@ export function LimitReachedDialog({
             </div>
 
             <div className="space-y-2">
-              {/* Primary option: top up. It leads and takes the focus because it
-                  is the only one that clears the block itself — the other two
-                  route around it, onto a different model or a different
-                  credential, and leave the balance where it is. */}
+              {/* Primary option: purchase credits. Rewards can also refill the balance. */}
               <button
                 ref={primaryButtonRef}
                 onClick={handleBuyCredits}
@@ -193,7 +198,7 @@ export function LimitReachedDialog({
               <button
                 type="button"
                 onClick={handleStarReward}
-                disabled={starRewarded || starPending}
+                disabled={!starStatusLoaded || starRewarded || starPending}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-lg border border-border hover:bg-accent/50 transition-colors p-3 text-left cursor-pointer",
                   "focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-default"
@@ -204,7 +209,7 @@ export function LimitReachedDialog({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-foreground">
-                    {starRewarded ? "Star reward claimed" : starPending ? "Claiming star reward…" : starred ? "Claim star reward" : "Star our repo on GitHub"}
+                    {!starStatusLoaded && !starError ? "Checking star reward…" : starRewarded ? "Star reward claimed" : starPending ? "Claiming star reward…" : starred ? "Claim star reward" : "Star our repo on GitHub"}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {starRewarded ? "Thanks for starring Backgrounder" : "Credits are added immediately"}
