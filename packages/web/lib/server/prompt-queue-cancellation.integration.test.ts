@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, expect, it } from "vitest"
+import { createTestUser, databaseDescribe, deleteTestUser } from "./db-test-helpers"
 
 type Database = typeof import("@/lib/db/prisma").prisma
 type Queue = typeof import("./prompt-queue")
@@ -6,18 +7,13 @@ let prisma: Database
 let queue: Queue
 let userId: string
 const run = crypto.randomUUID()
-const databaseDescribe = process.env.DATABASE_URL ? describe : describe.skip
 
 databaseDescribe("idempotent prompt cancellation on a real database", () => {
   beforeAll(async () => {
-    ;({ prisma } = await import("@/lib/db/prisma"))
+    ;({ prisma, userId } = await createTestUser("queue-cancel"))
     queue = await import("./prompt-queue")
-    userId = (await prisma.user.create({ data: { email: `queue-cancel-${run}@example.test` } })).id
   })
-  afterAll(async () => {
-    if (userId) await prisma.user.delete({ where: { id: userId } })
-    await prisma.$disconnect()
-  })
+  afterAll(() => deleteTestUser(prisma, userId))
   const input = (clientId: string) => ({ clientId, content: "cancel this prompt", agent: "eliza", model: "eliza-classic-1.0" })
 
   it("remembers removal before a delayed send or import arrives", async () => {

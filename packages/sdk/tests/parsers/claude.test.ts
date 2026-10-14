@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parseClaudeLine, CLAUDE_TOOL_MAPPINGS } from "../../src/agents/index.js"
+import { parseFixtureEvents } from "./helpers.js"
 
 describe("parseClaudeLine", () => {
   const mappings = CLAUDE_TOOL_MAPPINGS
@@ -110,18 +111,9 @@ describe("parseClaudeLine", () => {
   })
 
   it("no-credit fixture: surfaces the billing failure (not a silent end)", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/claude-error.jsonl"),
-      "utf-8"
-    )
-    const events = fixture
-      .split("\n")
-      .filter(Boolean)
-      .map((l: string) => parseClaudeLine(l, mappings))
-      .filter(Boolean)
-      .flat() as { type: string; error?: string }[]
+    const events = parseFixtureEvents("claude-error.jsonl", (line) =>
+      parseClaudeLine(line, mappings)
+    ) as { type: string; error?: string }[]
     const ends = events.filter((e) => e.type === "end")
     expect(ends).toHaveLength(1)
     expect(ends[0].error).toContain("Credit balance is too low")

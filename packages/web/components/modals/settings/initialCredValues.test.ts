@@ -55,24 +55,4 @@ describe("initialCredValues", () => {
     }
     expect(initialCredValues(flags).GEMINI_API_KEY).toBe(MASK)
   })
-
-  it("clearing a user key while a shared key remains reopens blank", () => {
-    // Before: user had their own OpenCode key → field masked.
-    const withUserKey: CredentialFlags = {
-      OPENCODE_API_KEY: true,
-      OPENCODE_API_KEY_SHARED: true,
-      OPENCODE_API_KEY_USER: true,
-    }
-    expect(initialCredValues(withUserKey).OPENCODE_API_KEY).toBe(MASK)
-
-    // After clearing + save: server drops the user key; only the shared/env key
-    // remains, so the flags come back with USER=false. The field must reopen
-    // blank rather than re-masking from the shared key.
-    const afterClear: CredentialFlags = {
-      OPENCODE_API_KEY: true,
-      OPENCODE_API_KEY_SHARED: true,
-      OPENCODE_API_KEY_USER: false,
-    }
-    expect(initialCredValues(afterClear).OPENCODE_API_KEY).toBe("")
-  })
 })

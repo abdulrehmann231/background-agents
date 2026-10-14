@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, expect, it } from "vitest"
+import { createTestUser, databaseDescribe, deleteTestUser } from "./db-test-helpers"
 
 type Database = typeof import("@/lib/db/prisma").prisma
 type Queue = typeof import("./prompt-queue")
@@ -8,19 +9,14 @@ let queue: Queue
 let recovery: Recovery
 let userId: string
 const run = crypto.randomUUID()
-const databaseDescribe = process.env.DATABASE_URL ? describe : describe.skip
 
 databaseDescribe("explicit terminal queue recovery on a real database", () => {
   beforeAll(async () => {
-    ;({ prisma } = await import("@/lib/db/prisma"))
+    ;({ prisma, userId } = await createTestUser("queue-recovery"))
     queue = await import("./prompt-queue")
     recovery = await import("./queue-recovery")
-    userId = (await prisma.user.create({ data: { email: `queue-recovery-${run}@example.test` } })).id
   })
-  afterAll(async () => {
-    if (userId) await prisma.user.delete({ where: { id: userId } })
-    await prisma.$disconnect()
-  })
+  afterAll(() => deleteTestUser(prisma, userId))
   async function failedChat(confirmed: boolean | null = true) {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "error" } })
     const assistantMessageId = `failed-${crypto.randomUUID()}`

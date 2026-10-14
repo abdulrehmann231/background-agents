@@ -17,12 +17,8 @@
 import "dotenv/config"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { Daytona, type Sandbox } from "@daytonaio/sdk"
-import {
-  createSession,
-  getSession,
-  type Event,
-  type BackgroundSession,
-} from "../../src/index.js"
+import { createSession, getSession } from "../../src/index.js"
+import { pollUntilEnd } from "./error-handling-helpers.js"
 
 // Check for TEST_ prefixed keys first, then fall back to regular keys
 const DAYTONA_API_KEY =
@@ -33,33 +29,6 @@ const ANTHROPIC_API_KEY =
 const SIMPLE_PROMPT = "What is 2 + 2? Reply with just the number."
 const LONG_RUNNING_PROMPT =
   "Count from 1 to 5, wait 2 seconds between each number."
-
-// Helper to poll until end or timeout
-async function pollUntilEnd(
-  session: BackgroundSession,
-  timeoutMs = 120_000,
-  pollIntervalMs = 2000
-): Promise<Event[]> {
-  const deadline = Date.now() + timeoutMs
-  const allEvents: Event[] = []
-
-  while (Date.now() < deadline) {
-    const { events, running } = await session.getEvents()
-    for (const event of events) {
-      if (!allEvents.some((e) => e === event)) {
-        allEvents.push(event)
-      }
-    }
-    if (
-      !running ||
-      allEvents.some((e) => e.type === "end" || e.type === "agent_crashed")
-    )
-      break
-    await new Promise((r) => setTimeout(r, pollIntervalMs))
-  }
-
-  return allEvents
-}
 
 describe.skipIf(!DAYTONA_API_KEY || !ANTHROPIC_API_KEY)(
   "sandbox background session tests",

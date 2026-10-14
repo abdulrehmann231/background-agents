@@ -22,7 +22,8 @@
 import "dotenv/config"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { Daytona, type Sandbox } from "@daytonaio/sdk"
-import { createSession, type Event, type BackgroundSession } from "../../src/index.js"
+import { createSession } from "../../src/index.js"
+import { pollUntilEnd } from "./error-handling-helpers.js"
 
 // Check for TEST_ prefixed keys first, then fall back to regular keys
 // This allows running tests with separate keys that don't conflict with running agents
@@ -88,25 +89,6 @@ const agents = [
     hasKey: true, // Always runnable - no API key needed
   },
 ]
-
-// Helper to poll for completion
-async function pollUntilEnd(
-  session: BackgroundSession,
-  timeoutMs = 120_000,
-  pollIntervalMs = 2000
-): Promise<Event[]> {
-  const deadline = Date.now() + timeoutMs
-  const allEvents: Event[] = []
-
-  while (Date.now() < deadline) {
-    const { events, running } = await session.getEvents()
-    // Accumulate events (getEvents returns only new events since last poll)
-    allEvents.push(...events)
-    if (!running || events.some((e) => e.type === "end")) break
-    await new Promise((r) => setTimeout(r, pollIntervalMs))
-  }
-  return allEvents
-}
 
 describe.skipIf(!DAYTONA_API_KEY)("agent integration tests", () => {
   // Test each agent
