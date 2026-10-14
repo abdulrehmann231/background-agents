@@ -12,6 +12,7 @@ import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useGitHubUserQuery } from "@/lib/query"
 import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH, COLLAPSE_THRESHOLD } from "@/lib/contexts"
+import { DOCS_URL } from "@/lib/constants"
 import { clearAllStorage } from "@/lib/storage"
 import { isChatVisibleForFilter } from "@/lib/chat-tree"
 import type { Chat } from "@/lib/types"
@@ -26,9 +27,6 @@ import {
 
 // Re-export from context for backward compatibility
 export { ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS } from "@/lib/contexts"
-
-// The docs site is deployed separately (packages/docs) at its own domain.
-const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || "https://docs.backgrounder.dev"
 
 interface SidebarProps {
   chats: Chat[]
@@ -414,20 +412,6 @@ export function Sidebar({
               <Clock className={cn("h-5 w-5", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
               <span className="text-base text-foreground">Scheduled Agents</span>
             </button>
-
-            {/* Docs Link */}
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => {
-                if (onMobileClose) onMobileClose()
-              }}
-              className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
-            >
-              <BookOpen className="h-5 w-5 text-muted-foreground" />
-              <span className="text-base text-foreground">Docs</span>
-            </a>
           </div>
 
           {/* Repository Filter */}
@@ -546,6 +530,16 @@ export function Sidebar({
                       <HelpCircle className="h-5 w-5" />
                       Help
                     </button>
+                    <a
+                      href={DOCS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setMobileUserMenuOpen(false)}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
+                    >
+                      <BookOpen className="h-5 w-5" />
+                      Docs
+                    </a>
                     <button
                       onClick={() => {
                         clearAllStorage()
@@ -691,21 +685,6 @@ export function Sidebar({
           <Clock className={cn("h-4 w-4", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
           {!collapsed && <span className="text-sm text-foreground">Scheduled Agents</span>}
         </button>
-
-        {/* Docs Link */}
-        <a
-          href={DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Docs"
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors hover:bg-accent/50 cursor-pointer",
-            collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
-          )}
-        >
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          {!collapsed && <span className="text-sm text-foreground">Docs</span>}
-        </a>
       </div>
 
       <div className="pb-2" />

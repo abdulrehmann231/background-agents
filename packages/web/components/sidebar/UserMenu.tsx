@@ -2,11 +2,12 @@
 
 import { useState, useRef } from "react"
 import { signOut } from "next-auth/react"
-import { Settings, LogOut, HelpCircle, BarChart3 } from "lucide-react"
+import { Settings, LogOut, HelpCircle, BarChart3, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { clearAllStorage } from "@/lib/storage"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useModals } from "@/lib/contexts"
+import { DOCS_URL } from "@/lib/constants"
 
 interface UserMenuProps {
   user: {
@@ -99,6 +100,16 @@ export function UserMenu({ user, collapsed }: UserMenuProps) {
             <HelpCircle className="h-4 w-4" />
             Help
           </button>
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setMenuOpen(false)}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+          >
+            <BookOpen className="h-4 w-4" />
+            Docs
+          </a>
           <button
             onClick={() => {
               clearAllStorage()
