@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, expect, it } from "vitest"
+import { createTestUser, databaseDescribe, deleteTestUser } from "./db-test-helpers"
 
 type Database = typeof import("@/lib/db/prisma").prisma
 type Failures = typeof import("./turn-failure")
@@ -7,17 +8,12 @@ let recordTurnFailure: Failures["recordTurnFailure"]
 let readTurnFailure: Failures["readTurnFailure"]
 let userId: string
 
-const databaseDescribe = process.env.DATABASE_URL ? describe : describe.skip
 databaseDescribe("persisted turn failure decisions", () => {
   beforeAll(async () => {
-    ;({ prisma } = await import("@/lib/db/prisma"))
+    ;({ prisma, userId } = await createTestUser("failure-outcome"))
     ;({ recordTurnFailure, readTurnFailure } = await import("./turn-failure"))
-    userId = (await prisma.user.create({ data: { email: `failure-outcome-${crypto.randomUUID()}@example.test` } })).id
   })
-  afterAll(async () => {
-    if (userId) await prisma.user.delete({ where: { id: userId } })
-    await prisma?.$disconnect()
-  })
+  afterAll(() => deleteTestUser(prisma, userId))
 
   it("keeps the first failure decision and never reverts a confirmed stop across retrying observers", async () => {
     const sessionId = crypto.randomUUID()

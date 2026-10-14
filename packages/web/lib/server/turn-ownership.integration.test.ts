@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, expect, it } from "vitest"
+import { createTestUser, databaseDescribe, deleteTestUser } from "./db-test-helpers"
 
 type PrismaClient = typeof import("@/lib/db/prisma").prisma
 type TurnOwnership = typeof import("./turn-ownership")
@@ -23,17 +24,13 @@ let chatId: string
 const turnA = { chatId: "", backgroundSessionId: `run-A-${run}`, assistantMessageId: `assistant-A-${run}` }
 const turnB = { chatId: "", backgroundSessionId: `run-B-${run}`, assistantMessageId: `assistant-B-${run}` }
 
-const databaseDescribe = process.env.DATABASE_URL ? describe : describe.skip
-
 databaseDescribe("turn ownership on a real database", () => {
 beforeAll(async () => {
-  ;({ prisma } = await import("@/lib/db/prisma"))
+  ;({ prisma, userId } = await createTestUser("turn-ownership"))
   ;({ claimTurnFinalization, releaseTurn, abandonFinalization } = await import("./turn-ownership"))
   ;({ claimNextPrompt, enqueuePrompt } = await import("./prompt-queue"))
   ;({ persistAgentSnapshot } = await import("@/app/api/agent/stream/_lib/persist-snapshot"))
   ;({ recordTurnFailure, readTurnFailure } = await import("./turn-failure"))
-  const user = await prisma.user.create({ data: { email: `turn-ownership-${run}@example.test` } })
-  userId = user.id
   const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "running", backgroundSessionId: turnA.backgroundSessionId, activeAssistantMessageId: turnA.assistantMessageId } })
   chatId = chat.id
   turnA.chatId = chatId
@@ -44,10 +41,7 @@ beforeAll(async () => {
   ] })
 })
 
-afterAll(async () => {
-  if (userId) await prisma.user.delete({ where: { id: userId } })
-  await prisma.$disconnect()
-})
+afterAll(() => deleteTestUser(prisma, userId))
 
   it("allows exactly one finalizer across concurrent observers", async () => {
     const claims = await Promise.all(Array.from({ length: 16 }, () => claimTurnFinalization(turnA)))
