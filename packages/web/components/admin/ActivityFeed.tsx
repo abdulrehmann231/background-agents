@@ -18,6 +18,7 @@ import {
   Calendar,
   AlertTriangle,
   GitBranch,
+  MapPin,
 } from "lucide-react"
 
 interface Activity {
@@ -104,6 +105,8 @@ function ActivityItem({ activity }: { activity: Activity }) {
   const errorMessage = metadata?.message
   // git_push_failed carries the branch that failed to push.
   const branch = metadata?.branch
+  // login carries the client IP, when it could be read off the request.
+  const ip = metadata?.ip
 
   return (
     <div className="flex items-start gap-3 py-3">
@@ -122,7 +125,7 @@ function ActivityItem({ activity }: { activity: Activity }) {
             <span className="text-muted-foreground"> - {details}</span>
           )}
         </p>
-        {(agent || model || errorCategory || branch) && (
+        {(agent || model || errorCategory || branch || ip) && (
           <div className="mt-1 flex flex-wrap gap-2">
             {agent && (
               <span className="inline-flex items-center gap-1 rounded bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
@@ -146,6 +149,12 @@ function ActivityItem({ activity }: { activity: Activity }) {
               <span className="inline-flex items-center gap-1 rounded bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600">
                 <AlertTriangle className="h-3 w-3" />
                 {errorCategory}
+              </span>
+            )}
+            {ip && (
+              <span className="inline-flex items-center gap-1 rounded bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                <MapPin className="h-3 w-3" />
+                {ip}
               </span>
             )}
           </div>
