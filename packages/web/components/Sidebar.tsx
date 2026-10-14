@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
-import { Plus, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
+import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
 import Image from "next/image"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
@@ -377,7 +377,7 @@ export function Sidebar({
               onClick={handleNewChat}
               className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
             >
-              <Plus className="h-5 w-5 text-muted-foreground" />
+              <SquarePen className="h-5 w-5 text-muted-foreground" />
               <span className="text-base text-foreground">New Chat</span>
             </button>
 
@@ -649,7 +649,7 @@ export function Sidebar({
             collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
           )}
         >
-          <Plus className="h-4 w-4 text-muted-foreground" />
+          <SquarePen className="h-4 w-4 text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">New Chat</span>}
         </button>
 
