@@ -18,7 +18,9 @@ One job = one process = one directory:
 <root>/<jobId>/
   meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version }
   output.log    combined stdout+stderr, byte-exact, append-only
-  exit          integer $?, present ONLY once the process finishes
+  exit          integer $?, also written after confirmed cancellation
+  command-exit  wrapper-only foreground exit code (atomic publication)
+  cancelling    retain full descendant liveness during explicit cancellation
   launch.lock   shared by launch and abort
   aborted       permanent no-future-launch marker for this attempt
 ```
@@ -49,8 +51,23 @@ One job = one process = one directory:
 
 These operations require `flock` in addition to `setsid` and the cgroup-v2
 permissions described above. Missing or unreadable status is an error, not a
-successful cancellation. An `exit` file does not make a job terminal while an
-owned process remains alive.
+successful cancellation. An `exit` file alone does not make a job terminal while
+an owned process remains alive.
+
+A normally completed foreground command can leave background services (such as a
+website preview) running. Once its wrapper is gone and `command-exit` agrees with
+`exit`, `status()` and `read()` report the command as exited without killing those
+services. The populated cgroup remains owned by that job: explicit `cancel()`
+still reaps every descendant, while cancelling a later job cannot kill it.
+A provider's end event, a lone exit file, or an unknown/crashed wrapper is not
+completion proof. Cancellation records `cancelling` before signalling processes,
+so it continues to require full process-group/cgroup termination even when the
+foreground command exits during Stop.
+
+Jobs launched by older versions lack `command-exit`; they retain the conservative
+all-descendant check. An already-stuck legacy turn still needs Stop and a preview
+restart once. No database migration or provider-specific process-name matching
+is needed.
 
 ## Why not Daytona's session API (`executeSessionCommand`)?
 

@@ -43,7 +43,7 @@ describe("job cancellation acknowledgement", () => {
   ])("checks real shell postconditions before recording exit: %j", async ({ state, populated, stopped }) => {
     const dir = await mkdtemp(join(tmpdir(), "sandbox-cancel-contract-"))
     try {
-      const local = { ...handle, exitFile: join(dir, "exit"), cgroup: join(dir, "cgroup") }
+      const local = { ...handle, dir, exitFile: join(dir, "exit"), cgroup: join(dir, "cgroup") }
       await mkdir(local.cgroup)
       await writeFile(join(local.cgroup, "cgroup.events"), populated === null ? "invalid\n" : `populated ${populated ? 1 : 0}\n`)
       // Execute the generated shell itself, replacing only OS observations and
