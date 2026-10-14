@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
-import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
+import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen, MessageSquare } from "lucide-react"
 import Image from "next/image"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
@@ -122,6 +122,11 @@ export function Sidebar({
   // Mobile user menu state
   const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false)
   const mobileUserMenuRef = useRef<HTMLDivElement>(null)
+
+  // Collapsed sidebar: popup listing chat titles so a chat can be switched to
+  // without expanding the sidebar.
+  const [chatSwitcherOpen, setChatSwitcherOpen] = useState(false)
+  const chatSwitcherRef = useRef<HTMLDivElement>(null)
 
   // Repository filter state - supports controlled mode from parent
   const [internalRepoFilter, setInternalRepoFilter] = useState<string>(ALL_REPOSITORIES)
@@ -250,6 +255,15 @@ export function Sidebar({
 
   // Close mobile user menu when clicking outside
   useClickOutside(mobileUserMenuRef, () => setMobileUserMenuOpen(false), mobileUserMenuOpen)
+
+  // Close the collapsed chat switcher popup when clicking outside
+  useClickOutside(chatSwitcherRef, () => setChatSwitcherOpen(false), chatSwitcherOpen)
+
+  // Close the chat switcher popup if the sidebar expands (its trigger unmounts,
+  // but reset the flag so it doesn't reopen pre-opened if collapsed again later).
+  useEffect(() => {
+    if (!collapsed) setChatSwitcherOpen(false)
+  }, [collapsed])
 
   // Animate collapse/expand when toggled via button
   const handleToggleCollapse = useCallback(() => {
@@ -664,6 +678,53 @@ export function Sidebar({
           <Search className="h-4 w-4 text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">Search Chats</span>}
         </button>
+
+        {/* Chat Switcher - collapsed only, since the chat list itself is hidden */}
+        {collapsed && (
+          <div className="relative" ref={chatSwitcherRef}>
+            <button
+              onClick={() => setChatSwitcherOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-2 rounded-md p-1.5 transition-colors cursor-pointer",
+                chatSwitcherOpen ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+              )}
+              aria-label="Switch chat"
+              aria-haspopup="menu"
+              aria-expanded={chatSwitcherOpen}
+              title="Chats"
+            >
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            </button>
+
+            {chatSwitcherOpen && (
+              <div
+                className="absolute left-full top-0 ml-2 w-64 max-h-96 overflow-y-auto rounded-md border border-border bg-popover shadow-md py-1 z-50"
+                role="menu"
+              >
+                {filteredChats.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No chats</div>
+                ) : (
+                  filteredChats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      onClick={() => {
+                        onSelectChat(chat.id)
+                        setChatSwitcherOpen(false)
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 px-3 py-2 text-sm text-left truncate cursor-pointer",
+                        chat.id === currentChatId ? "bg-accent text-accent-foreground" : "hover:bg-accent"
+                      )}
+                      role="menuitem"
+                    >
+                      <span className="truncate">{chat.displayName || "Untitled"}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Scheduled Jobs Button */}
         <button
