@@ -184,6 +184,8 @@ export function useChatComposer({
   }
 
   // Auto-scroll to bottom when chat changes or content grows during streaming.
+  // Includes queuedMessages so the pending-submission bubble (rendered before the
+  // user's message lands in chat.messages) doesn't leave the view un-scrolled.
   useLayoutEffect(() => {
     const chatChanged = chat?.id !== prevChatIdRef.current
     prevChatIdRef.current = chat?.id ?? null
@@ -191,7 +193,7 @@ export function useChatComposer({
     if (chatChanged || !userHasScrolledUp) {
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" })
     }
-  }, [chat?.id, chat?.messages, userHasScrolledUp])
+  }, [chat?.id, chat?.messages, chat?.queuedMessages, userHasScrolledUp])
 
   // Focus prompt when switching chats or when the welcome view transitions to
   // the messages view (which remounts the textarea in a different DOM location).
