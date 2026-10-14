@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
-import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen, MessageSquare } from "lucide-react"
+import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen, MessageCircle } from "lucide-react"
 import Image from "next/image"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
@@ -693,7 +693,7 @@ export function Sidebar({
               aria-expanded={chatSwitcherOpen}
               title="Chats"
             >
-              <MessageSquare className="h-[18px] w-[18px] text-muted-foreground" />
+              <MessageCircle className="h-[18px] w-[18px] text-muted-foreground" />
             </button>
 
             {chatSwitcherOpen && (
