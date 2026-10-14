@@ -629,7 +629,7 @@ export function Sidebar({
               className="hidden h-[18px] w-[18px] transition-opacity group-hover:opacity-0 dark:block"
               priority
             />
-            <PanelLeft className="absolute h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
+            <PanelLeft className="absolute h-[18px] w-[18px] opacity-0 transition-opacity group-hover:opacity-100" />
           </button>
         ) : (
           <>
@@ -647,7 +647,7 @@ export function Sidebar({
               style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
               aria-label="Collapse sidebar"
             >
-              <PanelLeft className="h-4 w-4" />
+              <PanelLeft className="h-[18px] w-[18px]" />
             </button>
           </>
         )}
@@ -663,7 +663,7 @@ export function Sidebar({
             collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
           )}
         >
-          <SquarePen className="h-4 w-4 text-muted-foreground" />
+          <SquarePen className="h-[18px] w-[18px] text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">New Chat</span>}
         </button>
 
@@ -675,7 +675,7 @@ export function Sidebar({
             collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
           )}
         >
-          <Search className="h-4 w-4 text-muted-foreground" />
+          <Search className="h-[18px] w-[18px] text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">Search Chats</span>}
         </button>
 
@@ -693,7 +693,7 @@ export function Sidebar({
               aria-expanded={chatSwitcherOpen}
               title="Chats"
             >
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <MessageSquare className="h-[18px] w-[18px] text-muted-foreground" />
             </button>
 
             {chatSwitcherOpen && (
@@ -743,7 +743,7 @@ export function Sidebar({
               : "hover:bg-accent/50"
           )}
         >
-          <Clock className={cn("h-4 w-4", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
+          <Clock className={cn("h-[18px] w-[18px]", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
           {!collapsed && <span className="text-sm text-foreground">Scheduled Agents</span>}
         </button>
       </div>
