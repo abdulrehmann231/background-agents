@@ -31,6 +31,7 @@ import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { useFileUpload } from "@/lib/hooks/useFileUpload"
 import { isModKeyPressed } from "@/lib/keyboard"
 import { useToastStore } from "@/lib/stores/toast-store"
+import { NAVIGATE_TO_CHAT_EVENT, type NavigateToChatEventDetail } from "@/lib/notify"
 import { hasActiveQueue } from "@/lib/chat-state"
 import { queuedSendNotice } from "@/lib/composer-queue"
 
@@ -194,6 +195,23 @@ export function useChatComposer({
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" })
     }
   }, [chat?.id, chat?.messages, chat?.queuedMessages, userHasScrolledUp])
+
+  // Clicking a "finished"/"push" notification for the chat that's already open
+  // should scroll down to reveal it, even if the user had scrolled up reading
+  // history before it arrived (the effect above won't touch scroll position in
+  // that case since chat.id hasn't changed). Navigating to a *different* chat
+  // is handled by the chat-changed branch above once the chat prop updates.
+  useEffect(() => {
+    const handleWindowEvent = (event: Event) => {
+      const chatId = (event as CustomEvent<NavigateToChatEventDetail>).detail?.chatId
+      if (chatId && chatId === chat?.id) {
+        setUserHasScrolledUp(false)
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      }
+    }
+    window.addEventListener(NAVIGATE_TO_CHAT_EVENT, handleWindowEvent)
+    return () => window.removeEventListener(NAVIGATE_TO_CHAT_EVENT, handleWindowEvent)
+  }, [chat?.id])
 
   // Focus prompt when switching chats or when the welcome view transitions to
   // the messages view (which remounts the textarea in a different DOM location).
