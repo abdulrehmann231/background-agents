@@ -22,6 +22,18 @@ vi.mock("@/lib/stores/chat-sync-store", async (original) => {
 })
 import { useMessageDispatch } from "./useMessageDispatch"
 
+// A promise plus its own resolve/reject, for tests that need to control when
+// a mocked async call settles (e.g. a delayed response racing a UI update).
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 function setup(overrides: Partial<Parameters<typeof useMessageDispatch>[0]> = {}) {
   const client = new QueryClient()
   const chat = { id: "chat-1", repo: "__new__", messages: [], status: "ready", updatedAt: 0, createdAt: 0, sandboxId: null, agent: "eliza", model: "eliza-classic-1.0", baseBranch: null, branch: null, sessionId: null, displayName: null } as unknown as Chat
@@ -61,8 +73,7 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 describe("direct-send failure ownership", () => {
   it("restores a failed materialization without dropping a newer draft or sending a message", async () => {
-    let release!: (value: null) => void
-    const materialization = new Promise<null>((resolve) => { release = resolve })
+    const { promise: materialization, resolve: release } = deferred<null>()
     const { dispatch } = setup({ currentChatId: "draft-1", materializeDraft: () => materialization })
     const sending = dispatch.sendMessage("Original first prompt")
     useChatSyncStore.getState().setDraftText("draft-1", "Newer draft")
@@ -73,8 +84,8 @@ describe("direct-send failure ownership", () => {
   })
 
   it("does not let a delayed successful response replace a newer active turn", async () => {
-    let release!: (value: unknown) => void
-    mocks.send.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    const { promise, resolve: release } = deferred<unknown>()
+    mocks.send.mockReturnValue(promise)
     const { dispatch, client, stream, chat } = setup()
     const sending = dispatch.sendMessage("First request", "eliza", "eliza-classic-1.0")
     const newer = { ...chat, updatedAt: 5, status: "running", activeAssistantMessageId: "assistant-new", backgroundSessionId: "background-new" } as Chat
@@ -87,8 +98,8 @@ describe("direct-send failure ownership", () => {
   })
 
   it("does not remove acknowledged server rows when a delayed POST error arrives", async () => {
-    let reject!: (error: Error) => void
-    mocks.send.mockReturnValue(new Promise((_, fail) => { reject = fail }))
+    const { promise, reject } = deferred<unknown>()
+    mocks.send.mockReturnValue(promise)
     mocks.fetchChat.mockRejectedValue(new Error("Still offline"))
     const { dispatch, client, chat } = setup()
     const sending = dispatch.sendMessage("Please say 4", "eliza", "eliza-classic-1.0")
@@ -103,8 +114,8 @@ describe("direct-send failure ownership", () => {
   })
 
   it("does not restart an acknowledged finished turn when its delayed POST success arrives", async () => {
-    let release!: (value: unknown) => void
-    mocks.send.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    const { promise, resolve: release } = deferred<unknown>()
+    mocks.send.mockReturnValue(promise)
     const { dispatch, client, stream, chat } = setup()
     const sending = dispatch.sendMessage("Please say 4", "eliza", "eliza-classic-1.0")
     const pending = client.getQueryData<Chat[]>(queryKeys.chats.list())![0]
@@ -158,8 +169,8 @@ describe("direct-send failure ownership", () => {
     { ok: false, isChatBusy: true, isDailyLimit: false, error: "Chat is busy" },
     { ok: false, isPullConflict: true, error: "PULL_CONFLICT", conflictedFiles: [], branch: null },
   ])("keeps a newer active owner when a delayed explicit rejection arrives: $error", async (rejection) => {
-    let release!: (value: unknown) => void
-    mocks.send.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    const { promise, resolve: release } = deferred<unknown>()
+    mocks.send.mockReturnValue(promise)
     const { dispatch, client, chat } = setup()
     const sending = dispatch.sendMessage("Rejected attempt", "eliza", "eliza-classic-1.0")
     const pending = client.getQueryData<Chat[]>(queryKeys.chats.list())![0]
@@ -174,9 +185,8 @@ describe("direct-send failure ownership", () => {
   })
 
   it.each(["success", "rejection", "network error"])("does not clear a newer browser POST's pending flag on old %s", async (outcome) => {
-    let release!: (value: unknown) => void
-    let reject!: (error: Error) => void
-    mocks.send.mockReturnValue(new Promise((resolve, fail) => { release = resolve; reject = fail }))
+    const { promise, resolve: release, reject } = deferred<unknown>()
+    mocks.send.mockReturnValue(promise)
     mocks.fetchChat.mockRejectedValue(new Error("Offline"))
     const { dispatch, client } = setup()
     const sending = dispatch.sendMessage("Older request", "eliza", "eliza-classic-1.0")
