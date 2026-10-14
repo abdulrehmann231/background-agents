@@ -77,6 +77,17 @@ import {
 } from "@background-agents/common"
 ```
 
+### Codex Model Defaults
+
+Codex defaults to `gpt-6.1-sol`. GPT-5.5 is retained only for API-key
+authentication, since it retired from ChatGPT sign-in. When a ChatGPT
+subscription is connected it takes precedence over an API key, matching the
+SDK's authentication route. Saved GPT-5.5 preferences and chat selections on
+that route resolve to the current default; API-only and custom-endpoint choices
+are preserved. This resolution does not send prompts or rewrite chat history.
+Credential checks do not prove account/plan access to a particular model; a
+provider rejection still needs the explicit model-selection recovery flow.
+
 ### GitHub API Helpers
 
 Type-safe GitHub API client utilities.

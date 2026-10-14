@@ -16,7 +16,35 @@ import {
   type CustomEndpoint,
   getAgentModels,
   resolveChatModel,
+  getDefaultModelForAgent,
+  hasCredentialsForModel,
 } from "@background-agents/common"
+
+describe("Codex model selection by authentication route", () => {
+  it.each([undefined, null, {}, { CODEX_CREDENTIALS: true }, { OPENAI_API_KEY: true }])(
+    "uses the current default with flags %j",
+    (flags) => expect(getDefaultModelForAgent("codex", flags)).toBe("gpt-6.1-sol")
+  )
+
+  it.each([{ CODEX_CREDENTIALS: true }, { CODEX_CREDENTIALS: true, OPENAI_API_KEY: true }])(
+    "does not offer an API-only model on the subscription route %j",
+    (flags) => {
+      const retired = getAgentModels("codex").find(m => m.value === "gpt-5.5")!
+      expect(hasCredentialsForModel(retired, flags, "codex")).toBe(false)
+      expect(resolveModelForAgent("codex", flags, retired.value)).toBe("gpt-6.1-sol")
+      expect(resolveChatModel("codex", retired.value, flags, retired.value)).toBe("gpt-6.1-sol")
+    }
+  )
+
+  it("preserves API-only saved choices and custom endpoints", () => {
+    const flags = { OPENAI_API_KEY: true }
+    expect(resolveChatModel("codex", "gpt-5.5", flags)).toBe("gpt-5.5")
+    expect(resolveModelForAgent("codex", flags, "gpt-5.5")).toBe("gpt-5.5")
+    const endpoint: CustomEndpoint = { id: "codex-qa", name: "Private", type: "codex", baseUrl: "https://example.com", model: "gpt-5.5", headers: "" }
+    expect(resolveChatModel("codex", "endpoint:codex-qa", { CODEX_CREDENTIALS: true }, null, [endpoint])).toBe("endpoint:codex-qa")
+    expect(resolveChatModel("codex", "gpt-6-astra", { CODEX_CREDENTIALS: true })).toBe("gpt-6-astra")
+  })
+})
 
 describe("resolveModelForAgent", () => {
   it("offers supported free models and resolves a retired saved selection", () => {

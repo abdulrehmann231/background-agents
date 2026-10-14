@@ -398,7 +398,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "openai" },
     { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "openai" },
     { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "openai" },
-    { value: "gpt-5.5", label: "GPT-5.5", requiresKey: "openai" },
+    { value: "gpt-5.5", label: "GPT-5.5 (API key only)", requiresKey: "openai" },
   ],
   "copilot": [
     { value: "claude-fable-5.1", label: "Claude Fable 5.1", requiresKey: "github" },
@@ -564,7 +564,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
 export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "sonnet",
   "opencode": "opencode-go/mimo-v2.5-pro",
-  "codex": "gpt-5.5",
+  "codex": "gpt-6.1-sol",
   "command-code": "xiaomi/mimo-v2.6-pro", // widest plan availability of the catalog tiers
   "copilot": "gpt-5-mini",
   "droid": "claude-sonnet-4-5-20250929", // BYOK default (user's ANTHROPIC_API_KEY)
@@ -842,6 +842,12 @@ export function hasCredentialsForModel(
     // ~/.codex/auth.json, which no other agent reads. Every other agent needs a
     // real platform API key. Mirrors the claude-code rule above.
     if (agent !== "codex") return !!flags?.OPENAI_API_KEY
+    // GPT-5.5 retired from ChatGPT sign-in, not the API. Subscription auth
+    // wins when both credentials exist (getEnvForModel / Codex setup), so an
+    // API key must not falsely unlock it on a subscription-backed run.
+    if (model.value === "gpt-5.5") {
+      return !!flags?.OPENAI_API_KEY && !flags?.CODEX_CREDENTIALS
+    }
     return !!(flags?.OPENAI_API_KEY || flags?.CODEX_CREDENTIALS)
   }
 
