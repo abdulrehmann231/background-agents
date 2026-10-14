@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parsePiLine, PI_TOOL_MAPPINGS } from "../../src/agents/index.js"
-import { createContext } from "./helpers.js"
+import { createContext, parseFixtureEvents } from "./helpers.js"
 
 describe("parsePiLine", () => {
   const mappings = PI_TOOL_MAPPINGS
@@ -412,19 +412,10 @@ describe("parsePiLine", () => {
   // ─── Fixture-driven (real captured Pi runs) ────────────────────────────────
 
   const parseFixture = (name: string) => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, `../fixtures/jsonl-reference/${name}.jsonl`),
-      "utf-8"
-    )
     const ctx = createContext()
-    return fixture
-      .split("\n")
-      .filter(Boolean)
-      .map((l: string) => parsePiLine(l, mappings, ctx))
-      .filter(Boolean)
-      .flat() as { type: string; error?: string }[]
+    return parseFixtureEvents(`${name}.jsonl`, (line) =>
+      parsePiLine(line, mappings, ctx)
+    ) as { type: string; error?: string }[]
   }
 
   it.each([

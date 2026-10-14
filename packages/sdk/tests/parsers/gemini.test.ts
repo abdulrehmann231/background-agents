@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parseGeminiLine, GEMINI_TOOL_MAPPINGS } from "../../src/agents/index.js"
-import { createContext } from "./helpers.js"
+import { createContext, parseFixtureEvents } from "./helpers.js"
 
 describe("parseGeminiLine", () => {
   const mappings = GEMINI_TOOL_MAPPINGS
@@ -236,19 +236,10 @@ describe("parseGeminiLine", () => {
   // ─── Fixture-driven ──────────────────────────────────────────────────────
 
   it("pro-model-on-free-key stream: surfaces a classified quota error (not a silent end)", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/gemini-error.jsonl"),
-      "utf-8"
-    )
     const ctx = createContext()
-    const events = fixture
-      .split("\n")
-      .filter(Boolean)
-      .map((l: string) => parseGeminiLine(l, mappings, ctx))
-      .filter(Boolean)
-      .flat() as { type: string; error?: string }[]
+    const events = parseFixtureEvents("gemini-error.jsonl", (line) =>
+      parseGeminiLine(line, mappings, ctx)
+    ) as { type: string; error?: string }[]
     const ends = events.filter((e) => e.type === "end")
     // Exactly one end, and it carries the failure detail + an actionable hint…
     expect(ends).toHaveLength(1)

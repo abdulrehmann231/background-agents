@@ -10,6 +10,7 @@ import {
   DROID_TOOL_MAPPINGS,
   droidAgent,
 } from "../../src/agents/index.js"
+import { parseFixtureEvents, readFixtureLines } from "./helpers.js"
 import type { Event } from "../../src/types/events.js"
 
 const mappings = DROID_TOOL_MAPPINGS
@@ -135,23 +136,13 @@ describe("parseDroidLine", () => {
   // ─── Fixture-driven (captured from real droid runs) ──────────────────────
 
   it("success stream: parses the reference fixture into tokens, tools and one end", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/droid.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
-    const tokens: string[] = []
-    const types: string[] = []
-    let sessionId: string | undefined
-    for (const line of lines) {
-      for (const e of flat(parseDroidLine(line, mappings))) {
-        types.push(e.type)
-        if (e.type === "token") tokens.push((e as { text: string }).text)
-        if (e.type === "session") sessionId = (e as { id: string }).id
-      }
-    }
+    const lines = readFixtureLines("droid.jsonl")
+    const events = parseFixtureEvents("droid.jsonl", (line) =>
+      parseDroidLine(line, mappings)
+    ) as { type: string; text?: string; id?: string }[]
+    const types = events.map((e) => e.type)
+    const tokens = events.filter((e) => e.type === "token").map((e) => e.text!)
+    const sessionId = events.find((e) => e.type === "session")?.id
     // Session id comes from the init line (a real BYOK run: model custom:byok-0).
     const initSessionId = JSON.parse(lines[0]).session_id
     expect(sessionId).toBe(initSessionId)
@@ -163,33 +154,18 @@ describe("parseDroidLine", () => {
   })
 
   it("gemini BYOK success stream: also parses into tokens, tools and one end", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/droid-gemini.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
-    const types: string[] = []
-    for (const line of lines) {
-      for (const e of flat(parseDroidLine(line, mappings))) types.push(e.type)
-    }
+    const types = parseFixtureEvents("droid-gemini.jsonl", (line) =>
+      parseDroidLine(line, mappings)
+    ).map((e) => e.type)
     expect(types).toContain("session")
     expect(types).toContain("tool_start")
     expect(types.filter((t) => t === "end")).toHaveLength(1)
   })
 
   it("fatal error stream: surfaces a classified auth error (not a silent crash)", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/droid-error.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
-    const events = lines
-      .map((l: string) => parseDroidLine(l, mappings))
-      .flatMap(flat) as { type: string; error?: string }[]
+    const events = parseFixtureEvents("droid-error.jsonl", (line) =>
+      parseDroidLine(line, mappings)
+    ) as { type: string; error?: string }[]
     const end = events.find((e) => e.type === "end")
     expect(end).toBeDefined()
     expect(end!.error).toContain("invalid api key")

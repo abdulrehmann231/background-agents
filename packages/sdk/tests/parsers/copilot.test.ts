@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parseCopilotLine, COPILOT_TOOL_MAPPINGS } from "../../src/agents/index.js"
-import { createContext } from "./helpers.js"
+import { createContext, parseFixtureEvents } from "./helpers.js"
 
 describe("parseCopilotLine", () => {
   const mappings = COPILOT_TOOL_MAPPINGS
@@ -460,22 +460,12 @@ describe("parseCopilotLine", () => {
   // Replay full JSONL streams and assert the correct token sequence.
 
   it("gpt-5-mini stream: emits response tokens from initial-turn deltas, suppresses continuation narration", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/copilot-gpt-5-mini.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
     const ctx = createContext()
-    const tokens: string[] = []
-    const events: string[] = []
-    for (const line of lines) {
-      const event = parseCopilotLine(line, mappings, ctx)
-      if (!event) continue
-      if (event.type === "token") tokens.push((event as { type: "token"; text: string }).text)
-      else events.push(event.type)
-    }
+    const parsed = parseFixtureEvents("copilot-gpt-5-mini.jsonl", (line) =>
+      parseCopilotLine(line, mappings, ctx)
+    ) as { type: string; text?: string }[]
+    const tokens = parsed.filter((e) => e.type === "token").map((e) => e.text!)
+    const events = parsed.filter((e) => e.type !== "token").map((e) => e.type)
     // Should have emitted the initial-turn deltas as tokens
     expect(tokens.length).toBeGreaterThan(0)
     expect(tokens.join("")).toContain("Dogs")
@@ -487,22 +477,12 @@ describe("parseCopilotLine", () => {
   })
 
   it("gpt-4.1 stream: emits response from assistant.message, suppresses continuation turn", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/copilot-gpt-4.1.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
     const ctx = createContext()
-    const tokens: string[] = []
-    const events: string[] = []
-    for (const line of lines) {
-      const event = parseCopilotLine(line, mappings, ctx)
-      if (!event) continue
-      if (event.type === "token") tokens.push((event as { type: "token"; text: string }).text)
-      else events.push(event.type)
-    }
+    const parsed = parseFixtureEvents("copilot-gpt-4.1.jsonl", (line) =>
+      parseCopilotLine(line, mappings, ctx)
+    ) as { type: string; text?: string }[]
+    const tokens = parsed.filter((e) => e.type === "token").map((e) => e.text!)
+    const events = parsed.filter((e) => e.type !== "token").map((e) => e.type)
     // Response content arrives via streaming deltas; assistant.message is
     // suppressed by the messageId dedup. The joined text must equal the full
     // response and must not be repeated (repetition bug).

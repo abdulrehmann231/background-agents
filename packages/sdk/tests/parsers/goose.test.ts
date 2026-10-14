@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parseGooseLine, GOOSE_TOOL_MAPPINGS } from "../../src/agents/index.js"
-import { createContext } from "./helpers.js"
+import { createContext, parseFixtureEvents } from "./helpers.js"
 
 describe("parseGooseLine", () => {
   const mappings = GOOSE_TOOL_MAPPINGS
@@ -364,19 +364,10 @@ describe("parseGooseLine", () => {
   })
 
   it("no-credit fixture: surfaces the billing failure (not a silent end)", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/goose-error.jsonl"),
-      "utf-8"
-    )
     const ctx = createContext()
-    const events = fixture
-      .split("\n")
-      .filter(Boolean)
-      .map((l: string) => parseGooseLine(l, mappings, ctx))
-      .filter(Boolean)
-      .flat() as { type: string; error?: string }[]
+    const events = parseFixtureEvents("goose-error.jsonl", (line) =>
+      parseGooseLine(line, mappings, ctx)
+    ) as { type: string; error?: string }[]
     const ends = events.filter((e) => e.type === "end")
     expect(ends).toHaveLength(1)
     expect(ends[0].error).toContain("credit balance is too low")
