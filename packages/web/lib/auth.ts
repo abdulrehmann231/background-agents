@@ -90,7 +90,8 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signIn({ user }) {
-      // Log user login activity
+      // Log user login activity. The client IP is attached automatically by
+      // logActivity (see lib/db/activity-log.ts).
       if (user?.id) {
         logActivityAsync(user.id, "login")
       }
