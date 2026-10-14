@@ -1,11 +1,9 @@
 import { NextAuthOptions } from "next-auth"
 import GitHubProvider from "next-auth/providers/github"
 import { PrismaAdapter } from "@auth/prisma-adapter"
-import { headers } from "next/headers"
 import { grantSignupCredit } from "@/lib/db/credits"
 import { prisma } from "@/lib/db/prisma"
 import { logActivityAsync } from "@/lib/db/activity-log"
-import { getClientIpFromHeaders } from "@/lib/request-ip"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
@@ -92,22 +90,10 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signIn({ user }) {
-      // Log user login activity, with the client IP when we can read it.
-      // headers() requires an active request scope — true for every real
-      // sign-in, since this event fires while NextAuth's route handler is
-      // still processing the callback request — but don't let a failure to
-      // read it block login.
+      // Log user login activity. The client IP is attached automatically by
+      // logActivity (see lib/db/activity-log.ts).
       if (user?.id) {
-        let ip: string | undefined
-        try {
-          ip = getClientIpFromHeaders(await headers())
-        } catch (error) {
-          console.error(
-            "[auth] Failed to read client IP:",
-            error instanceof Error ? error.message : error
-          )
-        }
-        logActivityAsync(user.id, "login", ip ? { ip } : undefined)
+        logActivityAsync(user.id, "login")
       }
     },
     async signOut({ token }) {
