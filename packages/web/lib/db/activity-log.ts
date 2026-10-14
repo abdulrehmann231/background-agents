@@ -26,6 +26,10 @@ export type ActivityAction =
   // correction. Stripe purchases are not logged here; they live in the
   // CreditTransaction ledger with their Stripe ids attached.
   | "credits_adjusted"
+  // An admin handed out bonus credits (repo star, PR, issue, …) to one, many
+  // or all users from the /admin Credits panel. One row per batch; the
+  // per-user rows are in CreditTransaction with metadata.batchId.
+  | "credits_bonus_granted"
   // An admin changed a provider's pricing multiplier from the /admin Pricing
   // panel (see lib/db/provider-pricing). The row itself already carries
   // `updatedBy`/`updatedAt`; this is what makes the change show up in the

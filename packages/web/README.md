@@ -15,6 +15,14 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 - **Skills**: install repo-scoped agent skills from the [skills.sh](https://skills.sh) marketplace
 - **Dark/Light Theme**: system-aware theming with manual override options
 
+### GitHub star reward
+
+The Out of Credits dialog checks whether the signed-in GitHub account has starred
+`jamesmurdza/background-agents`. Its star button stars the repository through the
+GitHub API and immediately grants $0.25 in credits. An account can receive this
+reward only once, including when an admin has already granted its star reward.
+Unstarring later does not remove credits or make the reward available again.
+
 ## Architecture
 
 - **Frontend**: Next.js 16 with React 19, Tailwind CSS 4, and Radix UI primitives
