@@ -1,8 +1,7 @@
 /**
  * Bonus credits: one-off grants an admin hands out for community contributions
  * (starring the repo, opening a PR, filing an issue) from the /admin Credits
- * panel. Not the daily top-up (app/api/cron/daily-credits) and not the signup
- * grant — those are automatic; this is a person deciding.
+ * panel. Stars can also be rewarded immediately through the user claim route.
  *
  * Shared by the admin UI and the API route, so it stays free of server-only
  * imports. Ledger rows are written as `type: "grant"` with
@@ -14,6 +13,7 @@ export const BONUS_CREDIT_SOURCE = "admin_bonus"
 
 /** The repo users are asked to star (Out of Credits dialog). */
 export const GITHUB_REPO_URL = "https://github.com/jamesmurdza/background-agents"
+export const GITHUB_STAR_CREDIT_USD = 0.25
 
 export const BONUS_CREDIT_REASONS = [
   { key: "github_star", label: "Starred the repo" },

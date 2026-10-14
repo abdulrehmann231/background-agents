@@ -1,13 +1,15 @@
 "use client"
 
-import { useCallback, useRef, useEffect } from "react"
+import { useCallback, useRef, useEffect, useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
+import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { Key, Star, Wallet } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { fmtBalance } from "@/lib/format"
-import { GITHUB_REPO_URL } from "@/lib/bonus-credits"
+import { GITHUB_STAR_CREDIT_USD } from "@/lib/bonus-credits"
+import { queryKeys } from "@/lib/query/keys"
 
 interface LimitReachedDialogProps {
   open: boolean
@@ -48,6 +50,49 @@ export function LimitReachedDialog({
   // draw it down and so stay available at zero.
   const canSwitchToOpenCode = true
   const primaryButtonRef = useRef<HTMLButtonElement>(null)
+  const queryClient = useQueryClient()
+  const [starRewarded, setStarRewarded] = useState(false)
+  const [starred, setStarred] = useState(false)
+  const [starPending, setStarPending] = useState(false)
+  const [starError, setStarError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch("/api/user/star-reward")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not check your GitHub star")
+        return response.json() as Promise<{ rewarded: boolean; starred: boolean }>
+      })
+      .then((status) => {
+        if (!cancelled) {
+          setStarRewarded(status.rewarded)
+          setStarred(status.starred)
+          setStarError(null)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setStarError(error instanceof Error ? error.message : "Could not check your GitHub star")
+      })
+    return () => { cancelled = true }
+  }, [open])
+
+  const handleStarReward = useCallback(async () => {
+    setStarPending(true)
+    setStarError(null)
+    try {
+      const response = await fetch("/api/user/star-reward", { method: "POST" })
+      const result = await response.json() as { rewarded?: boolean; error?: string }
+      if (!response.ok) throw new Error(result.error || "Could not claim star credits")
+      setStarRewarded(result.rewarded === true)
+      setStarred(true)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.settings.all })
+    } catch (error) {
+      setStarError(error instanceof Error ? error.message : "Could not claim star credits")
+    } finally {
+      setStarPending(false)
+    }
+  }, [queryClient])
 
   // Focus the primary button when modal opens
   useEffect(() => {
@@ -145,16 +190,13 @@ export function LimitReachedDialog({
                 </div>
               </button>
 
-              {/* Star the repo for free credits. Granted by an admin from the
-                  /admin Credits panel (see lib/bonus-credits), not instantly —
-                  so this opens GitHub in a new tab and leaves the dialog up. */}
-              <a
-                href={GITHUB_REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={handleStarReward}
+                disabled={starRewarded || starPending}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-lg border border-border hover:bg-accent/50 transition-colors p-3 text-left cursor-pointer",
-                  "focus:outline-none focus:ring-2 focus:ring-ring"
+                  "focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-default"
                 )}
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
@@ -162,16 +204,17 @@ export function LimitReachedDialog({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-foreground">
-                    Star our repo on GitHub
+                    {starRewarded ? "Star reward claimed" : starPending ? "Claiming star reward…" : starred ? "Claim star reward" : "Star our repo on GitHub"}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Get free credits for starring Backgrounder
+                    {starRewarded ? "Thanks for starring Backgrounder" : "Credits are added immediately"}
                   </div>
                 </div>
                 <div className="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded bg-amber-500/10">
-                  Free credits
+                  ${GITHUB_STAR_CREDIT_USD.toFixed(2)} credit
                 </div>
-              </a>
+              </button>
+              {starError && <p role="alert" className="text-xs text-destructive">{starError}</p>}
 
               {/* Option 2: OpenCode's free models, which never draw the balance. */}
               {canSwitchToOpenCode && (
