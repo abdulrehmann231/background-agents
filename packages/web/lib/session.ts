@@ -139,6 +139,12 @@ interface ToolDetailResult {
   filePath?: string
 }
 
+/** Max chars kept for a Bash command summary before falling back to a
+ *  server-side ellipsis. Generous on purpose — the chat UI's CSS truncation
+ *  already clips to whatever actually fits the row, so this only needs to
+ *  guard against pathological input, not pick the visible length. */
+const BASH_SUMMARY_MAX_CHARS = 400
+
 function getToolDetail(toolName: string, input: unknown): ToolDetailResult {
   if (!input || typeof input !== "object") return { summary: "" }
   const inp = input as Record<string, unknown>
@@ -147,8 +153,13 @@ function getToolDetail(toolName: string, input: unknown): ToolDetailResult {
 
   if (mappedName === "Bash" && inp.command) {
     const cmd = String(inp.command)
-    if (cmd.length > 80) {
-      return { summary: cmd.slice(0, 80) + "...", fullDetail: cmd }
+    // Keep enough of the command that the chat UI's single-line ellipsis
+    // (which truncates based on the row's actual rendered width) is what
+    // decides the visible cutoff, not an arbitrarily short server-side slice.
+    // Still bounded so pathological inputs (giant heredocs, inline scripts)
+    // don't bloat stored messages.
+    if (cmd.length > BASH_SUMMARY_MAX_CHARS) {
+      return { summary: cmd.slice(0, BASH_SUMMARY_MAX_CHARS) + "...", fullDetail: cmd }
     }
     return { summary: cmd }
   }
