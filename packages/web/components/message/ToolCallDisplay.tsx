@@ -102,11 +102,15 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
   const [expanded, setExpanded] = useState(false)
   const Icon = getToolIcon(tool.tool)
   const hasOutput = !!tool.output
+  // Server only sets fullSummary when the summary was truncated, so its
+  // presence alone means there's more command text to reveal.
+  const hasFullSummary = !!tool.fullSummary
+  const canExpand = hasOutput || hasFullSummary
   const hasFileLink = !!(tool.filePath && onOpenFile)
 
   const handleRowClick = () => {
     if (hasFileLink) return // filename has its own click handler
-    if (hasOutput) setExpanded(!expanded)
+    if (canExpand) setExpanded(!expanded)
   }
 
   // Summaries from the agent typically look like "Write: hello.html" — when
@@ -124,17 +128,17 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
       onClick={handleRowClick}
       className={cn(
         isMobile ? "py-1" : "py-0.5",
-        hasOutput && !hasFileLink && "cursor-pointer"
+        canExpand && !hasFileLink && "cursor-pointer"
       )}
     >
       {/* Tool call header */}
       <div className={cn(
         "flex items-center gap-1.5 text-muted-foreground transition-colors",
         isMobile ? "text-sm" : "text-[13px]",
-        hasOutput && !hasFileLink && "hover:text-foreground"
+        canExpand && !hasFileLink && "hover:text-foreground"
       )}>
         <Icon className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
-        <span className="truncate">
+        <span className="truncate" title={tool.fullSummary ?? tool.summary}>
           {hasFileLink ? (
             <>
               {prefix}
@@ -149,7 +153,7 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
             tool.summary
           )}
         </span>
-        {hasOutput && !hasFileLink && (
+        {canExpand && !hasFileLink && (
           expanded ? (
             <ChevronDown className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
           ) : (
@@ -158,14 +162,30 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
         )}
       </div>
 
-      {/* Tool output - block quote style with left border */}
-      {expanded && tool.output && (
-        <pre className={cn(
-          "font-mono whitespace-pre-wrap overflow-x-auto max-w-full mobile-scroll text-muted-foreground mt-1.5 pl-3 border-l-2 border-border",
-          isMobile ? "text-xs max-h-64 ml-5" : "text-[11px] max-h-48 ml-4"
+      {/* Full command + tool output - block quote style with left border */}
+      {expanded && (hasFullSummary || tool.output) && (
+        <div className={cn(
+          "mt-1.5 pl-3 border-l-2 border-border",
+          isMobile ? "ml-5" : "ml-4"
         )}>
-          {tool.output}
-        </pre>
+          {hasFullSummary && (
+            <pre className={cn(
+              "font-mono whitespace-pre-wrap overflow-x-auto max-w-full mobile-scroll text-muted-foreground",
+              isMobile ? "text-xs max-h-64" : "text-[11px] max-h-48"
+            )}>
+              {tool.fullSummary}
+            </pre>
+          )}
+          {tool.output && (
+            <pre className={cn(
+              "font-mono whitespace-pre-wrap overflow-x-auto max-w-full mobile-scroll text-muted-foreground",
+              hasFullSummary && "mt-2",
+              isMobile ? "text-xs max-h-64" : "text-[11px] max-h-48"
+            )}>
+              {tool.output}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   )
