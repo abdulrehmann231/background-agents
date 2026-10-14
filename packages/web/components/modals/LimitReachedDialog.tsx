@@ -55,10 +55,13 @@ export function LimitReachedDialog({
   const [starRewarded, setStarRewarded] = useState(false)
   const [starred, setStarred] = useState(false)
   const [starPending, setStarPending] = useState(false)
+  const [starStatusLoaded, setStarStatusLoaded] = useState(false)
   const [starError, setStarError] = useState<string | null>(null)
 
   useEffect(() => {
+    setStarStatusLoaded(false)
     if (!open) return
+    setStarError(null)
     let cancelled = false
     fetch("/api/user/star-reward")
       .then(async (response) => {
@@ -70,6 +73,7 @@ export function LimitReachedDialog({
           setStarRewarded(status.rewarded)
           setStarred(status.starred)
           setStarError(null)
+          setStarStatusLoaded(true)
         }
       })
       .catch((error: unknown) => {
@@ -79,6 +83,7 @@ export function LimitReachedDialog({
   }, [open])
 
   const handleStarReward = useCallback(async () => {
+    if (!starStatusLoaded || starRewarded || starPending) return
     setStarPending(true)
     setStarError(null)
     try {
@@ -93,7 +98,7 @@ export function LimitReachedDialog({
     } finally {
       setStarPending(false)
     }
-  }, [queryClient])
+  }, [queryClient, starStatusLoaded, starRewarded, starPending])
 
   // Focus the primary button when modal opens
   useEffect(() => {
@@ -193,7 +198,7 @@ export function LimitReachedDialog({
               <button
                 type="button"
                 onClick={handleStarReward}
-                disabled={starRewarded || starPending}
+                disabled={!starStatusLoaded || starRewarded || starPending}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-lg border border-border hover:bg-accent/50 transition-colors p-3 text-left cursor-pointer",
                   "focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-default"
@@ -204,7 +209,7 @@ export function LimitReachedDialog({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-foreground">
-                    {starRewarded ? "Star reward claimed" : starPending ? "Claiming star reward…" : starred ? "Claim star reward" : "Star our repo on GitHub"}
+                    {!starStatusLoaded && !starError ? "Checking star reward…" : starRewarded ? "Star reward claimed" : starPending ? "Claiming star reward…" : starred ? "Claim star reward" : "Star our repo on GitHub"}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {starRewarded ? "Thanks for starring Backgrounder" : "Credits are added immediately"}

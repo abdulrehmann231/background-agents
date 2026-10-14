@@ -30,6 +30,11 @@ The dialog checks whether the signed-in GitHub account has starred
 GitHub API and immediately grants $1.00 in credits. An account can receive this
 reward only once, including when an admin has already granted its star reward.
 Unstarring later does not remove credits or make the reward available again.
+The star reward button stays disabled until the status check succeeds, while
+the claim is pending, and after the reward has been claimed. A failed status
+check leaves it disabled; reopening the dialog retries the check. The POST
+endpoint checks the ledger before granting and uses the same unique reward
+key as admin grants to prevent repeat or concurrent claims.
 
 ## Architecture
 
