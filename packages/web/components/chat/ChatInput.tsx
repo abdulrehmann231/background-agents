@@ -27,6 +27,7 @@ import { MobileSelect } from "../ui/MobileBottomSheet"
 
 interface ChatInputProps {
   chat: Chat
+  modelPickerRequest?: { chatId: string; sequence: number }
   input: string
   onInputChange: (value: string) => void
   onSend: () => void
@@ -178,6 +179,7 @@ export function ChatActionSlot({
 }
 
 export function ChatInput({
+  modelPickerRequest,
   chat,
   input,
   onInputChange,
@@ -726,6 +728,7 @@ export function ChatInput({
             {/* Agent and Model selectors */}
             <AgentModelSelector
               chat={chat}
+              modelPickerRequest={modelPickerRequest}
               credentialFlags={credentialFlags}
               currentAgent={currentAgent}
               currentModel={currentModel}

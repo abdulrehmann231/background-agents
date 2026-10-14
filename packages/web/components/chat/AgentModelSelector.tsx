@@ -33,6 +33,7 @@ import {
 
 interface AgentModelSelectorProps {
   chat: Chat | null
+  modelPickerRequest?: { chatId: string; sequence: number }
   credentialFlags: CredentialFlags
   currentAgent: Agent
   currentModel: string
@@ -130,6 +131,7 @@ export function AgentModelSelector({
   isMobile,
   onDropdownOpen,
   closeDropdowns,
+  modelPickerRequest,
 }: AgentModelSelectorProps) {
   const modals = useModals()
 
@@ -157,6 +159,18 @@ export function AgentModelSelector({
   const [showAgentSheet, setShowAgentSheet] = useState(false)
   const [showModelSheet, setShowModelSheet] = useState(false)
   const [search, setSearch] = useState("")
+  const handledRequest = useRef(modelPickerRequest)
+  useEffect(() => {
+    if (!modelPickerRequest || handledRequest.current === modelPickerRequest) return
+    handledRequest.current = modelPickerRequest
+    if (modelPickerRequest.chatId !== chat?.id) return
+    setSearch("")
+    setShowAgentDropdown(false)
+    setShowAgentSheet(false)
+    if (isMobile) setShowModelSheet(true)
+    else setShowModelDropdown(true)
+    onDropdownOpen?.()
+  }, [modelPickerRequest, chat?.id, isMobile, onDropdownOpen])
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const agentDropdownMaxHeight = useUpwardMenuMaxHeight(showAgentDropdown, agentDropdownRef)
 

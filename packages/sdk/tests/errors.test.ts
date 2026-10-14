@@ -56,6 +56,17 @@ describe("extractErrorMessage", () => {
 })
 
 describe("classifyAgentError", () => {
+  it.each(["400 invalid_request_error: parameter temperature is not supported", "This model's temperature parameter is not supported"])("does not label unsupported parameters as model access failures: %s", raw => {
+    expect(classifyAgentError(raw).category).toBe("unknown")
+  })
+  it.each([
+    "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.",
+    '400 invalid_request_error: {"error":{"message":"The model is not supported with this account"}}',
+    "model gpt-6.1-sol is not supported",
+  ])("recognizes model access rejection: %s", raw => {
+    expect(classifyAgentError(raw)).toMatchObject({ category: "model_unavailable", raw })
+    expect(classifyAgentError(raw).message).toContain("select a different model")
+  })
   it("tags balance errors and appends a hint", () => {
     const r = classifyAgentError("insufficient balance")
     expect(r.category).toBe("balance")

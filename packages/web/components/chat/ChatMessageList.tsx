@@ -6,7 +6,7 @@ import type { GitContextValue } from "@/lib/contexts/GitContext"
 import { ErrorBanner } from "./ErrorBanner"
 import { MessageBubble } from "../MessageBubble"
 import { getPendingSubmission } from "@/lib/chat-state"
-import { latestFailedAssistant, persistedProviderFailure } from "@/lib/turn-error-presentation"
+import { latestFailedAssistant, persistedProviderFailure, unsupportedModelFailure } from "@/lib/turn-error-presentation"
 import { dismissDirectSend } from "@/lib/direct-send-recovery"
 import { useToastStore } from "@/lib/stores/toast-store"
 import {
@@ -28,6 +28,7 @@ interface ChatMessageListProps {
   onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => Promise<void> | void
+  onChooseModel?: () => void
   currentAgent: Agent
   currentModel: string
   planModeEnabled: boolean
@@ -55,6 +56,7 @@ export function ChatMessageList({
   onSendMessage,
   onRemoveQueuedMessage,
   onResumeQueue,
+  onChooseModel,
   currentAgent,
   currentModel,
   planModeEnabled,
@@ -222,7 +224,8 @@ export function ChatMessageList({
           )}
           {chat.status === "error" && directRecovery.length === 0 && (() => {
             const providerFailure = persistedProviderFailure(chat)
-            const failureMessage = providerFailure || chat.errorMessage
+            const failureMessage = providerFailure || unsupportedModelFailure(chat.errorMessage) || chat.errorMessage
+            const unsupportedModel = !!unsupportedModelFailure(failureMessage)
             const lastUserMessage = [...chat.messages].reverse().find((m) => m.role === "user")
             const resend = lastUserMessage
               ? () => onSendMessage(
@@ -261,9 +264,9 @@ export function ChatMessageList({
                   ? "The last run stopped before it finished. Queued prompts have not been sent."
                   : "The last run stopped before it finished. Reload to check its saved output.")}
                 isMobile={isMobile}
-                onRetry={canContinue ? onResumeQueue : useReload ? () => onReload!(chat.id) : failureMessage ? resend : undefined}
-                actionLabel={canContinue ? "Continue queued prompts" : useReload ? "Reload" : "Retry"}
-                actionPendingLabel={canContinue ? "Continuing…" : useReload ? "Reloading…" : "Retrying…"}
+                onRetry={unsupportedModel ? onChooseModel : canContinue ? onResumeQueue : useReload ? () => onReload!(chat.id) : failureMessage ? resend : undefined}
+                actionLabel={unsupportedModel ? "Choose model" : canContinue ? "Continue queued prompts" : useReload ? "Reload" : "Retry"}
+                actionPendingLabel={unsupportedModel ? "Choose model" : canContinue ? "Continuing…" : useReload ? "Reloading…" : "Retrying…"}
               />
             )
           })()}

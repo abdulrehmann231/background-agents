@@ -31,6 +31,7 @@ function renderWarning(uncommittedFilesCount: number, isNewRepo = false, overrid
     onSendMessage: () => {},
     onReload: () => {},
     onResumeQueue: () => {},
+    onChooseModel: () => {},
     currentAgent: "opencode" as Agent,
     currentModel: "test",
     planModeEnabled: false,
@@ -62,6 +63,26 @@ describe("uncommitted file warning", () => {
 })
 
 describe("chat execution presentation", () => {
+  it.each([false, true])("offers model selection without replaying an unsupported turn (persisted=%s)", persisted => {
+    const reason = "400 invalid_request_error: The model is not supported. private-provider-detail"
+    const html = renderWarning(0, false, { status: "error", errorMessage: persisted ? undefined : reason,
+      messages: [
+        { id: "user", role: "user", content: "Keep my prompt", timestamp: 1 },
+        { id: "reply", role: "assistant", content: "", timestamp: 2, ...(persisted ? { metadata: { turnFinalization: {
+          state: "error", executionStopped: true, assistantMessageId: "reply", backgroundSessionId: "run", reason,
+        } } } : {}) },
+      ],
+      queuedMessages: [{ id: "next", content: "Wait for me" }],
+      recoverableAssistantMessageId: "reply",
+    })
+    expect(html).toContain("This model is not supported in this session.")
+    expect(html).toContain(">Choose model</button>")
+    expect(html).toContain("Keep my prompt")
+    expect(html).toContain("Wait for me")
+    expect(html).not.toContain("private-provider-detail")
+    expect(html).not.toContain(">Retry</button>")
+    expect(html).not.toContain(">Continue queued prompts</button>")
+  })
   it("does not claim a prompt was unsent when the acknowledgement is missing", () => {
     const html = renderWarning(0, false, { queuedMessages: [{ id: "ambiguous", content: "Keep this prompt",
       pendingSync: true, syncError: "HTTP 503", syncFailed: false }] })
