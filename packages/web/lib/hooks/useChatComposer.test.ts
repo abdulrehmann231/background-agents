@@ -1,7 +1,7 @@
 import { createElement, type KeyboardEvent } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { Chat, PendingFile } from "@/lib/types"
+import type { Chat, CredentialFlags, PendingFile } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
 const mocks = vi.hoisted(() => ({
@@ -12,14 +12,17 @@ const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
   resume: vi.fn(),
   toast: vi.fn(),
+  showCreditDialog: vi.fn(),
+  branch: vi.fn(),
+  creditBalanceUsd: null as number | null,
 }))
 
 vi.mock("@/lib/contexts", () => ({
   useModals: () => ({ setSignInModalOpen: vi.fn() }),
-  useGit: () => ({}),
+  useGit: () => ({ canBranch: true, handleBranchWithMessage: mocks.branch }),
 }))
 vi.mock("@/lib/query/hooks/useSettingsQuery", () => ({
-  useSettingsQuery: () => ({ data: { customEndpoints: [] } }),
+  useSettingsQuery: () => ({ data: { customEndpoints: [], creditBalanceUsd: mocks.creditBalanceUsd } }),
 }))
 vi.mock("@/lib/hooks/useFileUpload", () => ({
   useFileUpload: () => ({
@@ -42,7 +45,7 @@ type Composer = ReturnType<typeof useChatComposer>
 
 // A real React render evaluates the hook; controlled state snapshots isolate
 // the send contract without pretending to test network or browser transitions.
-function renderComposer(overrides: Partial<Chat> = {}, draft = "Keep this draft") {
+function renderComposer(overrides: Partial<Chat> = {}, draft = "Keep this draft", credentialFlags: CredentialFlags = {}) {
   const chat = {
     id: "chat-1", repo: "__new__", baseBranch: "main", branch: null,
     sandboxId: "sandbox-1", sessionId: null, displayName: "Test",
@@ -53,10 +56,11 @@ function renderComposer(overrides: Partial<Chat> = {}, draft = "Keep this draft"
   let result: Composer | undefined
   function Probe() {
     result = useChatComposer({
-      chat, settings: DEFAULT_SETTINGS, credentialFlags: {}, draft,
+      chat, settings: DEFAULT_SETTINGS, credentialFlags, draft,
       onDraftChange: mocks.draftChanged,
       isMobile: false, isSending: false, isAuthenticated: true,
       onSendMessage: mocks.send, onEnqueueMessage: mocks.enqueue, onResumeQueue: mocks.resume,
+      showCreditDialog: mocks.showCreditDialog,
     })
     return null
   }
@@ -67,6 +71,42 @@ function renderComposer(overrides: Partial<Chat> = {}, draft = "Keep this draft"
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.pendingFiles = []
+  mocks.creditBalanceUsd = null
+})
+
+describe("composer credit gate", () => {
+  it.each(["send", "enter", "branch"])("opens credit options on %s without losing the draft or attachments", (action) => {
+    mocks.creditBalanceUsd = -0.01
+    const file = new File(["file content"], "draft.txt", { type: "text/plain" })
+    mocks.pendingFiles = [{ id: "file-1", file, name: file.name, size: file.size }]
+    const composer = renderComposer({ agent: "claude-code", model: "sonnet" }, "Keep this draft", {
+      CLAUDE_SHARED_POOL_AVAILABLE: true, SHARED_BALANCE_EXHAUSTED: true,
+    })
+    if (action === "enter") {
+      composer.handleKeyDown({ key: "Enter", shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, preventDefault: vi.fn() } as unknown as KeyboardEvent<HTMLTextAreaElement>)
+    } else if (action === "branch") {
+      composer.handleBranchSend()
+    } else {
+      composer.handleSend()
+    }
+    expect(mocks.showCreditDialog).toHaveBeenCalledWith("claude", -0.01)
+    expect(mocks.send).not.toHaveBeenCalled()
+    expect(mocks.enqueue).not.toHaveBeenCalled()
+    expect(mocks.branch).not.toHaveBeenCalled()
+    expect(mocks.draftChanged).not.toHaveBeenCalled()
+    expect(mocks.clearFiles).not.toHaveBeenCalled()
+  })
+
+  it.each(["free", "own key"])("allows %s usage with an empty balance", (route) => {
+    mocks.creditBalanceUsd = 0
+    const composer = renderComposer(route === "free" ? {} : { agent: "claude-code", model: "sonnet" }, "Keep this draft", {
+      CLAUDE_SHARED_POOL_AVAILABLE: true, SHARED_BALANCE_EXHAUSTED: true,
+      ...(route === "own key" ? { ANTHROPIC_API_KEY: true } : {}),
+    })
+    composer.handleSend()
+    expect(mocks.showCreditDialog).not.toHaveBeenCalled()
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe("composer submission while Stop is being confirmed", () => {

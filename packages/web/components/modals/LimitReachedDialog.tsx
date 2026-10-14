@@ -45,6 +45,7 @@ export function LimitReachedDialog({
   isMobile = false,
 }: LimitReachedDialogProps) {
   const providerLabel = PROVIDER_LABEL[provider ?? ""] ?? "shared model"
+  const hasCredits = typeof creditBalance === "number" && creditBalance > 0
   // Always offer it, even when OpenCode was the pool that ran the user out: the
   // balance is pooled, and this routes to OpenCode's *free* models, which never
   // draw it down and so stay available at zero.
@@ -144,10 +145,12 @@ export function LimitReachedDialog({
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-xl shadow-xl"
           )}
         >
-          <ModalHeader title="Out of Credits" />
+          <ModalHeader title={hasCredits ? "Add Credits" : "Out of Credits"} />
           <div className="px-4 pt-3 pb-4 space-y-4">
             <div className="text-sm text-muted-foreground">
-              {typeof creditBalance === "number" && creditBalance < 0 ? (
+              {hasCredits ? (
+                <>You have {fmtBalance(creditBalance)} in credits remaining.</>
+              ) : typeof creditBalance === "number" && creditBalance < 0 ? (
                 <>
                   Your last turn ran{" "}
                   <span className="font-medium text-foreground">
@@ -163,10 +166,7 @@ export function LimitReachedDialog({
             </div>
 
             <div className="space-y-2">
-              {/* Primary option: top up. It leads and takes the focus because it
-                  is the only one that clears the block itself — the other two
-                  route around it, onto a different model or a different
-                  credential, and leave the balance where it is. */}
+              {/* Primary option: purchase credits. Rewards can also refill the balance. */}
               <button
                 ref={primaryButtonRef}
                 onClick={handleBuyCredits}

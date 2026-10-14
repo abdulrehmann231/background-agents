@@ -19,7 +19,7 @@ interface ChatPanelProps {
   chat: Chat | null
   settings: Settings
   credentialFlags: CredentialFlags
-  showClaudeLimitDialog: () => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
   onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
   /** Refresh the chat history after the SSE stream died (status === "disconnected"). */
   onReload?: (chatId: string) => Promise<void> | void
@@ -51,7 +51,7 @@ interface ChatPanelProps {
   isAuthenticated?: boolean
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
   const composer = useChatComposer({
     chat,
     settings,
@@ -61,6 +61,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
     isMobile,
     isSending,
     isAuthenticated,
+    showCreditDialog,
     onSendMessage,
     onEnqueueMessage,
     onResumeQueue,
@@ -192,7 +193,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       credentialFlags={credentialFlags}
       currentAgent={currentAgent}
       currentModel={currentModel}
-      showClaudeLimitDialog={showClaudeLimitDialog}
+      showCreditDialog={showCreditDialog}
       // Plan mode
       planModeEnabled={planModeEnabled}
       planModeSupported={agentSupportsPlanMode[currentAgent]}
