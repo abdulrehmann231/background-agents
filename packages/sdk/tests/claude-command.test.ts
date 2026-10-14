@@ -14,13 +14,45 @@ describe("claudeAgent.buildCommand", () => {
     expect(cmd).toBe("claude")
   })
 
-  it("always includes -p, --output-format, stream-json, --verbose, and --dangerously-skip-permissions", () => {
+  it("always includes -p, --output-format, stream-json, and --verbose", () => {
     const { args } = claudeAgent.buildCommand({ prompt: "hello" })
     expect(args).toContain("-p")
     expect(args).toContain("--output-format")
     expect(args).toContain("stream-json")
     expect(args).toContain("--verbose")
-    expect(args).toContain("--dangerously-skip-permissions")
+  })
+
+  // planMode and --dangerously-skip-permissions are mutually exclusive: plan mode
+  // must enforce read-only restrictions via the CLI's own permission system, so it
+  // must never also receive the flag that bypasses all permission checks.
+  describe("planMode", () => {
+    it("includes --dangerously-skip-permissions when planMode is not set", () => {
+      const { args } = claudeAgent.buildCommand({ prompt: "hello" })
+      expect(args).toContain("--dangerously-skip-permissions")
+      expect(args).not.toContain("--permission-mode")
+    })
+
+    it("includes --dangerously-skip-permissions when planMode is false", () => {
+      const { args } = claudeAgent.buildCommand({ prompt: "hello", planMode: false })
+      expect(args).toContain("--dangerously-skip-permissions")
+      expect(args).not.toContain("--permission-mode")
+    })
+
+    it("uses --permission-mode plan instead of --dangerously-skip-permissions when planMode is true", () => {
+      const { args } = claudeAgent.buildCommand({ prompt: "hello", planMode: true })
+      expect(args).not.toContain("--dangerously-skip-permissions")
+      const pmIdx = args.indexOf("--permission-mode")
+      expect(pmIdx).toBeGreaterThanOrEqual(0)
+      expect(args[pmIdx + 1]).toBe("plan")
+    })
+
+    it("places --permission-mode plan before the -- sentinel", () => {
+      const { args } = claudeAgent.buildCommand({ prompt: "hello", planMode: true })
+      const sepIdx = args.indexOf("--")
+      const pmIdx = args.indexOf("--permission-mode")
+      expect(pmIdx).toBeGreaterThanOrEqual(0)
+      expect(pmIdx).toBeLessThan(sepIdx)
+    })
   })
 
   it("places -- immediately before the prompt", () => {
