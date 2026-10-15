@@ -58,41 +58,6 @@ await sandbox.delete()
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | ✅ | Provider-specific (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) |
 | Eliza | ✅ | None (deterministic test agent) |
 
-### Shared Claude OAuth recovery
-
-Shared subscription hosts can opt into native OAuth recovery with `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK installs a small Node runner that fetches an access token at startup and answers Claude's `oauth_token_refresh` control request after a rejected API call. Claude then retries that request in place; the runner does not restart Claude, replay the prompt, or relay model traffic. Supply no shared refresh token or `CLAUDE_CODE_CREDENTIALS` blob for this mode. Access tokens live in runner/Claude memory; the endpoint capability is kept out of the child CLI's environment.
-
-This optional mode requires Node 22 and pins Claude Code to **2.1.283**. It relies on the internal stream-json host callback and the `local-agent` entrypoint, verified with that exact version; it is not the public `apiKeyHelper` setting. Shared OAuth setup checks the installed CLI and installs the pinned package with passwordless `sudo -n npm install -g` when it differs, including in older sandboxes. Setup fails before starting the turn if the CLI update or runner installation fails, or if another version still shadows the pinned CLI on `PATH`. Custom sandbox adapters must provide command execution for this mode. Runs without these two environment variables retain the normal CLI path. The SDK's fallback Claude installation is also pinned. Verify callback compatibility before changing the SDK and sandbox image pins by running the synthetic integration test (no subscription token, model charge, or Daytona key needed):
-
-```bash
-CLAUDE_CODE_TEST_EXECUTABLE=/path/to/claude npm test -- tests/integration/claude-oauth-retry.integration.test.ts
-```
-
-The credential endpoint must authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host. Reads time out after 15 seconds, and Claude rejects a callback that returns the same failed access token. API requests and streaming remain direct to Anthropic; a broken accepted response is not replayed by the runner.
-
-### Codex runtime preparation
-
-The Daytona adapter uses exactly the reviewed Codex CLI version (currently
-0.159.3), not any newer release. New images preinstall it in a versioned directory
-under `/home/daytona/.local/share/background-agents/codex`. Older sandboxes prepare
-that same directory before a new Codex execution. An already prepared runtime
-needs no registry access. Concurrent preparations share an installation lock.
-
-Runtime preparation does not replace the global CLI, older version directories,
-saved login credentials, or active processes. Each new execution selects its
-version through PATH, including when the global CLI is newer than the pin.
-
-If preparation fails, the new agent is not started. Reading or stopping an
-existing session does not require an installation or registry connection;
-explicitly starting another turn on a reattached session does. Keep the image's
-Codex package pin aligned with `CODEX_CLI_VERSION` in the SDK when updating it
-through a reviewed PR. To roll back a release, revert both pins and deploy the
-SDK/app; rebuild the image for future sandboxes. Subsequent executions in existing
-sandboxes select the reverted version (installing it if absent). Active jobs
-finish on their original executable. Do not delete a version directory while a
-job may still use it. Snapshot rebuild alone does not update existing sandboxes.
-CLI compatibility does not grant access to models unavailable to the account.
-
 ### CLI reference commands
 
 | Provider | CLI Command |
@@ -252,28 +217,10 @@ Returns `true` while the agent is running.
 
 ### `session.cancel()`
 
-Prevents a prepared attempt from starting later and stops an already-running
-process. It resolves only after cancellation is confirmed. A transport or
-metadata error is not proof that the agent stopped; retain the session id and
-retry inspection/cancellation rather than starting a replacement concurrently.
-
-New sessions save a known launch identity before their first command starts.
-If startup fails or its response is lost, reattach using the same session id.
-An `idle` snapshot with `launchPreparedAt` means a known attempt was prepared
-but has no observable process yet. Calling `cancel()` safely fences that
-attempt, including after a server restart. Legacy sessions without this
-metadata cannot be declared stopped merely because their process is missing.
-
-A cold session's `start()` retries its known prepared attempt; it does not
-silently create another execution. A warm session can start its next turn once
-its acknowledged prior turn has actually exited. After cancellation, or when
-starting new work from a cold caller, create a new session (pass the provider's
-resumable `sessionId` when appropriate). `TurnHandle.executionId` identifies the
-durable job attempt. Custom sandbox adapters must implement the updated
-`SandboxJobs.abort()` / `isAborted()` contract.
-
-`running` describes process liveness, not only the presence of an agent `end`
-event. The final event can arrive before process cleanup is finished.
+Stops a running (or not-yet-started) task. It resolves only after cancellation
+is confirmed — a transport or metadata error isn't proof the agent stopped, so
+retain the session id and retry inspection/cancellation rather than starting a
+replacement concurrently.
 
 ### `getSession(sessionId, options)`
 
@@ -381,6 +328,12 @@ Then retrieve your credentials:
 | Windows | `type %USERPROFILE%\.claude\.credentials.json` |
 
 Pass the output as `CLAUDE_CODE_CREDENTIALS`. The SDK automatically writes it to `~/.claude/.credentials.json` in the sandbox.
+
+### Shared hosts: token recovery instead of a static credential
+
+Instead of `CLAUDE_CODE_CREDENTIALS`, a host running sessions for many users can set `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK fetches an access token at startup and refreshes it automatically if a request is rejected, so there's no refresh token or `CLAUDE_CODE_CREDENTIALS` blob to manage per session. This requires Node 22. Access tokens stay in memory; the endpoint capability is kept out of the child CLI's environment.
+
+The credential endpoint should authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host.
 
 ---
 
