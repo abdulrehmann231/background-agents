@@ -219,7 +219,7 @@ async function meterTurnUsage(
         // history against today's budget and lock the user out. Detect that
         // case and backdate the baseline rows: they still advance the diff
         // cursor (getSessionCumulatives has no date filter) but fall outside
-        // every budget window (sumSharedUsage filters createdAt >= start of
+        // every budget window (sumSharedSpend filters createdAt >= start of
         // day). Only turns after the baseline charge.
         //
         // Age is the decisive test and is checked first, so a chat created
