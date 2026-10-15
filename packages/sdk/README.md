@@ -58,19 +58,6 @@ await sandbox.delete()
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | ✅ | Provider-specific (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) |
 | Eliza | ✅ | None (deterministic test agent) |
 
-### Shared Claude OAuth recovery
-
-Shared subscription hosts can opt into native OAuth recovery with `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK fetches an access token at startup and refreshes it automatically if a request is rejected — you don't need to supply a shared refresh token or `CLAUDE_CODE_CREDENTIALS` for this mode. This requires Node 22. Access tokens stay in memory; the endpoint capability is kept out of the child CLI's environment.
-
-The credential endpoint should authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host.
-
-### Codex runtime preparation
-
-The SDK manages the Codex CLI version inside the sandbox automatically, pinning
-it to a tested release rather than whatever is newest. You don't need to install
-or configure Codex yourself — this happens transparently the first time a Codex
-session runs in a sandbox.
-
 ### CLI reference commands
 
 | Provider | CLI Command |
@@ -230,18 +217,10 @@ Returns `true` while the agent is running.
 
 ### `session.cancel()`
 
-Prevents a prepared attempt from starting later and stops an already-running
-process. It resolves only after cancellation is confirmed. A transport or
-metadata error is not proof that the agent stopped; retain the session id and
-retry inspection/cancellation rather than starting a replacement concurrently.
-
-It's safe to call `cancel()` even if `start()` hasn't produced an observable
-process yet — the session tracks its launch attempt and fences it rather than
-racing a reattach. After cancellation, or to start new work, create a new
-session (pass the provider's resumable `sessionId` when appropriate).
-
-`running` describes process liveness, not only the presence of an agent `end`
-event. The final event can arrive before process cleanup is finished.
+Stops a running (or not-yet-started) task. It resolves only after cancellation
+is confirmed — a transport or metadata error isn't proof the agent stopped, so
+retain the session id and retry inspection/cancellation rather than starting a
+replacement concurrently.
 
 ### `getSession(sessionId, options)`
 
@@ -349,6 +328,12 @@ Then retrieve your credentials:
 | Windows | `type %USERPROFILE%\.claude\.credentials.json` |
 
 Pass the output as `CLAUDE_CODE_CREDENTIALS`. The SDK automatically writes it to `~/.claude/.credentials.json` in the sandbox.
+
+### Shared hosts: token recovery instead of a static credential
+
+Instead of `CLAUDE_CODE_CREDENTIALS`, a host running sessions for many users can set `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK fetches an access token at startup and refreshes it automatically if a request is rejected, so there's no refresh token or `CLAUDE_CODE_CREDENTIALS` blob to manage per session. This requires Node 22. Access tokens stay in memory; the endpoint capability is kept out of the child CLI's environment.
+
+The credential endpoint should authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host.
 
 ---
 
