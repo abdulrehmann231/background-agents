@@ -9,7 +9,7 @@ import { useCreditWarning } from "@/lib/hooks/useCreditWarning"
 import { useUpwardMenuMaxHeight } from "@/lib/hooks/useUpwardMenuMaxHeight"
 import { isModKeyPressed } from "@/lib/keyboard"
 import type { Chat, Agent, CredentialFlags, PendingFile } from "@/lib/types"
-import { NEW_REPOSITORY } from "@/lib/types"
+import { NEW_REPOSITORY, sharedPoolProviderForModel } from "@/lib/types"
 import { basename } from "@/lib/format"
 import { queuedSendNotice } from "@/lib/composer-queue"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
@@ -80,7 +80,7 @@ interface ChatInputProps {
   credentialFlags: CredentialFlags
   currentAgent: Agent
   currentModel: string
-  showClaudeLimitDialog: () => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
   // Plan mode
   planModeEnabled: boolean
   planModeSupported: boolean
@@ -230,7 +230,7 @@ export function ChatInput({
   credentialFlags,
   currentAgent,
   currentModel,
-  showClaudeLimitDialog,
+  showCreditDialog,
   // Plan mode
   planModeEnabled,
   planModeSupported,
@@ -371,7 +371,7 @@ export function ChatInput({
           <CreditWarningBanner
             tier={creditWarning.tier}
             balanceUsd={creditWarning.balanceUsd}
-            onBuyCredits={() => modals.openSettingsSection("credits")}
+            onAddCredits={() => showCreditDialog(sharedPoolProviderForModel(currentAgent, currentModel, credentialFlags) ?? undefined, creditWarning.balanceUsd)}
             onDismiss={creditWarning.dismiss}
             isMobile={isMobile}
           />
@@ -733,7 +733,7 @@ export function ChatInput({
               currentAgent={currentAgent}
               currentModel={currentModel}
               onUpdateChat={onUpdateChat}
-              showClaudeLimitDialog={showClaudeLimitDialog}
+              showCreditDialog={showCreditDialog}
               isMobile={isMobile}
               onDropdownOpen={() => setShowModeDropdown(false)}
               closeDropdowns={showModeDropdown}

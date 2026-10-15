@@ -19,6 +19,7 @@ import {
   CreditCard,
   DollarSign,
   ChevronDown,
+  Gift,
 } from "lucide-react"
 import { ActivityFeed } from "@/components/admin/ActivityFeed"
 import {
@@ -29,6 +30,7 @@ import {
 import { ChartCard } from "@/components/admin/ChartCard"
 import { ClaudeCredentials } from "@/components/admin/ClaudeCredentials"
 import { ProviderPricing } from "@/components/admin/ProviderPricing"
+import { BonusCredits } from "@/components/admin/BonusCredits"
 import { UserTable, type SortField, type SortOrder } from "@/components/admin/UserTable"
 import { UserGrowthChart } from "@/components/admin/charts/UserGrowthChart"
 import { MessagesByModelChart } from "@/components/admin/charts/MessagesByModelChart"
@@ -259,7 +261,7 @@ function ProviderFilterDropdown({
   )
 }
 
-type SectionKey = "overview" | "leaderboard" | "users" | "activity" | "credentials" | "pricing"
+type SectionKey = "overview" | "leaderboard" | "users" | "activity" | "credentials" | "pricing" | "credits"
 
 const sections: { key: SectionKey; label: string; icon: typeof Users }[] = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -268,6 +270,7 @@ const sections: { key: SectionKey; label: string; icon: typeof Users }[] = [
   { key: "activity", label: "Activity", icon: Activity },
   { key: "credentials", label: "Credentials", icon: KeyRound },
   { key: "pricing", label: "Pricing", icon: DollarSign },
+  { key: "credits", label: "Credits", icon: Gift },
 ]
 
 export default function AdminDashboard() {
@@ -868,6 +871,9 @@ export default function AdminDashboard() {
 
           {/* Pricing Section */}
           {activeSection === "pricing" && <ProviderPricing />}
+
+          {/* Bonus credits Section */}
+          {activeSection === "credits" && <BonusCredits />}
         </div>
       </main>
     </div>

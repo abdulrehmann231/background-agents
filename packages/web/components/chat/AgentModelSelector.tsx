@@ -9,6 +9,7 @@ import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
 import { getAgentModels, getFreeModelForAgent, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, agentUsesSharedPool, resolveModelForAgent, sharedPoolProviderForModel, formatTokenRate, ALL_AGENTS } from "@/lib/types"
 import { chargeableUsd, creditTier } from "@/lib/server/credits"
 import { fmtCreditAmount } from "@/lib/format"
+import { exhaustedCreditProvider } from "@/lib/credit-limit"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
@@ -38,7 +39,7 @@ interface AgentModelSelectorProps {
   currentAgent: Agent
   currentModel: string
   onUpdateChat?: (updates: Partial<Chat>) => void
-  showClaudeLimitDialog: () => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
   isMobile: boolean
   /** Called when a dropdown opens, so parent can close other dropdowns */
   onDropdownOpen?: () => void
@@ -127,7 +128,7 @@ export function AgentModelSelector({
   currentAgent,
   currentModel,
   onUpdateChat,
-  showClaudeLimitDialog,
+  showCreditDialog,
   isMobile,
   onDropdownOpen,
   closeDropdowns,
@@ -211,7 +212,8 @@ export function AgentModelSelector({
     // and so does an agent with an always-free, no-key model (OpenCode), whose
     // free tier never touches the balance.
     if (agentSharedPoolExhausted(agent, credentialFlags) && !getFreeModelForAgent(agent)) {
-      showClaudeLimitDialog()
+      const model = resolveModelForAgent(agent, credentialFlags, settingsData?.settings?.defaultModel, endpoints)
+      showCreditDialog(sharedPoolProviderForModel(agent, model, credentialFlags) ?? undefined, creditBalanceUsd)
       return
     }
 
@@ -241,11 +243,22 @@ export function AgentModelSelector({
         }
       }
     }
-  }, [chat, currentAgent, currentModel, credentialFlags, endpoints, settingsData, onUpdateChat, showClaudeLimitDialog, modals])
+  }, [chat, currentAgent, currentModel, credentialFlags, endpoints, settingsData, creditBalanceUsd, onUpdateChat, showCreditDialog, modals])
 
   const handleModelChange = useCallback((model: string) => {
     setShowModelDropdown(false)
     setShowModelSheet(false)
+    const blockedProvider = exhaustedCreditProvider({
+      agent: currentAgent,
+      model,
+      credentialFlags,
+      balanceUsd: creditBalanceUsd,
+      providerMultipliers,
+    })
+    if (blockedProvider) {
+      showCreditDialog(blockedProvider, creditBalanceUsd)
+      return
+    }
     if (chat && onUpdateChat) {
       const prevModel = currentModel
       onUpdateChat({ model })
@@ -263,7 +276,7 @@ export function AgentModelSelector({
         }
       }
     }
-  }, [chat, availableModels, credentialFlags, currentAgent, currentModel, onUpdateChat, modals])
+  }, [chat, availableModels, credentialFlags, currentAgent, currentModel, creditBalanceUsd, providerMultipliers, onUpdateChat, showCreditDialog, modals])
 
   // Determine which section heading a model belongs to
   const getModelSection = useCallback((model: ModelOption): string => {

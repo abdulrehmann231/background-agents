@@ -42,7 +42,7 @@ import {
   type ChatContextValue,
   type GitContextValue,
 } from "@/lib/contexts"
-import { NEW_REPOSITORY, type Message } from "@/lib/types"
+import { NEW_REPOSITORY, getFreeModelForAgent, type Message } from "@/lib/types"
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import type { GitHubRepo, GitHubBranch } from "@/lib/github"
 import { hasPendingMessage } from "@/lib/pending-message"
@@ -700,8 +700,10 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   chat={displayCurrentChat}
                   settings={settings}
                   credentialFlags={credentialFlags}
-                  showClaudeLimitDialog={() => {
-                    setLimitReachedState({ show: true, provider: "claude" })
+                  showCreditDialog={(provider, creditBalance) => {
+                    // Keep any server-rejected message available for an explicit retry.
+                    if (limitReachedState.show) return
+                    setLimitReachedState({ show: true, provider, creditBalance })
                   }}
                   onSendMessage={handleSendMessage}
                   onReload={reloadChat}
@@ -789,7 +791,14 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
         limitReachedState={limitReachedState}
         onDismissLimitReached={dismissLimitReached}
-        onContinueWithOpenCode={retryWithOpenCode}
+        onContinueWithOpenCode={() => {
+          if (limitReachedState.pendingMessage) {
+            retryWithOpenCode()
+          } else {
+            handleUpdateChatProp({ agent: "opencode", model: getFreeModelForAgent("opencode") })
+            dismissLimitReached()
+          }
+        }}
       />
     </div>
     </GitProvider>

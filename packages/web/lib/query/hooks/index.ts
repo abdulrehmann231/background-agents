@@ -53,3 +53,8 @@ export {
   useSetProviderMultiplierMutation,
 } from "./useProviderPricingQuery"
 export type { ProviderPricingRow } from "./useProviderPricingQuery"
+export {
+  useBonusCreditsQuery,
+  useGrantBonusCreditsMutation,
+} from "./useBonusCreditsQuery"
+export type { BonusCreditGrant, GrantBonusCreditsResult } from "./useBonusCreditsQuery"

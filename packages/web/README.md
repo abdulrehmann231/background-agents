@@ -15,6 +15,27 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 - **Skills**: install repo-scoped agent skills from the [skills.sh](https://skills.sh) marketplace
 - **Dark/Light Theme**: system-aware theming with manual override options
 
+### GitHub star reward
+
+Credit options open automatically when the selected paid shared model runs out
+of credits while a chat is open. They also open from **Add credits** on either
+credit-warning banner, when a send is blocked by an empty balance, and when
+selecting a paid shared model with no credits. Dismissing the automatic prompt
+keeps it closed until the balance recovers and is depleted again; explicit
+actions can always reopen it. Blocked sends preserve the draft and attachments.
+Free models and personal API keys remain usable without credits.
+
+The dialog checks whether the signed-in GitHub account has starred
+`jamesmurdza/background-agents`. Its star button stars the repository through the
+GitHub API and immediately grants $1.00 in credits. An account can receive this
+reward only once, including when an admin has already granted its star reward.
+Unstarring later does not remove credits or make the reward available again.
+The star reward button stays disabled until the status check succeeds, while
+the claim is pending, and after the reward has been claimed. A failed status
+check leaves it disabled; reopening the dialog retries the check. The POST
+endpoint checks the ledger before granting and uses the same unique reward
+key as admin grants to prevent repeat or concurrent claims.
+
 ## Architecture
 
 - **Frontend**: Next.js 16 with React 19, Tailwind CSS 4, and Radix UI primitives
