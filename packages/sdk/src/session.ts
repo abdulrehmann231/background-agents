@@ -155,7 +155,11 @@ async function createSessionWithId(
   const sessionDir = `${CODEAGENT_SESSION_DIR_PREFIX}${id}`
 
   // Run agent installation (cast to ProviderName for backwards compat with sandbox interface)
-  await sandbox.ensureProvider(agentName as ProviderName)
+  // Reattaching only observes an existing job. An installer outage must never
+  // prevent monitoring/Stop, or change the runtime beneath that execution.
+  if (agentName !== "codex" || !opts?.skipWriteInitialMeta) {
+    await sandbox.ensureProvider(agentName as ProviderName)
+  }
 
   // Apply session-level env vars
   if (options.env) {
@@ -181,6 +185,16 @@ async function createSessionWithId(
     cwd: options.cwd,
     planMode: options.planMode,
   })
+
+  // A caller may explicitly start another turn on a reattached SDK session.
+  // Defer preparation until that action, never while merely reading/stopping it.
+  if (agentName === "codex" && opts?.skipWriteInitialMeta) {
+    const start = session.start.bind(session)
+    session.start = async (...args: Parameters<BackgroundSession["start"]>) => {
+      await sandbox.ensureProvider("codex")
+      return start(...args)
+    }
+  }
 
   // Write initial meta for reattachment
   if (!opts?.skipWriteInitialMeta) {

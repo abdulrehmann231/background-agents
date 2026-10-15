@@ -1,6 +1,12 @@
 import type { Chat } from "./types"
 import { readFailureMarker } from "./turn-failure-marker"
 
+export function unsupportedModelFailure(reason: string | undefined): string | undefined {
+  if (reason && /\bmodel\b(?:\s+['"]?[\w./:-]+['"]?)?\s+(?:is\s+)?not\s+supported\b|unsupported\s+model/i.test(reason)) {
+    return "This model is not supported in this session. Choose another model before retrying."
+  }
+}
+
 export function latestFailedAssistant(chat: Chat) {
   if (chat.status !== "error" || chat.pendingSend || chat.stopPending ||
       chat.backgroundSessionId || chat.activeAssistantMessageId) return
@@ -30,6 +36,8 @@ export function persistedProviderFailure(chat: Chat): string | undefined {
   if (/ProviderHeaderTimeoutError|provider response headers timed out/i.test(marker.reason)) {
     return "The model provider did not respond in time. Try again, or choose another model before retrying."
   }
+  const unsupported = unsupportedModelFailure(marker.reason)
+  if (unsupported) return unsupported
   if (/ProviderModelNotFoundError|model[^\n]*(?:not found|not available|unavailable)/i.test(marker.reason)) {
     return "This model is no longer available. Choose another model before retrying."
   }

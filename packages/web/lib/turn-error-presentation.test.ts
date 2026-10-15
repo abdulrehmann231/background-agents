@@ -12,6 +12,13 @@ function failed(reason = "ProviderHeaderTimeoutError: Provider response headers 
 }
 
 describe("persisted provider failure presentation", () => {
+  it.each([
+    "400 invalid_request_error: The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.",
+    '{"error":{"message":"The model is not supported with this account","type":"invalid_request_error"}}',
+  ])("explains unsupported models after restoring history: %s", reason => {
+    expect(persistedProviderFailure(failed(reason))).toBe(
+      "This model is not supported in this session. Choose another model before retrying.")
+  })
   it("identifies a timeout without displaying raw logs", () => {
     const message = persistedProviderFailure(failed())
     expect(message).toContain("model provider did not respond in time")

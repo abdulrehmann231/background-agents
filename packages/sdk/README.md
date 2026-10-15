@@ -70,6 +70,29 @@ CLAUDE_CODE_TEST_EXECUTABLE=/path/to/claude npm test -- tests/integration/claude
 
 The credential endpoint must authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host. Reads time out after 15 seconds, and Claude rejects a callback that returns the same failed access token. API requests and streaming remain direct to Anthropic; a broken accepted response is not replayed by the runner.
 
+### Codex runtime preparation
+
+The Daytona adapter uses exactly the reviewed Codex CLI version (currently
+0.159.3), not any newer release. New images preinstall it in a versioned directory
+under `/home/daytona/.local/share/background-agents/codex`. Older sandboxes prepare
+that same directory before a new Codex execution. An already prepared runtime
+needs no registry access. Concurrent preparations share an installation lock.
+
+Runtime preparation does not replace the global CLI, older version directories,
+saved login credentials, or active processes. Each new execution selects its
+version through PATH, including when the global CLI is newer than the pin.
+
+If preparation fails, the new agent is not started. Reading or stopping an
+existing session does not require an installation or registry connection;
+explicitly starting another turn on a reattached session does. Keep the image's
+Codex package pin aligned with `CODEX_CLI_VERSION` in the SDK when updating it
+through a reviewed PR. To roll back a release, revert both pins and deploy the
+SDK/app; rebuild the image for future sandboxes. Subsequent executions in existing
+sandboxes select the reverted version (installing it if absent). Active jobs
+finish on their original executable. Do not delete a version directory while a
+job may still use it. Snapshot rebuild alone does not update existing sandboxes.
+CLI compatibility does not grant access to models unavailable to the account.
+
 ### CLI reference commands
 
 | Provider | CLI Command |
@@ -295,7 +318,7 @@ type Event =
 | Provider | Example | Docs |
 |----------|---------|------|
 | **Claude** | `model: "sonnet"`, `model: "opus"`, `model: "haiku"` | [Claude Code](https://code.claude.com/docs/en/model-config#model-aliases) |
-| **Codex** | `model: "gpt-6.1-sol"`, `model: "gpt-5.5"` | [Codex CLI models](https://developers.openai.com/codex/models) |
+| **Codex** | `model: "gpt-6.1-sol"` (Backgrounder default); `gpt-5.5` requires API-key authentication, not ChatGPT sign-in | [Codex CLI models](https://learn.chatgpt.com/docs/models) |
 | **Command Code** | `model: "xiaomi/mimo-v2.6-pro"`, `model: "claude-sonnet-5"`, `model: "deepseek/deepseek-v4-flash"` | [Command Code models](https://commandcode.ai/docs/reference/cli/models) |
 | **Copilot** | `model: "gpt-5-mini"`, `model: "claude-sonnet-5"`, `model: "gpt-5.5"` | [GitHub Copilot](https://docs.github.com/en/copilot) |
 | **Droid** | `model: "claude-sonnet-4-5-20250929"` (BYOK), `model: "gpt-5"`, `model: "factory/<id>"` (Factory-hosted) | [Factory Droid](https://docs.factory.ai/cli/) |

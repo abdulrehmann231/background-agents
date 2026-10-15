@@ -1,5 +1,7 @@
 "use client"
 
+import { useState } from "react"
+
 import {
   ChatHeader,
   MobileConflictBar,
@@ -51,7 +53,8 @@ interface ChatPanelProps {
   isAuthenticated?: boolean
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
+  const [modelPickerRequest, setModelPickerRequest] = useState<{ chatId: string; sequence: number }>()
   const composer = useChatComposer({
     chat,
     settings,
@@ -141,6 +144,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
   const chatInput = (
     <ChatInput
       chat={chat}
+      modelPickerRequest={modelPickerRequest}
       input={input}
       onInputChange={setInput}
       onSend={handleSend}
@@ -266,6 +270,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
         onSendMessage={onSendMessage}
         onRemoveQueuedMessage={onRemoveQueuedMessage}
         onResumeQueue={onResumeQueue}
+        onChooseModel={() => setModelPickerRequest(previous => ({ chatId: chat.id, sequence: (previous?.sequence ?? 0) + 1 }))}
         currentAgent={currentAgent}
         currentModel={currentModel}
         planModeEnabled={planModeEnabled}

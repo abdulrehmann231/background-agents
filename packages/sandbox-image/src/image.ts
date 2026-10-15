@@ -67,10 +67,14 @@ export const SNAPSHOT_RESOURCES = {
  * NPM packages to pre-install for each agent CLI.
  * Goose uses a binary download, not npm.
  */
+// Keep in sync with packages/sdk/src/utils/install.ts. Updates and rollbacks
+// both go through review; do not replace this with latest or a version range.
+export const CODEX_CLI_VERSION = "0.159.3"
+
 export const AGENT_PACKAGES = {
   // Keep in sync with the SDK's CLAUDE_CODE_VERSION; its OAuth callback is internal.
   claude: "@anthropic-ai/claude-code@2.1.283",
-  codex: "@openai/codex",
+  codex: `@openai/codex@${CODEX_CLI_VERSION}`,
   commandcode: "command-code",
   copilot: "@github/copilot",
   kilo: "@kilocode/cli",
@@ -79,6 +83,14 @@ export const AGENT_PACKAGES = {
   gemini: "@google/gemini-cli",
   pi: "@mariozechner/pi-coding-agent",
 } as const
+
+// Matches the SDK's versioned runtime layout. The global command is for direct
+// terminal use; SDK jobs explicitly select their reviewed version via PATH.
+const CODEX_RUNTIME_PREFIX = `/home/daytona/.local/share/background-agents/codex/${CODEX_CLI_VERSION}`
+export const CODEX_INSTALL_COMMAND =
+  `npm install -g --prefix ${CODEX_RUNTIME_PREFIX} ${AGENT_PACKAGES.codex} --no-audit --no-fund && ` +
+  `test "$("${CODEX_RUNTIME_PREFIX}/bin/codex" --version)" = "codex-cli ${CODEX_CLI_VERSION}" && ` +
+  `ln -sfn ${CODEX_RUNTIME_PREFIX}/bin/codex /usr/local/bin/codex`
 
 /**
  * tokscale CLI version, pinned for reproducible snapshots and a stable
@@ -120,7 +132,7 @@ export function getAgentSandboxImage(): Image {
       .runCommands(
         // Install system dependencies (curl for Goose download, git for agents, sudo for user)
         "apt-get update && apt-get install -y --no-install-recommends " +
-          "curl ca-certificates git bzip2 sudo " +
+          "curl ca-certificates git bzip2 sudo util-linux " +
           "&& rm -rf /var/lib/apt/lists/*"
       )
       .runCommands(
@@ -129,7 +141,7 @@ export function getAgentSandboxImage(): Image {
       )
       .runCommands(
         // Install Codex CLI
-        "npm install -g @openai/codex"
+        CODEX_INSTALL_COMMAND
       )
       .runCommands(
         // Install Command Code CLI. Ships `cmd`/`cmdc`/`commandcode`/

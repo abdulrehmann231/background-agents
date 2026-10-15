@@ -11,7 +11,7 @@ import { useDragToClose } from "@/lib/hooks/useDragToClose"
 import { useElectron, type LicenseDetectResult } from "@/lib/hooks/useElectron"
 import { isModKeyPressed } from "@/lib/keyboard"
 import type { Settings, Theme, Agent, Credentials, CredentialFlags, CustomEndpoint } from "@/lib/types"
-import { agentModels, resolveAgent, getDefaultModelForAgent } from "@/lib/types"
+import { agentModels, resolveAgent, resolveModelForAgent, getDefaultModelForAgent } from "@/lib/types"
 import {
   CREDENTIAL_KEYS,
   type CredentialId,
@@ -137,8 +137,10 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     [settings.defaultAgent]
   )
   const initialDefaultModel = useMemo<string>(
-    () => settings.defaultModel ?? getDefaultModelForAgent(initialDefaultAgent, credentialFlags),
-    [settings.defaultModel, initialDefaultAgent, credentialFlags]
+    () => initialDefaultAgent === "codex"
+      ? resolveModelForAgent(initialDefaultAgent, credentialFlags, settings.defaultModel, initialEndpoints)
+      : settings.defaultModel ?? getDefaultModelForAgent(initialDefaultAgent, credentialFlags),
+    [settings.defaultModel, initialDefaultAgent, credentialFlags, initialEndpoints]
   )
 
   const [defaultAgent, setDefaultAgent] = useState<Agent>(initialDefaultAgent)
