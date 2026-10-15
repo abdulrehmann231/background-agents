@@ -32,10 +32,11 @@ Codex is pinned to `CODEX_CLI_VERSION` in `src/image.ts` and the SDK's
 `src/utils/install.ts`. Update or revert both pins in a reviewed PR. The image
 preinstalls the versioned runtime used by the SDK and links the terminal's
 `codex` command to it. Rebuilding the image affects new sandboxes only; the SDK
-selects the exact reviewed version before a new execution in existing sandboxes,
-without replacing active jobs. See the SDK README's Codex runtime preparation
-section for rollback behavior. This package does not schedule automatic upgrades;
-other agents' existing installation policies are unchanged.
+selects the exact reviewed version (installing it if absent) before a new
+execution in existing sandboxes, without replacing active jobs — so reverting
+the pins and redeploying rolls back new executions without touching jobs
+already in progress. This package does not schedule automatic upgrades; other
+agents' existing installation policies are unchanged.
 
 This is an internal workspace package. It's automatically available to other packages in the monorepo:
 
