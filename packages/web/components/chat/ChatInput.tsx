@@ -14,6 +14,8 @@ import { basename } from "@/lib/format"
 import { queuedSendNotice } from "@/lib/composer-queue"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
 import { AgentModelSelector } from "./AgentModelSelector"
+import { ThinkingSelector } from "./ThinkingSelector"
+import type { ThinkingCapability } from "@background-agents/sdk/thinking"
 import { CreditWarningBanner } from "./CreditWarningBanner"
 import { RepoCombobox } from "./RepoCombobox"
 import { BranchCombobox } from "./BranchCombobox"
@@ -85,6 +87,13 @@ interface ChatInputProps {
   planModeEnabled: boolean
   planModeSupported: boolean
   onSetPlanMode: (enabled: boolean) => void
+  thinking?: string
+  onThinkingChange?: (value: string) => void
+  thinkingNotice?: string
+  thinkingCapability?: ThinkingCapability
+  thinkingChecking?: boolean
+  onThinkingRetry?: () => void
+  onThinkingMenuOpen?: () => void
   // MCP servers (chat-scoped, draft-aware)
   showMcpButton: boolean
   isDraftChat: boolean
@@ -235,6 +244,13 @@ export function ChatInput({
   planModeEnabled,
   planModeSupported,
   onSetPlanMode,
+  thinking = "default",
+  onThinkingChange,
+  thinkingNotice,
+  thinkingCapability,
+  thinkingChecking,
+  onThinkingRetry,
+  onThinkingMenuOpen,
   // MCP servers
   showMcpButton,
   isDraftChat,
@@ -638,7 +654,7 @@ export function ChatInput({
           </div>
 
           {/* Right side items */}
-          <div className={cn("flex items-center gap-2", isMobile && "w-full @container/row2")}>
+          <div className={cn("flex flex-wrap items-center gap-2 min-w-0", isMobile && "w-full @container/row2")}>
             {/* Mode selector dropdown (Edit/Plan) - only show if agent supports plan mode */}
             {planModeSupported && (
               isMobile ? (
@@ -725,6 +741,8 @@ export function ChatInput({
               )
             )}
 
+            {onThinkingChange && thinkingCapability && <ThinkingSelector capability={thinkingCapability} value={thinking} onChange={onThinkingChange} notice={thinkingNotice}
+              checking={thinkingChecking} onRetry={onThinkingRetry} onOpenChange={open => { if (open) onThinkingMenuOpen?.() }} />}
             {/* Agent and Model selectors */}
             <AgentModelSelector
               chat={chat}
