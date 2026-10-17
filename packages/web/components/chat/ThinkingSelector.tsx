@@ -3,11 +3,13 @@
 import type { ThinkingCapability } from "@background-agents/sdk/thinking"
 import { supportsThinking, thinkingLabel } from "@background-agents/sdk/thinking"
 import { useId, useState } from "react"
+import { Brain } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 
-export function ThinkingSelector({ capability, value, onChange, notice, onRetry, onOpenChange, checking = false }: {
+export function ThinkingSelector({ capability, value, onChange, notice, onRetry, onOpenChange, checking = false, isMobile = false }: {
   capability: ThinkingCapability; value: string; onChange: (value: string) => void; notice?: string
-  onRetry?: () => void; onOpenChange?: (open: boolean) => void; checking?: boolean
+  onRetry?: () => void; onOpenChange?: (open: boolean) => void; checking?: boolean; isMobile?: boolean
 }) {
   const helpId = useId()
   const explanation = "Default uses the agent and model's own thinking setting, without an override. It does not select a different model or always mean Medium. Changes apply to future prompts."
@@ -18,12 +20,12 @@ export function ThinkingSelector({ capability, value, onChange, notice, onRetry,
   // notices and incompatible saved choices visible for retry/explicit recovery.
   if (capability.status === "no_controls" && capability.levels.every(level => level === "default") &&
     !capability.budget && value === "default" && !notice) return null
-  return <div className="relative flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
+  return <div className={cn("relative flex shrink-0 items-center gap-1 text-sm text-muted-foreground", isMobile && "max-w-[45%] flex-wrap justify-end")}>
     <Select value={selectedValue} onOpenChange={onOpenChange} onValueChange={next => onChange(next === "budget" && capability.budget ? `budget:${capability.budget.min}` : next)}>
       <SelectTrigger aria-label="Thinking level" aria-describedby={helpId} title={notice ?? capability.reason ?? explanation}
         aria-invalid={!selectionValid || undefined} aria-busy={checking}
-        className="h-auto w-auto max-w-48 gap-1 border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2">
-        <span className="shrink-0">Thinking:</span><SelectValue />
+        className={cn("h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2", isMobile && "min-h-9")}>
+        <Brain aria-hidden="true" className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} /><SelectValue />
       </SelectTrigger>
       <SelectContent side="top" align="end" className="max-h-[min(28rem,var(--radix-select-content-available-height))] max-w-[calc(100vw-2rem)]">
         <SelectItem value="default" title={explanation} aria-describedby={helpId}>Default</SelectItem>
