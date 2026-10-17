@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { GitBranch, ChevronDown, Loader2 } from "lucide-react"
+import { GitBranch, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetchBranches } from "@/lib/github"
 import type { GitHubBranch } from "@/lib/types"
+import { ComboboxTriggerButton } from "./ComboboxTriggerButton"
 import {
   Popover,
   PopoverContent,
@@ -103,23 +104,14 @@ export function BranchCombobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <ComboboxTriggerButton
           disabled={disabled}
-          className={cn(
-            "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-sm",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
+          isMobile={isMobile}
+          showLabel={showLabel}
           title={value}
-        >
-          <GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-          <span className={cn(
-            showLabel ? "inline" : (isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")
-          )}>
-            {value}
-          </span>
-          <ChevronDown className={cn(isMobile ? "h-4 w-4 hidden @[16rem]/row1:block" : "h-3.5 w-3.5")} />
-        </button>
+          icon={<GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />}
+          label={value}
+        />
       </PopoverTrigger>
       <PopoverContent
         className="w-64 p-0"
