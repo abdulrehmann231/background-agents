@@ -11,7 +11,7 @@
 
 export const BONUS_CREDIT_SOURCE = "admin_bonus"
 
-/** The repo users are asked to star (Out of Credits dialog). */
+/** The repo users are asked to star, linked from the welcome screen. */
 export const GITHUB_REPO_URL = "https://github.com/jamesmurdza/background-agents"
 export const GITHUB_STAR_CREDIT_USD = 1.0
 

@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { Github, HelpCircle, Command } from "lucide-react"
 import { CreditBalancePill } from "./CreditBalancePill"
 import { cn } from "@/lib/utils"
+import { GITHUB_REPO_URL } from "@/lib/bonus-credits"
 
 interface WelcomeViewProps {
   isMobile: boolean
@@ -55,7 +56,7 @@ export function WelcomeView({
           </button>
         </div>
         <a
-          href="https://github.com/jamesmurdza/background-agents"
+          href={GITHUB_REPO_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="absolute top-5 flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/50 text-sm text-foreground/70 hover:text-foreground transition-colors"
