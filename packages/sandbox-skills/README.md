@@ -11,7 +11,11 @@ This package provides:
 
 ## Installation
 
-This is an internal workspace package. It's automatically available to other packages in the monorepo:
+```bash
+npm install @background-agents/sandbox-skills @daytonaio/sdk
+```
+
+Inside this monorepo, it's also available to other packages as a workspace dependency:
 
 ```json
 {
@@ -105,4 +109,4 @@ import { stripAnsi, parseSkillList, extractCleanError } from "@background-agents
 
 ## License
 
-MIT
+Apache-2.0

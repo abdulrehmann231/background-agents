@@ -179,4 +179,4 @@ Messages are JSON-encoded:
 
 ## License
 
-MIT
+Apache-2.0
