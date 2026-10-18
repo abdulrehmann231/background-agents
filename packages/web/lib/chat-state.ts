@@ -165,34 +165,10 @@ export function enqueue(
   return [...(queue ?? []), item]
 }
 
-/** Remove a queued message by id. */
-export function removeFromQueue(
-  queue: QueuedMessage[] | undefined,
-  id: string
-): QueuedMessage[] {
-  return (queue ?? []).filter((m) => m.id !== id)
-}
-
 /** Split the head of a (non-empty) queue from the rest. */
 export function dequeue(queue: QueuedMessage[]): { next: QueuedMessage; rest: QueuedMessage[] } {
   const [next, ...rest] = queue
   return { next, rest }
-}
-
-/**
- * Whether a chat is in a state where the next queued message may be dispatched.
- * Covers the data-only conditions; in-flight/stream locks are checked by the
- * caller (they're not pure state).
- */
-export function isChatReadyForQueueDispatch(
-  chat: Pick<Chat, "status" | "backgroundSessionId">,
-  queue: QueuedMessage[] | undefined,
-  paused: boolean | undefined
-): boolean {
-  if (!queue || queue.length === 0) return false
-  if (paused) return false
-  if (chat.status !== "ready" || !!chat.backgroundSessionId) return false
-  return true
 }
 
 // =============================================================================

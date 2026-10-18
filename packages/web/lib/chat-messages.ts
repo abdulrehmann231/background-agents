@@ -191,19 +191,3 @@ export function applySendSuccess(
     ),
   }
 }
-
-/** Mark the chat errored and surface the error on the assistant placeholder message. */
-export function applySendError(chat: Chat, assistantMessageId: string, errorMessage: string): Chat {
-  return {
-    ...chat,
-    status: "error",
-    pendingSend: false,
-    activeAssistantMessageId: undefined,
-    errorMessage,
-    messages: chat.messages.map((m) =>
-      m.id === assistantMessageId
-        ? { ...m, content: `Error: ${errorMessage}`, messageType: "error", isError: true }
-        : m
-    ),
-  }
-}
