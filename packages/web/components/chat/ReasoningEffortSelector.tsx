@@ -23,8 +23,14 @@ export function ReasoningEffortSelector({ capability, value, onChange, isMobile 
         {/* Desktop collapses to icon-only below the same @[32rem] breakpoint
             every other composer trigger (agent/mode/repo/branch/MCP) uses.
             Mobile has no such collapse convention for this row, so it keeps
-            always showing the label. */}
-        <span className={cn(!isMobile && "hidden @[32rem]:inline")}><SelectValue /></span>
+            always showing the label. This wrapper must not be a <span>: the
+            shared SelectTrigger always applies `[&>span]:line-clamp-1` to its
+            direct-child span (meant for Radix's own un-wrapped SelectValue
+            span), and that rule's higher selector specificity than a plain
+            class forces `display: -webkit-box`, permanently overriding the
+            `hidden`/`@[32rem]:inline` toggle below it. A <div> isn't matched
+            by that selector, so the toggle actually takes effect. */}
+        <div className={cn(!isMobile && "hidden @[32rem]:inline")}><SelectValue /></div>
       </SelectTrigger>
       <SelectContent side="top" align="end" className="max-h-[min(28rem,var(--radix-select-content-available-height))] max-w-[calc(100vw-2rem)]">
         <SelectItem value="default" title={explanation} aria-describedby={helpId}>Default</SelectItem>
