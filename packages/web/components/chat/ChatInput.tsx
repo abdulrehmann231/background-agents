@@ -679,10 +679,10 @@ export function ChatInput({
         {/* Bottom row with selectors */}
         <div ref={composerRowRef} className={cn(
           "@container",
-          isMobile ? "flex flex-col gap-1 px-3 pb-2 pt-1" : "flex items-center gap-3 px-4 py-2"
+          isMobile ? "flex flex-col gap-1 px-3 pb-2 pt-1" : "flex items-center gap-3 overflow-hidden px-4 py-2"
         )}>
           {/* Left side items */}
-          <div className={cn("flex items-center gap-2", isMobile ? "w-full" : "flex-1")}>
+          <div className={cn("flex items-center gap-2", isMobile ? "w-full" : "grow shrink-0 basis-auto")}>
             {/* Attachment button — same hit-target size as the mic/send/stop
                 buttons on the other side of the textarea. */}
             <button
@@ -790,7 +790,7 @@ export function ChatInput({
           </div>
 
           {/* Agent/model first on mobile; keep keyboard order aligned with the layout. */}
-          <div className={cn("flex items-center gap-2 min-w-0", isMobile ? "w-full @container/row2 border-t border-border/50 pt-1" : "flex-wrap")}>
+          <div className={cn("flex items-center gap-2 min-w-0", isMobile ? "w-full @container/row2 border-t border-border/50 pt-1" : "shrink-0 flex-nowrap overflow-hidden")}>
             {isMobile && agentModelSelector}
             {/* Mode selector dropdown (Edit/Plan) - only show if agent supports plan mode */}
             {planModeSupported && (
