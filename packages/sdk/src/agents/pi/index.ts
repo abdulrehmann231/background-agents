@@ -43,9 +43,8 @@ export const piAgent: AgentDefinition = {
       args.push("--system-prompt", options.systemPrompt)
     }
 
-    // Pi natively accepts provider/model. Use the same exact identity as the
-    // capability lookup, including the picker's legacy bare Anthropic IDs.
-    // Unknown patterns remain native Default-only requests, not guessed models.
+    // Pi takes provider/model. The picker stores bare claude-* IDs, so qualify
+    // them as anthropic/claude-*; anything else is passed through unchanged.
     if (options.model) {
       args.push("--model", piModelIdentity(options.model) ?? options.model)
     }

@@ -96,12 +96,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
     setPlanModeEnabled,
     thinking,
     setThinking,
-    thinkingNotice,
     thinkingCapability,
-    thinkingChecking,
-    recheckThinking,
-    onThinkingMenuOpen,
-    canRecheckThinking,
     currentAgent,
     currentModel,
     rebaseConflict,
@@ -212,11 +207,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
       onSetPlanMode={setPlanModeEnabled}
       thinking={thinking}
       onThinkingChange={setThinking}
-      thinkingNotice={thinkingNotice}
       thinkingCapability={thinkingCapability}
-      thinkingChecking={thinkingChecking}
-      onThinkingRetry={canRecheckThinking ? recheckThinking : undefined}
-      onThinkingMenuOpen={onThinkingMenuOpen}
       // MCP servers — only show when authenticated and we have a chat to attach to.
       showMcpButton={isAuthenticated && !!chat?.id && !!onMaterializeDraftForMcp}
       isDraftChat={isDraftChat}

@@ -89,11 +89,7 @@ interface ChatInputProps {
   onSetPlanMode: (enabled: boolean) => void
   thinking?: string
   onThinkingChange?: (value: string) => void
-  thinkingNotice?: string
   thinkingCapability?: ThinkingCapability
-  thinkingChecking?: boolean
-  onThinkingRetry?: () => void
-  onThinkingMenuOpen?: () => void
   // MCP servers (chat-scoped, draft-aware)
   showMcpButton: boolean
   isDraftChat: boolean
@@ -246,11 +242,7 @@ export function ChatInput({
   onSetPlanMode,
   thinking = "default",
   onThinkingChange,
-  thinkingNotice,
   thinkingCapability,
-  thinkingChecking,
-  onThinkingRetry,
-  onThinkingMenuOpen,
   // MCP servers
   showMcpButton,
   isDraftChat,
@@ -754,8 +746,7 @@ export function ChatInput({
               )
             )}
 
-            {onThinkingChange && thinkingCapability && <ThinkingSelector isMobile={isMobile} capability={thinkingCapability} value={thinking} onChange={onThinkingChange} notice={thinkingNotice}
-              checking={thinkingChecking} onRetry={onThinkingRetry} onOpenChange={open => { if (open) onThinkingMenuOpen?.() }} />}
+            {onThinkingChange && thinkingCapability && <ThinkingSelector isMobile={isMobile} capability={thinkingCapability} value={thinking} onChange={onThinkingChange} />}
             {/* Agent and Model selectors */}
             {!isMobile && agentModelSelector}
           </div>

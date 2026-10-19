@@ -6,8 +6,6 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { validateThinking, type ThinkingLevel } from "./thinking"
-import { verifyThinkingRuntime } from "./thinking-runtime"
 import { debugLog } from "./debug"
 
 // Import and register all agents
@@ -46,7 +44,7 @@ export interface SessionOptions {
   env?: Record<string, string>
   /** Working directory for the agent process */
   cwd?: string
-  thinking?: ThinkingLevel
+  thinking?: string
   /** When true, use read-only plan mode. */
   planMode?: boolean
 }
@@ -154,7 +152,6 @@ async function createSessionWithId(
   opts?: { skipWriteInitialMeta?: boolean }
 ): Promise<BackgroundSession> {
   const agent = getAgent(agentName)
-  validateThinking(agentName, options.model, options.thinking)
   const sandbox = adaptSandbox(options.sandbox)
   const sessionDir = `${CODEAGENT_SESSION_DIR_PREFIX}${id}`
 
@@ -180,7 +177,6 @@ async function createSessionWithId(
   }
 
   // Create the background session
-  if (!opts?.skipWriteInitialMeta) await verifyThinkingRuntime(agentName, options, sandbox)
   const session = createBgSession(agent, sandbox, sessionDir, {
     model: options.model,
     sessionId: options.sessionId,

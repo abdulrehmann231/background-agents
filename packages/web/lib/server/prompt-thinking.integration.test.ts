@@ -49,9 +49,8 @@ databaseDescribe("per-prompt thinking on the real server queue", () => {
   })
 
   it.each([
-    { agent: "gemini", model: "gemini-2.5-flash", thinking: "budget:1024", changed: "budget:2048" },
-    { agent: "kilo", model: "kilo/example/model", thinking: "variant:deep-review", changed: "variant:quick" },
-  ])("preserves $agent native selections through offline import and dispatch", async ({ changed, ...selection }) => {
+    { agent: "claude-code", model: "sonnet", thinking: "high", changed: "low" },
+  ])("preserves $agent selections through offline import and dispatch", async ({ changed, ...selection }) => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entry = { ...input(), ...selection }
     await queue.importLegacyPrompts(chat.id, [entry], false)

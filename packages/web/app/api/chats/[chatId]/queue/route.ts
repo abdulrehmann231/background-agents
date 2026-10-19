@@ -10,8 +10,6 @@ import {
 } from "@/lib/server/prompt-queue"
 import { getDefaultModelForAgent, type Agent } from "@background-agents/common"
 import { readTerminalQueueRecovery, recoverTerminalQueue } from "@/lib/server/queue-recovery"
-import { parseThinking } from "@/lib/thinking"
-import { UnsupportedThinkingError } from "@background-agents/sdk/thinking"
 
 type Params = { params: Promise<{ chatId: string }> }
 
@@ -23,7 +21,7 @@ function validInput(value: unknown, fallbackAgent?: string, fallbackModel?: stri
   const agent = typeof v.agent === "string" && v.agent ? v.agent : fallbackAgent
   const model = typeof v.model === "string" && v.model ? v.model : fallbackModel
   if (!clientId || clientId.length > 128 || !content || content.length > 100_000 || !agent || !model) return null
-  const thinking = parseThinking(agent, model, v.thinking)
+  const thinking = typeof v.thinking === "string" && v.thinking ? v.thinking : undefined
   return { clientId, content, agent, model, thinking }
 }
 
@@ -100,9 +98,6 @@ export async function POST(req: NextRequest, { params }: Params): Promise<Respon
     const item = await enqueuePrompt(chatId, input)
     return Response.json({ queuedMessage: toQueuedMessage(item) }, { status: 201 })
   } catch (error) {
-    if (error instanceof UnsupportedThinkingError) {
-      return Response.json({ error: error.message }, { status: 400 })
-    }
     if (error instanceof QueueIdConflict) {
       return Response.json({ error: error.message }, { status: 409 })
     }
