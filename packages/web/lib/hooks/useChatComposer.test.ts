@@ -15,15 +15,15 @@ const mocks = vi.hoisted(() => ({
   showCreditDialog: vi.fn(),
   branch: vi.fn(),
   creditBalanceUsd: null as number | null,
-  thinking: "default",
+  reasoningEffort: "default",
 }))
 
 vi.mock("@/lib/contexts", () => ({
   useModals: () => ({ setSignInModalOpen: vi.fn() }),
   useGit: () => ({ canBranch: true, handleBranchWithMessage: mocks.branch }),
 }))
-vi.mock("./useThinkingPreference", () => ({
-  useThinkingPreference: () => ({ thinking: mocks.thinking, setThinking: vi.fn(), capability: { levels: [] } }),
+vi.mock("./useReasoningEffortPreference", () => ({
+  useReasoningEffortPreference: () => ({ reasoningEffort: mocks.reasoningEffort, setReasoningEffort: vi.fn(), capability: { levels: [] } }),
 }))
 vi.mock("@/lib/query/hooks/useSettingsQuery", () => ({
   useSettingsQuery: () => ({ data: { customEndpoints: [], creditBalanceUsd: mocks.creditBalanceUsd } }),
@@ -76,15 +76,15 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.pendingFiles = []
   mocks.creditBalanceUsd = null
-  mocks.thinking = "default"
+  mocks.reasoningEffort = "default"
 })
 
-describe("composer thinking selection", () => {
+describe("composer reasoning effort selection", () => {
   it("freezes the selected effort for an enqueued prompt", () => {
-    mocks.thinking = "high"
+    mocks.reasoningEffort = "high"
     renderComposer().handleSend()
     expect(mocks.enqueue.mock.calls[0]).toContain("high")
-    mocks.thinking = "low"
+    mocks.reasoningEffort = "low"
     expect(mocks.enqueue.mock.calls[0]).toContain("high")
   })
 })

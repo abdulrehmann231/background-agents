@@ -81,7 +81,7 @@ export interface StartOptions {
   cwd?: string
   /** Previous conversation history to inject as context for this turn. */
   history?: readonly HistoryMessage[]
-  thinking?: string
+  reasoningEffort?: string
   /** When true, use read-only plan mode. */
   planMode?: boolean
 }

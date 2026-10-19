@@ -1,17 +1,17 @@
-/** Browser-safe thinking levels per agent/model. No provider credentials or Node imports. */
+/** Browser-safe reasoning-effort levels per agent/model. No provider credentials or Node imports. */
 import { piModelIdentity } from "./agents/pi/model-identity"
 
-const THINKING_LEVELS = ["default", "none", "off", "on", "adaptive", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const
-export type ThinkingLevel = typeof THINKING_LEVELS[number]
+const REASONING_EFFORT_LEVELS = ["default", "none", "off", "on", "adaptive", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const
+export type ReasoningEffortLevel = typeof REASONING_EFFORT_LEVELS[number]
 
-export interface ThinkingCapability {
-  readonly levels: readonly ThinkingLevel[]
+export interface ReasoningEffortCapability {
+  readonly levels: readonly ReasoningEffortLevel[]
   readonly control?: "codex-config" | "claude-effort" | "commandcode-effort" | "copilot-effort" | "droid-effort" | "pi-thinking" | "kimi-env"
 }
 
 const basic = ["low", "medium", "high"] as const
 const extended = [...basic, "xhigh", "max"] as const
-const none: ThinkingCapability = { levels: [] }
+const none: ReasoningEffortCapability = { levels: [] }
 
 /**
  * Hardcoded like the model lists: the chosen level is passed straight to the
@@ -19,7 +19,7 @@ const none: ThinkingCapability = { levels: [] }
  * levels vary per model (OpenCode, Kilo) or need a config file (Gemini) only
  * offer Default for now.
  */
-function expectedThinkingCapability(agent: string, model?: string): ThinkingCapability {
+function expectedReasoningEffortCapability(agent: string, model?: string): ReasoningEffortCapability {
   if (!model || model.startsWith("endpoint:")) return none
   if (agent === "codex") {
     if (["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol"].includes(model)) return { levels: [...extended, "ultra"], control: "codex-config" }
@@ -47,7 +47,7 @@ function expectedThinkingCapability(agent: string, model?: string): ThinkingCapa
   if (agent === "droid" && model.startsWith("factory/")) {
     // Droid's reasoning flag only applies to Factory-hosted models, not BYOK.
     const id = model.slice(8)
-    const levels: readonly ThinkingLevel[] | undefined =
+    const levels: readonly ReasoningEffortLevel[] | undefined =
       ["gpt-6.1-sol", "gpt-6-astra", "claude-opus-5-5"].includes(id) ? extended :
       ["gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"].includes(id) ? ["none", ...extended] :
       ["claude-fable-5", "claude-fable-5.1", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-5", "claude-sonnet-5", "claude-sonnet-5-5"].includes(id) ? ["off", ...extended] :
@@ -62,30 +62,30 @@ function expectedThinkingCapability(agent: string, model?: string): ThinkingCapa
   }
   // K2.5/K2.6 have an on/off switch, not effort levels. K2.7 always thinks.
   if (agent === "kimi" && ["kimi-k2.5", "kimi-k2.6"].includes(model)) return { levels: ["on", "off"], control: "kimi-env" }
-  // Eliza is a fake, regex-based test agent with no real thinking flag to
-  // forward — this exists only so the composer has something to exercise
-  // the thinking selector against. No `control`, since buildCommand() never
-  // calls thinkingArgs(): whatever level is picked here is silently ignored.
+  // Eliza is a fake, regex-based test agent with no real reasoning-effort flag
+  // to forward — this exists only so the composer has something to exercise
+  // the selector against. No `control`, since buildCommand() never calls
+  // reasoningEffortArgs(): whatever level is picked here is silently ignored.
   if (agent === "eliza") return { levels: extended }
   return none
 }
 
-export function getThinkingCapability(agent: string, model?: string): ThinkingCapability {
-  return expectedThinkingCapability(agent, model)
+export function getReasoningEffortCapability(agent: string, model?: string): ReasoningEffortCapability {
+  return expectedReasoningEffortCapability(agent, model)
 }
 
-export function supportsThinking(capability: ThinkingCapability, value: string): value is ThinkingLevel {
+export function supportsReasoningEffort(capability: ReasoningEffortCapability, value: string): value is ReasoningEffortLevel {
   return value === "default" || capability.levels.some(level => level === value)
 }
 
-export function thinkingLabel(value: string): string {
+export function reasoningEffortLabel(value: string): string {
   return value === "xhigh" ? "Extra high" : value[0].toUpperCase() + value.slice(1)
 }
 
 /** Default sends no flag, so the CLI keeps its own setting. */
-export function thinkingArgs(agent: string, model: string | undefined, value: unknown): string[] {
+export function reasoningEffortArgs(agent: string, model: string | undefined, value: unknown): string[] {
   if (typeof value !== "string" || value === "default") return []
-  switch (getThinkingCapability(agent, model).control) {
+  switch (getReasoningEffortCapability(agent, model).control) {
     case "codex-config": return ["-c", `model_reasoning_effort=${JSON.stringify(value)}`]
     case "claude-effort": return ["--effort", value]
     case "commandcode-effort": return ["--effort", value]

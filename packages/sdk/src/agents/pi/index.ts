@@ -14,7 +14,7 @@ import type {
 import type { Event } from "../../types/events"
 import { parsePiLine } from "./parser"
 import { PI_TOOL_MAPPINGS } from "./tools"
-import { thinkingArgs } from "../../thinking"
+import { reasoningEffortArgs } from "../../reasoning-effort"
 import { piModelIdentity } from "./model-identity"
 
 /**
@@ -33,7 +33,7 @@ export const piAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    const args = thinkingArgs("pi", options.model, options.thinking)
+    const args = reasoningEffortArgs("pi", options.model, options.reasoningEffort)
 
     // Use JSON mode for structured output
     args.push("--mode", "json")

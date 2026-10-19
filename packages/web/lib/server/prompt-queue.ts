@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/prisma"
 import type { QueuedMessage } from "@/lib/types"
 
 export type QueueItem = Pick<QueuedPrompt,
-  "id" | "clientId" | "content" | "agent" | "model" | "thinking" | "lastError" | "position" | "userMessageId" | "status"
+  "id" | "clientId" | "content" | "agent" | "model" | "reasoningEffort" | "lastError" | "position" | "userMessageId" | "status"
 >
 
 export function toQueuedMessage(item: QueueItem): QueuedMessage {
@@ -16,7 +16,7 @@ export function toQueuedMessage(item: QueueItem): QueuedMessage {
     content: item.content,
     agent: item.agent,
     model: item.model,
-    thinking: item.thinking ?? undefined,
+    reasoningEffort: item.reasoningEffort ?? undefined,
     lastError: item.lastError ?? undefined,
   }
 }
@@ -26,7 +26,7 @@ export interface QueueInput {
   content: string
   agent: string
   model: string
-  thinking?: string
+  reasoningEffort?: string
 }
 
 export class QueueIdConflict extends Error {
@@ -47,7 +47,7 @@ export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<
     })
     if (existing) {
       if (existing.status === "cancelled") return existing
-      if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model || (existing.thinking ?? "default") !== (input.thinking ?? "default")) {
+      if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model || (existing.reasoningEffort ?? "default") !== (input.reasoningEffort ?? "default")) {
         throw new QueueIdConflict()
       }
       return existing
@@ -66,7 +66,7 @@ export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<
         content: input.content,
         agent: input.agent,
         model: input.model,
-        thinking: input.thinking === "default" ? null : input.thinking,
+        reasoningEffort: input.reasoningEffort === "default" ? null : input.reasoningEffort,
         userMessageId: randomUUID(),
         assistantMessageId: randomUUID(),
       },
@@ -91,7 +91,7 @@ export async function importLegacyPrompts(
       })
       if (existing) {
         if (existing.status === "cancelled") continue
-        if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model || (existing.thinking ?? "default") !== (input.thinking ?? "default")) {
+        if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model || (existing.reasoningEffort ?? "default") !== (input.reasoningEffort ?? "default")) {
           throw new QueueIdConflict()
         }
         continue
@@ -109,7 +109,7 @@ export async function importLegacyPrompts(
           content: input.content,
           agent: input.agent,
           model: input.model,
-          thinking: input.thinking === "default" ? null : input.thinking,
+          reasoningEffort: input.reasoningEffort === "default" ? null : input.reasoningEffort,
           userMessageId: randomUUID(),
           assistantMessageId: randomUUID(),
         },

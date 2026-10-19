@@ -65,7 +65,7 @@ export type MessageAction = "force-push" | "view-pr" | "view-branch"
 
 /** Metadata for git-operation messages */
 export interface MessageMetadata {
-  thinking?: string
+  reasoningEffort?: string
   /** Confirmed execution outcome, persisted by the server finalizer. */
   turnFinalization?: {
     state: string
@@ -270,7 +270,7 @@ export type ChatStatus =
 
 /** A message that the user submitted while the agent was busy. Files are not persisted. */
 export interface QueuedMessage {
-  thinking?: string
+  reasoningEffort?: string
   id: string
   content: string
   /** This tab's fallback could not be saved durably; never serialized to storage. */

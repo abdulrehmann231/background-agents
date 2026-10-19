@@ -2,7 +2,7 @@
  * Claude Code CLI Agent Definition
  */
 
-import { thinkingArgs } from "../../thinking"
+import { reasoningEffortArgs } from "../../reasoning-effort"
 import type { AgentDefinition, CommandSpec, ParseContext, RunOptions } from "../../core/agent"
 import type { CodeAgentSandbox } from "../../types/provider"
 import type { Event } from "../../types/events"
@@ -133,7 +133,7 @@ export const claudeAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    const args: string[] = thinkingArgs("claude", options.model, options.thinking)
+    const args: string[] = reasoningEffortArgs("claude", options.model, options.reasoningEffort)
 
     // Print mode for non-interactive usage
     args.push("-p")

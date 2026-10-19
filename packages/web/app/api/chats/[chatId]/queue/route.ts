@@ -21,8 +21,8 @@ function validInput(value: unknown, fallbackAgent?: string, fallbackModel?: stri
   const agent = typeof v.agent === "string" && v.agent ? v.agent : fallbackAgent
   const model = typeof v.model === "string" && v.model ? v.model : fallbackModel
   if (!clientId || clientId.length > 128 || !content || content.length > 100_000 || !agent || !model) return null
-  const thinking = typeof v.thinking === "string" && v.thinking ? v.thinking : undefined
-  return { clientId, content, agent, model, thinking }
+  const reasoningEffort = typeof v.reasoningEffort === "string" && v.reasoningEffort ? v.reasoningEffort : undefined
+  return { clientId, content, agent, model, reasoningEffort }
 }
 
 async function authorizedChat(chatId: string) {

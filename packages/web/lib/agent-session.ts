@@ -79,7 +79,7 @@ export interface AgentSessionOptions {
   env?: Record<string, string>
   /** When true, agent should plan before acting */
   planMode?: boolean
-  thinking?: string
+  reasoningEffort?: string
   /**
    * Discovered skills to inject as a structured catalog in the system prompt.
    * Populated by scanning .agents/skills/ after install.
@@ -162,7 +162,7 @@ export async function createBackgroundAgentSession(
     model: options.model,
     env: Object.keys(env).length > 0 ? env : undefined,
     planMode: options.planMode,
-    thinking: options.thinking,
+    reasoningEffort: options.reasoningEffort,
   })
 
   return {

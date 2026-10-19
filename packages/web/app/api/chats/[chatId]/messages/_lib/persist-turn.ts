@@ -54,7 +54,7 @@ export async function persistTurn(params: {
         timestamp: BigInt(now),
         agent: payload.agent,
         model: payload.model,
-        metadata: { thinking: payload.thinking ?? "default" },
+        metadata: { reasoningEffort: payload.reasoningEffort ?? "default" },
         uploadedFiles:
           uploadedFilePaths.length > 0
             ? (uploadedFilePaths as unknown as Prisma.InputJsonValue)
@@ -64,7 +64,7 @@ export async function persistTurn(params: {
         content: agentPrompt,
         agent: payload.agent,
         model: payload.model,
-        metadata: { thinking: payload.thinking ?? "default" },
+        metadata: { reasoningEffort: payload.reasoningEffort ?? "default" },
         uploadedFiles:
           uploadedFilePaths.length > 0
             ? (uploadedFilePaths as unknown as Prisma.InputJsonValue)
@@ -84,10 +84,10 @@ export async function persistTurn(params: {
         model: payload.model,
         toolCalls: [],
         contentBlocks: [],
-        metadata: { usage: usageMeta, thinking: payload.thinking ?? "default" } as unknown as Prisma.InputJsonValue,
+        metadata: { usage: usageMeta, reasoningEffort: payload.reasoningEffort ?? "default" } as unknown as Prisma.InputJsonValue,
       },
       update: {
-        metadata: { usage: usageMeta, thinking: payload.thinking ?? "default" } as unknown as Prisma.InputJsonValue,
+        metadata: { usage: usageMeta, reasoningEffort: payload.reasoningEffort ?? "default" } as unknown as Prisma.InputJsonValue,
       },
     })
 

@@ -15,9 +15,8 @@ import { queuedSendNotice } from "@/lib/composer-queue"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
 import { DismissButton } from "./DismissButton"
 import { AgentModelSelector } from "./AgentModelSelector"
-import { ThinkingSelector } from "./ThinkingSelector"
-import { EffortSelector } from "./EffortSelector"
-import type { ThinkingCapability } from "@background-agents/sdk/thinking"
+import { ReasoningEffortSelector } from "./ReasoningEffortSelector"
+import type { ReasoningEffortCapability } from "@background-agents/sdk/reasoning-effort"
 import { CreditWarningBanner } from "./CreditWarningBanner"
 import { RepoCombobox } from "./RepoCombobox"
 import { BranchCombobox } from "./BranchCombobox"
@@ -89,9 +88,9 @@ interface ChatInputProps {
   planModeEnabled: boolean
   planModeSupported: boolean
   onSetPlanMode: (enabled: boolean) => void
-  thinking?: string
-  onThinkingChange?: (value: string) => void
-  thinkingCapability?: ThinkingCapability
+  reasoningEffort?: string
+  onReasoningEffortChange?: (value: string) => void
+  reasoningEffortCapability?: ReasoningEffortCapability
   // MCP servers (chat-scoped, draft-aware)
   showMcpButton: boolean
   isDraftChat: boolean
@@ -244,9 +243,9 @@ export function ChatInput({
   planModeEnabled,
   planModeSupported,
   onSetPlanMode,
-  thinking = "default",
-  onThinkingChange,
-  thinkingCapability,
+  reasoningEffort = "default",
+  onReasoningEffortChange,
+  reasoningEffortCapability,
   // MCP servers
   showMcpButton,
   isDraftChat,
@@ -737,10 +736,7 @@ export function ChatInput({
               )
             )}
 
-            {onThinkingChange && thinkingCapability && <ThinkingSelector isMobile={isMobile} capability={thinkingCapability} value={thinking} onChange={onThinkingChange} />}
-            {/* Eliza-only, cosmetic: a second no-op selector so the composer
-                layout can be exercised with two selectors side by side. */}
-            {currentAgent === "eliza" && <EffortSelector isMobile={isMobile} />}
+            {onReasoningEffortChange && reasoningEffortCapability && <ReasoningEffortSelector isMobile={isMobile} capability={reasoningEffortCapability} value={reasoningEffort} onChange={onReasoningEffortChange} />}
             {/* Agent and Model selectors */}
             {!isMobile && agentModelSelector}
           </div>

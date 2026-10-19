@@ -37,12 +37,12 @@ const KIMI_DEFAULT_BASE_URL = "https://api.moonshot.ai/v1"
  * with a max_context_size or the CLI refuses to use it. ids match the Moonshot
  * /v1/models catalog and the values in agentModels.kimi (@background-agents/common).
  */
-const KIMI_MODELS: { id: string; context: number; thinking?: "toggle" | "always" }[] = [
+const KIMI_MODELS: { id: string; context: number; reasoningEffort?: "toggle" | "always" }[] = [
   { id: "kimi-k3", context: 1048576 },
-  { id: "kimi-k2.7-code", context: 262144, thinking: "always" },
-  { id: "kimi-k2.7-code-highspeed", context: 262144, thinking: "always" },
-  { id: "kimi-k2.6", context: 262144, thinking: "toggle" },
-  { id: "kimi-k2.5", context: 262144, thinking: "toggle" },
+  { id: "kimi-k2.7-code", context: 262144, reasoningEffort: "always" },
+  { id: "kimi-k2.7-code-highspeed", context: 262144, reasoningEffort: "always" },
+  { id: "kimi-k2.6", context: 262144, reasoningEffort: "toggle" },
+  { id: "kimi-k2.5", context: 262144, reasoningEffort: "toggle" },
 ]
 /** Default model — must be one of KIMI_MODELS. */
 const KIMI_DEFAULT_MODEL = "kimi-k2.7-code"
@@ -64,7 +64,7 @@ ${KIMI_MODELS.map(
 [models."${m.id}"]
 provider = "kimi"
 model = "${m.id}"
-max_context_size = ${m.context}${m.thinking === "always" ? '\ncapabilities = ["thinking", "always_thinking"]' : m.thinking ? '\ncapabilities = ["thinking"]' : ""}`
+max_context_size = ${m.context}${m.reasoningEffort === "always" ? '\ncapabilities = ["thinking", "always_thinking"]' : m.reasoningEffort ? '\ncapabilities = ["thinking"]' : ""}`
 ).join("\n")}
 `
 
@@ -138,7 +138,9 @@ export const kimiAgent: AgentDefinition = {
       args: ["-c", `export PATH="$HOME/.kimi-code/bin:$PATH" && ${kimiCmd}`],
       // Native process override, not a persisted session/config update. On
       // resume the previous turn's override must not become the next default.
-      env: { ...options.env, ...(options.thinking && options.thinking !== "default" ? { KIMI_MODEL_THINKING_EFFORT: options.thinking } : {}) },
+      // KIMI_MODEL_THINKING_EFFORT is the Kimi CLI's own env var name — an
+      // external contract, not ours to rename.
+      env: { ...options.env, ...(options.reasoningEffort && options.reasoningEffort !== "default" ? { KIMI_MODEL_THINKING_EFFORT: options.reasoningEffort } : {}) },
     }
   },
 

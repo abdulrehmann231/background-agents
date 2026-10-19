@@ -22,10 +22,10 @@ interface ChatPanelProps {
   settings: Settings
   credentialFlags: CredentialFlags
   showCreditDialog: (provider?: string, creditBalance?: number | null) => void
-  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, thinking?: string) => void
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
   /** Refresh the chat history after the SSE stream died (status === "disconnected"). */
   onReload?: (chatId: string) => Promise<void> | void
-  onEnqueueMessage?: (message: string, agent?: string, model?: string, thinking?: string) => void
+  onEnqueueMessage?: (message: string, agent?: string, model?: string, reasoningEffort?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => void
   onStopAgent: () => void
@@ -94,9 +94,9 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
     hasLinkedRepo,
     planModeEnabled,
     setPlanModeEnabled,
-    thinking,
-    setThinking,
-    thinkingCapability,
+    reasoningEffort,
+    setReasoningEffort,
+    reasoningEffortCapability,
     currentAgent,
     currentModel,
     rebaseConflict,
@@ -205,9 +205,9 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
       planModeEnabled={planModeEnabled}
       planModeSupported={agentSupportsPlanMode[currentAgent]}
       onSetPlanMode={setPlanModeEnabled}
-      thinking={thinking}
-      onThinkingChange={setThinking}
-      thinkingCapability={thinkingCapability}
+      reasoningEffort={reasoningEffort}
+      onReasoningEffortChange={setReasoningEffort}
+      reasoningEffortCapability={reasoningEffortCapability}
       // MCP servers — only show when authenticated and we have a chat to attach to.
       showMcpButton={isAuthenticated && !!chat?.id && !!onMaterializeDraftForMcp}
       isDraftChat={isDraftChat}
@@ -279,7 +279,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
         onChooseModel={() => setModelPickerRequest(previous => ({ chatId: chat.id, sequence: (previous?.sequence ?? 0) + 1 }))}
         currentAgent={currentAgent}
         currentModel={currentModel}
-        currentThinking={thinking}
+        currentReasoningEffort={reasoningEffort}
         planModeEnabled={planModeEnabled}
         messagesContainerRef={messagesContainerRef}
         messagesEndRef={messagesEndRef}

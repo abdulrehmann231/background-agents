@@ -198,16 +198,16 @@ Starts a background task. Returns immediately with a `TurnHandle` (`{ executionI
 const { executionId, pid, outputFile } = await session.start("Your task here")
 ```
 
-### Per-turn thinking
+### Per-turn reasoning effort
 
-`thinking` sets the reasoning effort for a session or for a single turn. It is separate from `planMode`.
+`reasoningEffort` sets the reasoning effort for a session or for a single turn. It is separate from `planMode`.
 
 ```typescript
-const session = await createSession("codex", { sandbox, model: "gpt-6.1-sol", thinking: "low" })
-await session.start("Investigate this failure", { thinking: "high" })
+const session = await createSession("codex", { sandbox, model: "gpt-6.1-sol", reasoningEffort: "low" })
+await session.start("Investigate this failure", { reasoningEffort: "high" })
 ```
 
-The value is passed to the agent's own flag (for example `--effort` for Claude and `model_reasoning_effort` for Codex). `"default"` sends no flag, so the CLI keeps its own setting. `getThinkingCapability(agent, model).levels` lists the levels offered for a model. Values aren't validated: like an unknown model, an unsupported level is left to the CLI.
+The value is passed to the agent's own flag (for example `--effort` for Claude and `model_reasoning_effort` for Codex). `"default"` sends no flag, so the CLI keeps its own setting. `getReasoningEffortCapability(agent, model).levels` lists the levels offered for a model. Values aren't validated: like an unknown model, an unsupported level is left to the CLI.
 
 ### `session.getEvents()`
 

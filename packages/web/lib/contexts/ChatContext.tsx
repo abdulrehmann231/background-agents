@@ -27,12 +27,12 @@ export interface ChatContextValue {
   updateChatById: (chatId: string, updates: Partial<Chat>) => Promise<void>
 
   // Message operations
-  sendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, thinking?: string) => void
+  sendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
   stopAgent: () => void
   addMessage: (message: Message) => void
 
   // Queue operations
-  enqueueMessage: (message: string, agent?: string, model?: string, thinking?: string) => void
+  enqueueMessage: (message: string, agent?: string, model?: string, reasoningEffort?: string) => void
   removeQueuedMessage: (id: string) => void
   resumeQueue: () => void
 
