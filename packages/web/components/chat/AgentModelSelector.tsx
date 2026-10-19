@@ -393,7 +393,7 @@ export function AgentModelSelector({
         <button
           onClick={() => setShowAgentSheet(true)}
           aria-label={`Select agent: ${agentLabels[currentAgent]}`}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           title={agentLabels[currentAgent]}
         >
           <AgentIcon agent={currentAgent} className="h-4 w-4" />
