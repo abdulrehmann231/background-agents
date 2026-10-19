@@ -4,6 +4,7 @@ import { codexAgent } from "../src/agents/codex"
 import { commandCodeAgent } from "../src/agents/commandcode"
 import { copilotAgent } from "../src/agents/copilot"
 import { droidAgent } from "../src/agents/droid"
+import { elizaAgent } from "../src/agents/eliza"
 import { geminiAgent } from "../src/agents/gemini"
 import { kimiAgent } from "../src/agents/kimi"
 import { opencodeAgent } from "../src/agents/opencode"
@@ -46,5 +47,12 @@ describe("per-turn thinking", () => {
   it("qualifies Pi's bare Claude IDs the same way for levels and --model", () => {
     expect(getThinkingCapability("pi", "claude-opus-5").levels).toContain("high")
     expect(piAgent.buildCommand({ model: "claude-opus-5", prompt: "hello" }).args).toEqual(expect.arrayContaining(["--model", "anthropic/claude-opus-5"]))
+  })
+
+  it("offers Eliza levels for the UI to render, but its CLI command ignores whatever is picked", () => {
+    expect(getThinkingCapability("eliza", "eliza-classic-1.0").levels).toEqual(["low", "medium", "high", "xhigh", "max"])
+    const withThinking = elizaAgent.buildCommand({ model: "eliza-classic-1.0", prompt: "hello", thinking: "max" })
+    const withoutThinking = elizaAgent.buildCommand({ model: "eliza-classic-1.0", prompt: "hello" })
+    expect(withThinking).toEqual(withoutThinking)
   })
 })

@@ -16,6 +16,7 @@ import { PendingFilesDisplay } from "./PendingFilesDisplay"
 import { DismissButton } from "./DismissButton"
 import { AgentModelSelector } from "./AgentModelSelector"
 import { ThinkingSelector } from "./ThinkingSelector"
+import { EffortSelector } from "./EffortSelector"
 import type { ThinkingCapability } from "@background-agents/sdk/thinking"
 import { CreditWarningBanner } from "./CreditWarningBanner"
 import { RepoCombobox } from "./RepoCombobox"
@@ -737,6 +738,9 @@ export function ChatInput({
             )}
 
             {onThinkingChange && thinkingCapability && <ThinkingSelector isMobile={isMobile} capability={thinkingCapability} value={thinking} onChange={onThinkingChange} />}
+            {/* Eliza-only, cosmetic: a second no-op selector so the composer
+                layout can be exercised with two selectors side by side. */}
+            {currentAgent === "eliza" && <EffortSelector isMobile={isMobile} />}
             {/* Agent and Model selectors */}
             {!isMobile && agentModelSelector}
           </div>

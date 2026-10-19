@@ -62,6 +62,11 @@ function expectedThinkingCapability(agent: string, model?: string): ThinkingCapa
   }
   // K2.5/K2.6 have an on/off switch, not effort levels. K2.7 always thinks.
   if (agent === "kimi" && ["kimi-k2.5", "kimi-k2.6"].includes(model)) return { levels: ["on", "off"], control: "kimi-env" }
+  // Eliza is a fake, regex-based test agent with no real thinking flag to
+  // forward — this exists only so the composer has something to exercise
+  // the thinking selector against. No `control`, since buildCommand() never
+  // calls thinkingArgs(): whatever level is picked here is silently ignored.
+  if (agent === "eliza") return { levels: extended }
   return none
 }
 
