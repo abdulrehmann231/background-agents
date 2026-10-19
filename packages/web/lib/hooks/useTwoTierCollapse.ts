@@ -1,0 +1,66 @@
+"use client"
+
+import { useLayoutEffect, useRef, useState } from "react"
+
+/**
+ * Coordinates two label groups (e.g. the composer's left and right trigger
+ * clusters) as a priority pair, instead of each trigger deciding for itself:
+ * the row first tries to show both groups' labels in full; if that doesn't
+ * fit, the lower-priority group (`right`) collapses to icon-only first;
+ * only if it *still* doesn't fit with `right` collapsed does the
+ * higher-priority group (`left`) also collapse.
+ *
+ * Each group needs two hidden, always-rendered measurement clones — full
+ * labels, and icon-only — attached via the matching `*NaturalRef`/
+ * `*CollapsedRef`. Measuring both up front (rather than, say, collapsing
+ * `right` and then checking whether `left` still fits) means re-expanding
+ * is just as reliable as collapsing: nothing has to change the real visible
+ * content first to find out whether a wider state would fit, which would
+ * shift the available space and make the check lie about itself.
+ */
+export function useTwoTierCollapse() {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const leftNaturalRef = useRef<HTMLDivElement | null>(null)
+  const leftCollapsedRef = useRef<HTMLDivElement | null>(null)
+  const rightNaturalRef = useRef<HTMLDivElement | null>(null)
+  const rightCollapsedRef = useRef<HTMLDivElement | null>(null)
+  const [showLeft, setShowLeft] = useState(true)
+  const [showRight, setShowRight] = useState(true)
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const leftNatural = leftNaturalRef.current
+    const leftCollapsed = leftCollapsedRef.current
+    const rightNatural = rightNaturalRef.current
+    const rightCollapsed = rightCollapsedRef.current
+    if (!container || !leftNatural || !leftCollapsed || !rightNatural || !rightCollapsed) return
+
+    const check = () => {
+      const available = container.clientWidth
+      if (leftNatural.offsetWidth + rightNatural.offsetWidth <= available) {
+        setShowLeft(true)
+        setShowRight(true)
+      } else if (leftNatural.offsetWidth + rightCollapsed.offsetWidth <= available) {
+        setShowLeft(true)
+        setShowRight(false)
+      } else {
+        setShowLeft(false)
+        setShowRight(false)
+      }
+    }
+
+    check()
+    // Re-check on container resize, and whenever either group's natural or
+    // collapsed footprint changes (new repo/branch/model name, items
+    // appearing/disappearing, mobile/desktop icon-size changes, etc).
+    const observer = new ResizeObserver(check)
+    observer.observe(container)
+    observer.observe(leftNatural)
+    observer.observe(leftCollapsed)
+    observer.observe(rightNatural)
+    observer.observe(rightCollapsed)
+    return () => observer.disconnect()
+  }, [])
+
+  return { containerRef, leftNaturalRef, leftCollapsedRef, rightNaturalRef, rightCollapsedRef, showLeft, showRight }
+}

@@ -7,8 +7,14 @@ import { Brain } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 
-export function ReasoningEffortSelector({ capability, value, onChange, isMobile = false }: {
+export function ReasoningEffortSelector({ capability, value, onChange, isMobile = false, forceShowLabel }: {
   capability: ReasoningEffortCapability; value: string; onChange: (value: string) => void; isMobile?: boolean
+  /**
+   * Desktop only: forces the label on (`true`) or off (`false`) regardless
+   * of available space — e.g. a parent coordinating this with other
+   * triggers as one group. Omit to use the fixed breakpoint below.
+   */
+  forceShowLabel?: boolean
 }) {
   const helpId = useId()
   const explanation = "Default uses the agent and model's own reasoning effort setting, without an override. It does not select a different model or always mean Medium. Changes apply to future prompts."
@@ -30,7 +36,9 @@ export function ReasoningEffortSelector({ capability, value, onChange, isMobile 
             class forces `display: -webkit-box`, permanently overriding the
             `hidden`/`@[32rem]:inline` toggle below it. A <div> isn't matched
             by that selector, so the toggle actually takes effect. */}
-        <div className={cn(!isMobile && "hidden @[32rem]:inline")}><SelectValue /></div>
+        <div className={cn(!isMobile && (
+          forceShowLabel === undefined ? "hidden @[32rem]:inline" : (forceShowLabel ? "inline" : "hidden")
+        ))}><SelectValue /></div>
       </SelectTrigger>
       <SelectContent side="top" align="end" className="max-h-[min(28rem,var(--radix-select-content-available-height))] max-w-[calc(100vw-2rem)]">
         <SelectItem value="default" title={explanation} aria-describedby={helpId}>Default</SelectItem>

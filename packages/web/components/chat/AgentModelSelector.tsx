@@ -5,6 +5,7 @@ import { ChevronDown, Cpu, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import { useUpwardMenuMaxHeight } from "@/lib/hooks/useUpwardMenuMaxHeight"
+import { useCollapsibleLabel } from "@/lib/hooks/useCollapsibleLabel"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
 import { getAgentModels, getFreeModelForAgent, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, agentUsesSharedPool, resolveModelForAgent, sharedPoolProviderForModel, formatTokenRate, ALL_AGENTS } from "@/lib/types"
 import { chargeableUsd, creditTier } from "@/lib/server/credits"
@@ -45,6 +46,12 @@ interface AgentModelSelectorProps {
   onDropdownOpen?: () => void
   /** When true, close all dropdowns (controlled by parent) */
   closeDropdowns?: boolean
+  /**
+   * Forces both the agent and model labels on (`true`) or off (`false`)
+   * regardless of available space — e.g. a parent coordinating this with
+   * other triggers as one group. Omit to let each decide for itself.
+   */
+  forceShowLabel?: boolean
 }
 
 // Env override so Eliza can be forced on in tests/CI regardless of the stored
@@ -133,6 +140,7 @@ export function AgentModelSelector({
   onDropdownOpen,
   closeDropdowns,
   modelPickerRequest,
+  forceShowLabel,
 }: AgentModelSelectorProps) {
   const modals = useModals()
 
@@ -174,6 +182,14 @@ export function AgentModelSelector({
   }, [modelPickerRequest, chat?.id, isMobile, onDropdownOpen])
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const agentDropdownMaxHeight = useUpwardMenuMaxHeight(showAgentDropdown, agentDropdownRef)
+  // The model label can be a user-named custom endpoint — arbitrary length,
+  // unlike the agent label (always one of a fixed, short set) — so when no
+  // parent is coordinating label visibility, it collapses to icon-only
+  // based on actual overflow rather than a fixed breakpoint. See
+  // useCollapsibleLabel.
+  const { itemRef: modelButtonRef, measureRef: modelLabelMeasureRef, showLabel: modelFits } = useCollapsibleLabel<HTMLButtonElement>()
+  const showAgentLabel = forceShowLabel
+  const showModelLabel = forceShowLabel ?? modelFits
 
   const availableModels = getAgentModels(currentAgent, endpoints)
   const selectedModelConfig = availableModels.find(m => m.value === currentModel)
@@ -452,7 +468,12 @@ export function AgentModelSelector({
           title={agentLabels[currentAgent]}
         >
           <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
-          <span className="hidden @[32rem]:inline">{agentLabels[currentAgent]}</span>
+          <span className={cn(
+            "whitespace-nowrap",
+            forceShowLabel === undefined ? "hidden @[32rem]:inline" : (showAgentLabel ? "inline" : "hidden")
+          )}>
+            {agentLabels[currentAgent]}
+          </span>
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {showAgentDropdown && (
@@ -501,18 +522,35 @@ export function AgentModelSelector({
       }}>
         <PopoverTrigger asChild>
           <button
+            ref={modelButtonRef}
             className={cn(
-              "flex items-center gap-1 text-sm transition-colors cursor-pointer",
+              "flex items-center gap-1 overflow-hidden text-sm transition-colors cursor-pointer",
               !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
             )}
             title={getModelLabel(currentAgent, currentModel, endpoints)}
           >
-            {!hasRequiredCredentials && <Lock className="h-3.5 w-3.5" />}
-            <Cpu className="h-3.5 w-3.5" />
-            <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
-            <ChevronDown className="h-3.5 w-3.5" />
+            {!hasRequiredCredentials && <Lock className="h-3.5 w-3.5 shrink-0" />}
+            <Cpu className="h-3.5 w-3.5 shrink-0" />
+            <span className={cn("whitespace-nowrap", showModelLabel ? "inline" : "hidden")}>
+              {getModelLabel(currentAgent, currentModel, endpoints)}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
           </button>
         </PopoverTrigger>
+        {/* Hidden clone measuring this trigger's full natural width — see
+            useCollapsibleLabel for why measuring the real element (which
+            may already be collapsed) wouldn't work. Not needed when a parent
+            is already forcing the label on or off. */}
+        {forceShowLabel === undefined && (
+          <span
+            ref={modelLabelMeasureRef}
+            aria-hidden="true"
+            className="pointer-events-none invisible fixed left-0 top-0 flex items-center gap-1 whitespace-nowrap text-sm"
+          >
+            <Cpu className="h-3.5 w-3.5 shrink-0" />
+            <span>{getModelLabel(currentAgent, currentModel, endpoints)}</span>
+          </span>
+        )}
         <PopoverContent
           className="w-64 p-0 max-h-[var(--radix-popover-content-available-height)] overflow-hidden"
           align="end"

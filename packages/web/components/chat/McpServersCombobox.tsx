@@ -87,6 +87,12 @@ interface McpServersComboboxProps {
   /** Optional controlled open state (e.g. from the command palette). */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * Forces the trigger label on/off regardless of available space (e.g. a
+   * parent coordinating several triggers' labels as one group). Omit to let
+   * the trigger decide for itself based on its own available room.
+   */
+  showLabel?: boolean
 }
 
 export function McpServersCombobox({
@@ -98,6 +104,7 @@ export function McpServersCombobox({
   isMobile = false,
   open: openProp,
   onOpenChange,
+  showLabel,
 }: McpServersComboboxProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = openProp ?? internalOpen
@@ -488,6 +495,7 @@ export function McpServersCombobox({
         <ComboboxTriggerButton
           disabled={disabled}
           isMobile={isMobile}
+          showLabel={showLabel}
           title={triggerLabel}
           aria-label={triggerLabel}
           icon={<Plug className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />}
