@@ -660,7 +660,7 @@ export function ChatInput({
                   <button
                     onClick={() => setShowModeSheet(true)}
                     aria-label={planModeEnabled ? "Plan mode" : "Edit mode"}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                     title={planModeEnabled ? "Plan mode — agent will plan before acting" : "Edit mode — agent will edit code directly"}
                   >
                     {planModeEnabled ? (
