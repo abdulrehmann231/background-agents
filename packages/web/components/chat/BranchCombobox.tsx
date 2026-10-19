@@ -33,7 +33,10 @@ interface BranchComboboxProps {
   disabled?: boolean
   /** Mobile layout */
   isMobile?: boolean
-  /** Always show label regardless of container width */
+  /**
+   * Forces the label on (`true`) or off (`false`) regardless of available
+   * space. Omit to let the trigger decide for itself.
+   */
   showLabel?: boolean
 }
 
@@ -44,7 +47,7 @@ export function BranchCombobox({
   defaultBranch,
   disabled = false,
   isMobile = false,
-  showLabel = false,
+  showLabel,
 }: BranchComboboxProps) {
   const [open, setOpen] = useState(false)
   const [branches, setBranches] = useState<GitHubBranch[]>([])

@@ -13,7 +13,12 @@ interface ComboboxTriggerButtonProps
   label: ReactNode
   /** Mobile layout: slightly larger icons */
   isMobile?: boolean
-  /** Always show the label regardless of available space */
+  /**
+   * Forces the label on (`true`) or off (`false`) regardless of available
+   * space — e.g. a parent coordinating several triggers' labels as one
+   * group. Omit (`undefined`) to let the trigger decide for itself based on
+   * its own available room.
+   */
   showLabel?: boolean
 }
 
@@ -23,8 +28,10 @@ interface ComboboxTriggerButtonProps
  * collapses to icon-only when there isn't room for it — based on actual
  * overflow rather than a fixed breakpoint, since repo/branch names are
  * arbitrary-length (see useCollapsibleLabel) — and a trailing chevron.
- * `showLabel` forces the label on regardless of space, for layouts with
- * generous, fixed horizontal room (the scheduled-job form).
+ * `showLabel` forces the label on or off regardless of space, for a parent
+ * coordinating several triggers' labels as one group (the composer's left/
+ * right side groups) or a layout with generous, fixed horizontal room (the
+ * scheduled-job form, which forces it on).
  *
  * Forwards its ref and spreads extra props so it can be used as the child of
  * `PopoverTrigger asChild` (Radix clones the child and merges its own props
@@ -37,11 +44,11 @@ export const ComboboxTriggerButton = forwardRef<
   HTMLButtonElement,
   ComboboxTriggerButtonProps
 >(function ComboboxTriggerButton(
-  { icon, label, isMobile = false, showLabel: forceShowLabel = false, className, disabled, ...props },
+  { icon, label, isMobile = false, showLabel: forceShowLabel, className, disabled, ...props },
   forwardedRef
 ) {
   const { itemRef, measureRef, showLabel: fits } = useCollapsibleLabel<HTMLButtonElement>()
-  const showLabel = forceShowLabel || fits
+  const showLabel = forceShowLabel ?? fits
   return (
     <>
       <button
@@ -65,8 +72,8 @@ export const ComboboxTriggerButton = forwardRef<
       </button>
       {/* Hidden clone of the full icon+label content, measured by
           useCollapsibleLabel to decide whether the label above fits. Not
-          needed when the label is forced on regardless of space. */}
-      {!forceShowLabel && (
+          needed when a parent is already forcing the label on or off. */}
+      {forceShowLabel === undefined && (
         <span
           ref={measureRef}
           aria-hidden="true"

@@ -48,7 +48,10 @@ interface RepoComboboxProps {
   disabled?: boolean
   /** Mobile layout */
   isMobile?: boolean
-  /** Always show label regardless of container width */
+  /**
+   * Forces the label on (`true`) or off (`false`) regardless of available
+   * space. Omit to let the trigger decide for itself.
+   */
   showLabel?: boolean
   /** If true, clicking the button opens the create modal directly instead of showing the dropdown */
   createOnly?: boolean
@@ -60,7 +63,7 @@ export function RepoCombobox({
   onRequestCreate,
   disabled = false,
   isMobile = false,
-  showLabel = false,
+  showLabel,
   createOnly = false,
 }: RepoComboboxProps) {
   const { status } = useSession()
