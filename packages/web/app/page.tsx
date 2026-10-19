@@ -149,9 +149,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     setLimitReachedState,
     dismissLimitReached,
     retryWithOpenCode,
-    thinkingRecovery,
-    dismissThinkingRecovery,
-    confirmThinkingRecovery,
   } = useChatWithSync()
 
 
@@ -793,9 +790,6 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         onSlashCommand={handleSlashCommand}
         onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
         limitReachedState={limitReachedState}
-        thinkingRecovery={thinkingRecovery}
-        onDismissThinkingRecovery={dismissThinkingRecovery}
-        onConfirmThinkingRecovery={confirmThinkingRecovery}
         onDismissLimitReached={dismissLimitReached}
         onContinueWithOpenCode={() => {
           if (limitReachedState.pendingMessage) {

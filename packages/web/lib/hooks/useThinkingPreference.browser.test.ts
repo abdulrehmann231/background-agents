@@ -13,7 +13,6 @@ interface Harness {
   setProps: (props: Record<string, unknown>) => void
   setResponse: (response: Record<string, unknown> | "failure") => void
   setThinking: (value: string) => void
-  requestThinking?: (value: string) => void
   recheckThinking?: () => void
   onThinkingMenuOpen?: () => void
 }
@@ -35,7 +34,7 @@ beforeAll(async () => {
         const [props,setProps]=React.useState(window.initialProps);
         h.setProps=next=>setProps(previous=>({...previous,...next}));
         const r=useThinkingPreference(props.agent,props.model,props.chatId,props.sandboxId,{readinessKey:props.readinessKey,isStarting:props.isStarting});
-        Object.assign(h,{setThinking:r.setThinking,requestThinking:r.requestThinking,recheckThinking:r.recheckThinking,onThinkingMenuOpen:r.onThinkingMenuOpen});
+        Object.assign(h,{setThinking:r.setThinking,recheckThinking:r.recheckThinking,onThinkingMenuOpen:r.onThinkingMenuOpen});
         h.result={thinking:r.thinking,ready:r.ready,checking:r.checking,notice:r.notice,capability:r.capability};
         return React.createElement('pre',null,JSON.stringify(h.result));
       }
@@ -153,16 +152,6 @@ describe("thinking discovery and explicit preference recovery", () => {
     })
     await settle(page)
     expect(await snapshot(page)).toMatchObject({ thinking: "high", ready: false, capability: { status: "no_controls" } })
-    await page.close()
-  })
-  it("retains an incompatible recovery request until the user deliberately reselects", async () => {
-    const page = await mount()
-    await page.evaluate(() => (window as unknown as { harness: Harness }).harness.requestThinking?.("budget:1024"))
-    await settle(page)
-    expect(await snapshot(page)).toMatchObject({ thinking: "budget:1024", ready: false })
-    await page.evaluate(() => (window as unknown as { harness: Harness }).harness.setThinking("low"))
-    await settle(page)
-    expect(await snapshot(page)).toMatchObject({ thinking: "low", ready: true })
     await page.close()
   })
   it("does not poll a resolved catalog on ordinary turn lifecycle updates", async () => {

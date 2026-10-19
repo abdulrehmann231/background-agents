@@ -28,7 +28,7 @@ function renderWarning(uncommittedFilesCount: number, isNewRepo = false, overrid
     isCreating: chat.status === "creating",
     isNewRepo,
     git: {} as GitContextValue,
-    onSendMessage: async () => ({ status: "accepted" as const }),
+    onSendMessage: () => {},
     onReload: () => {},
     onResumeQueue: () => {},
     onChooseModel: () => {},

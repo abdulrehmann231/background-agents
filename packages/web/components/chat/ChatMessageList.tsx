@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useRef, useState } from "react"
-import { nanoid } from "nanoid"
 import { MoreHorizontal, GitBranch, GitBranchPlus, Trash2, ArrowDown, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat, Agent } from "@/lib/types"
@@ -10,10 +9,6 @@ import { getPendingSubmission } from "@/lib/chat-state"
 import { latestFailedAssistant, persistedProviderFailure, unsupportedModelFailure } from "@/lib/turn-error-presentation"
 import { dismissDirectSend } from "@/lib/direct-send-recovery"
 import { useToastStore } from "@/lib/stores/toast-store"
-import { requiresThinkingRecovery, type ThinkingRecoveryRequest } from "@/lib/thinking-recovery"
-import { parseThinking } from "@/lib/thinking"
-import { ThinkingRecoveryDialog } from "./ThinkingRecoveryDialog"
-import type { HandleSendMessage } from "@/lib/hooks/useSendMessage"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +25,7 @@ interface ChatMessageListProps {
   git: GitContextValue
   onOpenFile?: (filePath: string) => void
   onReload?: (chatId: string) => Promise<void> | void
-  onSendMessage: HandleSendMessage
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, thinking?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => Promise<void> | void
   onChooseModel?: () => void
@@ -81,22 +76,6 @@ export function ChatMessageList({
   const streamingId = (chat.status === "running" || chat.status === "creating") ? activeMessage?.id : undefined
   const showStarting = !streamingId && (isCreating || chat.status === "running" || !!pending)
   const directRecovery = chat.pendingSend ? [] : (chat.directSendRecovery ?? [])
-  const [thinkingRecovery, setThinkingRecovery] = useState<ThinkingRecoveryRequest>()
-  const attemptedRecovery = useRef<string | undefined>(undefined)
-  const recoveryInFlight = useRef<string | undefined>(undefined)
-  const currentRecovery = thinkingRecovery?.chatId === chat.id &&
-    thinkingRecovery.agent === currentAgent && thinkingRecovery.model === currentModel &&
-    (attemptedRecovery.current === thinkingRecovery.id || chat.status === "error" &&
-      thinkingRecovery.sourceMessageId === [...chat.messages].reverse().find(message => message.role === "user")?.id)
-    ? thinkingRecovery : undefined
-  const thinkingRecoveryRef = useRef(currentRecovery)
-  thinkingRecoveryRef.current = currentRecovery
-  useEffect(() => {
-    if (thinkingRecovery && !currentRecovery) {
-      attemptedRecovery.current = undefined
-      setThinkingRecovery(undefined)
-    }
-  }, [thinkingRecovery, currentRecovery])
 
   // Hide the uncommitted-files banner the moment the user asks the agent to
   // commit, rather than leaving it up until the triggered turn finishes and
@@ -186,7 +165,7 @@ export function ChatMessageList({
                   data-testid="uncommitted-files-commit"
                   onClick={() => {
                     setCommitRequested(true)
-                    void onSendMessage("Commit changes", currentAgent, currentModel, undefined, planModeEnabled, currentThinking)
+                    onSendMessage("Commit changes", currentAgent, currentModel, undefined, planModeEnabled, currentThinking)
                   }}
                   className="underline underline-offset-2 hover:no-underline cursor-pointer"
                 >
@@ -250,21 +229,16 @@ export function ChatMessageList({
             const failureMessage = providerFailure || unsupportedModelFailure(chat.errorMessage) || chat.errorMessage
             const unsupportedModel = !!unsupportedModelFailure(failureMessage)
             const lastUserMessage = [...chat.messages].reverse().find((m) => m.role === "user")
-            const resend = lastUserMessage ? () => {
-              if (requiresThinkingRecovery(lastUserMessage, { agent: currentAgent, model: currentModel })) {
-                setThinkingRecovery({
-                  id: nanoid(), chatId: chat.id, content: lastUserMessage.content,
-                  agent: currentAgent, model: currentModel,
-                  originalAgent: lastUserMessage.agent, originalModel: lastUserMessage.model,
-                  originalThinking: lastUserMessage.metadata?.thinking ?? "default",
-                  sourceMessageId: lastUserMessage.id,
-                  planMode: planModeEnabled, missingAttachments: lastUserMessage.uploadedFiles,
-                })
-                return
-              }
-              void onSendMessage(lastUserMessage.content, currentAgent, currentModel,
-                undefined, planModeEnabled, lastUserMessage.metadata?.thinking)
-            } : undefined
+            const resend = lastUserMessage
+              ? () => onSendMessage(
+                  lastUserMessage.content,
+                  currentAgent,
+                  currentModel,
+                  undefined,
+                  planModeEnabled,
+                  currentThinking,
+                )
+              : undefined
 
             // A generic process crash is often transient. If the failed turn
             // already streamed some output, the fuller copy is likely persisted
@@ -355,40 +329,6 @@ export function ChatMessageList({
           <div ref={messagesEndRef} />
         </div>
       </div>
-      {currentRecovery && <ThinkingRecoveryDialog
-        key={currentRecovery.id}
-        request={currentRecovery}
-        sandboxId={chat.sandboxId}
-        readinessKey={chat.status}
-        onCancel={() => {
-          if (recoveryInFlight.current === thinkingRecoveryRef.current?.id) return
-          thinkingRecoveryRef.current = undefined
-          attemptedRecovery.current = undefined
-          setThinkingRecovery(undefined)
-        }}
-        onConfirm={async (requestId, thinking) => {
-          const recovery = thinkingRecoveryRef.current
-          if (!recovery || recovery.id !== requestId) return { status: "blocked", message: "This retry has changed. Review the current chat and model before retrying." }
-          if (recoveryInFlight.current) return { status: "blocked", message: "The previous retry is still being confirmed. Your selection is kept; try again after it settles." }
-          const selectedThinking = parseThinking(recovery.agent, recovery.model, thinking)
-          // Optimistic dispatch temporarily changes status and the latest
-          // message. Keep this exact snapshot until acceptance is known.
-          attemptedRecovery.current = requestId
-          recoveryInFlight.current = requestId
-          try {
-            const result = await onSendMessage(recovery.content, recovery.agent, recovery.model,
-              recovery.files, recovery.planMode, selectedThinking, { callerOwnsRecovery: true })
-            if (result.status === "accepted" && thinkingRecoveryRef.current?.id === requestId) {
-              thinkingRecoveryRef.current = undefined
-              attemptedRecovery.current = undefined
-              setThinkingRecovery(undefined)
-            }
-            return result
-          } finally {
-            if (recoveryInFlight.current === requestId) recoveryInFlight.current = undefined
-          }
-        }}
-      />}
       {/* Floating scroll-to-bottom button — only shown when the user has
           scrolled away from the bottom of the conversation. */}
       {userHasScrolledUp && (

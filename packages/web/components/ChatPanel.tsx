@@ -16,14 +16,13 @@ import type { Chat, Settings, CredentialFlags } from "@/lib/types"
 import { NEW_REPOSITORY, agentSupportsPlanMode } from "@/lib/types"
 import type { SlashCommandType } from "./SlashCommandMenu"
 import { useChatComposer } from "@/lib/hooks/useChatComposer"
-import type { HandleSendMessage } from "@/lib/hooks/useSendMessage"
 
 interface ChatPanelProps {
   chat: Chat | null
   settings: Settings
   credentialFlags: CredentialFlags
   showCreditDialog: (provider?: string, creditBalance?: number | null) => void
-  onSendMessage: HandleSendMessage
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, thinking?: string) => void
   /** Refresh the chat history after the SSE stream died (status === "disconnected"). */
   onReload?: (chatId: string) => Promise<void> | void
   onEnqueueMessage?: (message: string, agent?: string, model?: string, thinking?: string) => void

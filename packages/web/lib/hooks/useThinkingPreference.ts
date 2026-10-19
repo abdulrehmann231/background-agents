@@ -156,8 +156,5 @@ export function useThinkingPreference(agent: string, model: string, chatId?: str
       setStorageNotice("Thinking preferences could not be saved. Your selection still applies to this tab.")
     }
   }
-  // Recovery retains the original intent without silently consenting to Default
-  // or altering the stored preference for a different model.
-  const requestThinking = useCallback((value: string) => { setSelection({ key, value: value || "default" }) }, [key])
-  return { thinking, setThinking, capability, notice, ready: selection.key === key && selectionValid, selectionValid, checking, recheckThinking, onThinkingMenuOpen, requestThinking, canRecheck: needsRuntime }
+  return { thinking, setThinking, capability, notice, ready: selection.key === key && selectionValid, selectionValid, checking, recheckThinking, onThinkingMenuOpen, canRecheck: needsRuntime }
 }

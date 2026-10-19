@@ -40,8 +40,6 @@ export type SendMessageResult =
       isDailyLimit: boolean
       /** The server did not accept or persist this turn because another turn won the claim. */
       isChatBusy?: boolean
-      /** The message route's requireAuth rejected before parsing/persistence. */
-      isUnauthenticated?: boolean
       /** Shared-pool provider that hit its limit (claude | gemini | opencode). */
       provider?: string
       /**
@@ -116,7 +114,6 @@ export async function sendMessageToApi(
       error: err.error || `Failed to send message (HTTP ${response.status})`,
       isDailyLimit: err.error === "DAILY_LIMIT_EXCEEDED",
       isChatBusy: response.status === 409 && err.error === "Chat is busy",
-      isUnauthenticated: response.status === 401 && err.error === "Unauthorized",
       provider: err.provider,
       creditBalance: typeof err.creditBalance === "number" ? err.creditBalance : undefined,
     }
