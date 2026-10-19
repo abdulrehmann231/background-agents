@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Clock, ChevronDown, X, Copy, RefreshCw, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -13,6 +14,7 @@ import { AgentIcon } from "@/components/icons/agent-icons"
 import { ScheduleFields } from "@/components/scheduled-jobs/ScheduleFields"
 import { TRIGGER_TYPES, AVAILABLE_AGENTS } from "@/components/scheduled-jobs/form-config"
 import { useScheduledJobForm } from "@/lib/hooks/useScheduledJobForm"
+import { useUpwardMenuMaxHeight } from "@/lib/hooks/useUpwardMenuMaxHeight"
 
 // =============================================================================
 // Types
@@ -93,6 +95,14 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
   } = useScheduledJobForm({ open, job, onClose, onSuccess })
 
   const fieldErrorMessages = Object.values(fieldErrors)
+
+  // Clamp the hand-rolled dropdowns to the space actually available above
+  // them, same as the main composer's agent/mode dropdowns, so they scroll
+  // instead of overflowing on a short viewport.
+  const agentDropdownRef = useRef<HTMLDivElement>(null)
+  const agentDropdownMaxHeight = useUpwardMenuMaxHeight(showAgentDropdown, agentDropdownRef)
+  const modelDropdownRef = useRef<HTMLDivElement>(null)
+  const modelDropdownMaxHeight = useUpwardMenuMaxHeight(showModelDropdown, modelDropdownRef)
 
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -377,11 +387,15 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                       title={agentLabels[agent]}
                     >
                       <AgentIcon agent={agent} className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{agentLabels[agent]}</span>
+                      <span className="hidden @[32rem]:inline">{agentLabels[agent]}</span>
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                     {showAgentDropdown && (
-                      <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40">
+                      <div
+                        ref={agentDropdownRef}
+                        style={{ maxHeight: agentDropdownMaxHeight }}
+                        className="absolute bottom-full right-0 mb-1 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40"
+                      >
                         {AVAILABLE_AGENTS.map((a) => (
                           <button
                             key={a}
@@ -412,12 +426,16 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                       className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                       title={getModelLabel(agent, model, customEndpoints)}
                     >
-                      <span className="hidden sm:inline">{getModelLabel(agent, model, customEndpoints)}</span>
-                      <span className="sm:hidden">Model</span>
+                      <span className="hidden @[32rem]:inline">{getModelLabel(agent, model, customEndpoints)}</span>
+                      <span className="@[32rem]:hidden">Model</span>
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                     {showModelDropdown && (
-                      <div className="absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52">
+                      <div
+                        ref={modelDropdownRef}
+                        style={{ maxHeight: modelDropdownMaxHeight }}
+                        className="absolute bottom-full right-0 mb-1 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52"
+                      >
                         {availableModels.map((m) => (
                           <button
                             key={m.value}

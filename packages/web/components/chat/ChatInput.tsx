@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useCallback, useState } from "react"
-import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, X, Paperclip, Pencil, ListChecks, Mic, GitBranch } from "lucide-react"
+import { AlertTriangle, ArrowUp, Square, ChevronDown, Clock, Github, Paperclip, Pencil, ListChecks, Mic, GitBranch } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import { useSpeechRecognition } from "@/lib/hooks/useSpeechRecognition"
@@ -13,6 +13,7 @@ import { NEW_REPOSITORY, sharedPoolProviderForModel } from "@/lib/types"
 import { basename } from "@/lib/format"
 import { queuedSendNotice } from "@/lib/composer-queue"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
+import { DismissButton } from "./DismissButton"
 import { AgentModelSelector } from "./AgentModelSelector"
 import { ThinkingSelector } from "./ThinkingSelector"
 import type { ThinkingCapability } from "@background-agents/sdk/thinking"
@@ -145,7 +146,9 @@ export function ChatActionSlot({
             isMobile ? "h-9 w-9" : "h-7 w-7"
           )}
         >
-          <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+          {/* Clock (not ArrowUp) so a queued send reads differently from an
+              immediate one at a glance, not just via the tooltip. */}
+          <Clock className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
         </button>
       ) : isRunning ? (
         <button
@@ -558,13 +561,7 @@ export function ChatInput({
           )}>
             <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
             <span className="flex-1">{fileError}</span>
-            <button
-              onClick={onClearFileError}
-              className="shrink-0 text-destructive/70 hover:text-destructive transition-colors"
-              aria-label="Dismiss error"
-            >
-              <X className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-            </button>
+            <DismissButton label="Dismiss error" onClick={onClearFileError} isMobile={isMobile} variant="destructive" />
           </div>
         )}
 
@@ -575,13 +572,14 @@ export function ChatInput({
         )}>
           {/* Left side items */}
           <div className={cn("flex items-center gap-2", isMobile ? "w-full @container/row1" : "flex-1")}>
-            {/* Attachment button */}
+            {/* Attachment button — same hit-target size as the mic/send/stop
+                buttons on the other side of the textarea. */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className={cn(
                 "shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
-                isMobile ? "h-7 w-7" : "h-6 w-6"
+                isMobile ? "h-9 w-9" : "h-7 w-7"
               )}
               title="Attach files"
               aria-label="Attach files"
@@ -613,16 +611,11 @@ export function ChatInput({
                   />
                 )}
                 {!isNewRepo && onUpdateChat && canSelectExistingRepo && (
-                  <button
+                  <DismissButton
+                    label="Remove repository"
                     onClick={() => onUpdateChat({ repo: NEW_REPOSITORY, baseBranch: "main" })}
-                    className={cn(
-                      "text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
-                      isMobile ? "p-1.5" : "p-0.5"
-                    )}
-                    title="Remove repository"
-                  >
-                    <X className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
-                  </button>
+                    isMobile={isMobile}
+                  />
                 )}
               </div>
             ) : !isNewRepo && (
@@ -630,10 +623,7 @@ export function ChatInput({
                 href={`https://github.com/${chat.repo}/tree/${chat.branch}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(
-                  "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors",
-                  isMobile ? "text-sm" : "text-sm"
-                )}
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm"
                 title={chat.repo}
               >
                 <Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />

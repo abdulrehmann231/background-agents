@@ -508,7 +508,7 @@ export function AgentModelSelector({
             title={getModelLabel(currentAgent, currentModel, endpoints)}
           >
             {!hasRequiredCredentials && <Lock className="h-3.5 w-3.5" />}
-            <Cpu className="h-3.5 w-3.5 @[32rem]:hidden" />
+            <Cpu className="h-3.5 w-3.5" />
             <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
             <ChevronDown className="h-3.5 w-3.5" />
           </button>

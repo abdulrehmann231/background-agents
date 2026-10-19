@@ -1,9 +1,10 @@
 "use client"
 
-import { TriangleAlert, Wallet, X } from "lucide-react"
+import { TriangleAlert, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fmtCreditAmount } from "@/lib/format"
 import type { CreditTier } from "@/lib/server/credits"
+import { DismissButton } from "./DismissButton"
 
 interface CreditWarningBannerProps {
   /** Which warning to show. The caller decides; see lib/credit-warning. */
@@ -78,15 +79,13 @@ export function CreditWarningBanner({
         </button>
       </div>
 
-      <button
-        type="button"
+      <DismissButton
+        label="Dismiss"
+        ariaLabel="Dismiss credit warning"
         onClick={onDismiss}
-        aria-label="Dismiss credit warning"
-        title="Dismiss"
-        className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100 hover:bg-foreground/10 transition-opacity cursor-pointer"
-      >
-        <X className={isMobile ? "h-4 w-4" : "h-3.5 w-3.5"} />
-      </button>
+        isMobile={isMobile}
+        variant="tinted"
+      />
     </div>
   )
 }

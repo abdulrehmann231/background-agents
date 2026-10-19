@@ -17,8 +17,14 @@ export function ThinkingSelector({ capability, value, onChange, isMobile = false
   return <div className={cn("relative flex shrink-0 items-center gap-1 text-sm text-muted-foreground", isMobile && "max-w-[45%] flex-wrap justify-end")}>
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger aria-label="Thinking level" aria-describedby={helpId} title={explanation}
-        className={cn("h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2", isMobile && "min-h-9")}>
-        <Brain aria-hidden="true" className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} /><SelectValue />
+        className={cn("h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2", isMobile && "min-h-9")}
+        iconClassName={isMobile ? "h-4 w-4" : undefined}>
+        <Brain aria-hidden="true" className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+        {/* Desktop collapses to icon-only below the same @[32rem] breakpoint
+            every other composer trigger (agent/mode/repo/branch/MCP) uses.
+            Mobile has no such collapse convention for this row, so it keeps
+            always showing the label. */}
+        <span className={cn(!isMobile && "hidden @[32rem]:inline")}><SelectValue /></span>
       </SelectTrigger>
       <SelectContent side="top" align="end" className="max-h-[min(28rem,var(--radix-select-content-available-height))] max-w-[calc(100vw-2rem)]">
         <SelectItem value="default" title={explanation} aria-describedby={helpId}>Default</SelectItem>

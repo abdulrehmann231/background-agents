@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { X, Loader2, File as FileIcon } from "lucide-react"
+import { Loader2, File as FileIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   getFileType,
@@ -11,6 +11,7 @@ import {
   HighlightedCode,
 } from "@/lib/file-preview"
 import type { PendingFile } from "@/lib/types"
+import { DismissButton } from "./DismissButton"
 
 interface FilePreviewModalProps {
   file: PendingFile
@@ -81,13 +82,7 @@ export function FilePreviewModal({ file, fileContent, onClose, onRemove, isMobil
             </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
-              title="Close preview (Esc)"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <DismissButton label="Close preview (Esc)" onClick={onClose} isMobile={isMobile} />
           </div>
         </div>
 
