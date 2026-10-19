@@ -24,7 +24,6 @@ import type { Event } from "../../types/events"
 import { parseKimiLine } from "./parser"
 import { KIMI_TOOL_MAPPINGS } from "./tools"
 import { quote } from "../../utils/shell"
-import { validateThinking } from "../../thinking"
 
 /** Kimi config directory (daytona user home) */
 const KIMI_CONFIG_DIR = "/home/daytona/.kimi-code"
@@ -106,7 +105,6 @@ export const kimiAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    const thinking = validateThinking("kimi", options.model, options.thinking)
     const args: string[] = []
 
     // Note: prompt mode (-p) runs non-interactively and auto-approves actions on
@@ -140,7 +138,7 @@ export const kimiAgent: AgentDefinition = {
       args: ["-c", `export PATH="$HOME/.kimi-code/bin:$PATH" && ${kimiCmd}`],
       // Native process override, not a persisted session/config update. On
       // resume the previous turn's override must not become the next default.
-      env: { ...options.env, ...(thinking === "default" ? {} : { KIMI_MODEL_THINKING_EFFORT: thinking }) },
+      env: { ...options.env, ...(options.thinking && options.thinking !== "default" ? { KIMI_MODEL_THINKING_EFFORT: options.thinking } : {}) },
     }
   },
 

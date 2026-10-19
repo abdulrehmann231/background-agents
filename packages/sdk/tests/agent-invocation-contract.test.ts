@@ -4,11 +4,6 @@ import { kimiAgent } from "../src/agents/kimi"
 import type { CodeAgentSandbox } from "../src/types/provider"
 
 describe("native invocation contracts", () => {
-  it.each([gooseAgent, kimiAgent])("rejects unavailable thinking before launching %s", agent => {
-    expect(() => agent.buildCommand({ model: "unverified-model", thinking: "high", prompt: "hello" })).toThrow("not supported")
-    expect(() => agent.buildCommand({ model: "unverified-model", thinking: "default", prompt: "hello" })).not.toThrow()
-  })
-
   it("resumes the requested Goose conversation instead of the most recent one", () => {
     const a = gooseAgent.buildCommand({ sessionId: "20261016_1", prompt: "A" }).args.join(" ")
     const b = gooseAgent.buildCommand({ sessionId: "20261016_2", prompt: "B" }).args.join(" ")

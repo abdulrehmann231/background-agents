@@ -7,7 +7,6 @@ import type { Event } from "../../types/events"
 import { quote } from "../../utils/shell"
 import { parseGooseLine } from "./parser"
 import { GOOSE_TOOL_MAPPINGS } from "./tools"
-import { validateThinking } from "../../thinking"
 
 /**
  * Determine the goose provider based on the given model name.
@@ -40,7 +39,6 @@ export const gooseAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    validateThinking("goose", options.model, options.thinking)
     const gooseArgs: string[] = []
 
     // Use run subcommand for non-interactive execution

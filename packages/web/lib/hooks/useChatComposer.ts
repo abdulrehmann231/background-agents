@@ -145,12 +145,7 @@ export function useChatComposer({
   const { data: settingsData } = useSettingsQuery()
   const customEndpoints = settingsData?.customEndpoints
   const currentModel = resolveChatModel(currentAgent, chat?.model, credentialFlags, settings.defaultModel, customEndpoints)
-  const { thinking, setThinking, notice: thinkingNotice, capability: thinkingCapability, ready: thinkingReady,
-    checking: thinkingChecking, recheckThinking, onThinkingMenuOpen, canRecheck: canRecheckThinking } = useThinkingPreference(
-    currentAgent, currentModel, chat?.id, chat?.sandboxId,
-    // These are turn hints, not a claim about the sandbox's actual state.
-    { readinessKey: `${chat?.status ?? "draft"}:${chat?.backgroundSessionId ?? ""}`, isStarting: chat?.status === "creating" },
-  )
+  const { thinking, setThinking, capability: thinkingCapability } = useThinkingPreference(currentAgent, currentModel)
   const balanceUsd = settingsData?.creditBalanceUsd ?? null
   const creditGate = { agent: currentAgent, credentialFlags, balanceUsd, providerMultipliers: settingsData?.providerMultipliers }
   const blockedProvider = exhaustedCreditProvider({ ...creditGate, model: currentModel })
@@ -192,12 +187,12 @@ export function useChatComposer({
   const queueNotice = queuedSendNotice({ isRunning, isPaused, hasFiles: pendingFiles.length > 0,
     planMode: planModeEnabled, hasText: !!input.trim() })
   // When the agent is running, text-only messages are queued for later dispatch.
-  const canQueue = thinkingReady && !chat?.stopPending && !chat?.directSendRecovery?.length && !needsRecovery && !queueNotice && !!onEnqueueMessage && !!input.trim() && pendingFiles.length === 0
+  const canQueue = !chat?.stopPending && !chat?.directSendRecovery?.length && !needsRecovery && !queueNotice && !!onEnqueueMessage && !!input.trim() && pendingFiles.length === 0
   // Paused queue: always show the send button (either to enqueue a new prompt
   // at the end or to resume draining with nothing typed).
   // A new direct send must not skip prompts waiting behind a failed turn.
   // Reload first to reconcile that turn; it never implicitly resumes the queue.
-  const canSend = thinkingReady && !chat?.stopPending && !chat?.directSendRecovery?.length && !queueNotice && !(needsRecovery && hasQueued) && (
+  const canSend = !chat?.stopPending && !chat?.directSendRecovery?.length && !queueNotice && !(needsRecovery && hasQueued) && (
     (hasContent && !isRunning && !isCreating && !isPaused) ||
     (isRunning && canQueue) ||
     isPaused)
@@ -366,7 +361,6 @@ export function useChatComposer({
   // the message to it in the background. Triggered by Cmd/Alt/Ctrl+Enter or by
   // holding one of those modifiers while clicking the send button.
   const handleBranchSend = () => {
-    if (!thinkingReady) return
     if (git.canBranch && input.trim()) {
       if (blockedProvider) {
         showCreditDialog(blockedProvider, balanceUsd)
@@ -466,12 +460,7 @@ export function useChatComposer({
     setPlanModeEnabled,
     thinking,
     setThinking,
-    thinkingNotice,
     thinkingCapability,
-    thinkingChecking,
-    recheckThinking,
-    onThinkingMenuOpen,
-    canRecheckThinking,
     // agent/model
     currentAgent,
     currentModel,

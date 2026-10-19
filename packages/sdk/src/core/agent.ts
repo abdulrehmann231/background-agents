@@ -7,7 +7,6 @@
 
 import type { Event } from "../types/events"
 import type { CodeAgentSandbox } from "../types/provider"
-import type { ThinkingLevel } from "../thinking"
 
 /**
  * Command specification returned by buildCommand()
@@ -48,7 +47,7 @@ export interface RunOptions {
   /** Working directory for the agent process */
   cwd?: string
   /** Native reasoning control for this invocation, independent of permissions. */
-  thinking?: ThinkingLevel
+  thinking?: string
   /** When true, use read-only plan mode; this is not reasoning effort. */
   planMode?: boolean
 }

@@ -16,24 +16,14 @@ const mocks = vi.hoisted(() => ({
   branch: vi.fn(),
   creditBalanceUsd: null as number | null,
   thinking: "default",
-  thinkingReady: true,
-  thinkingHook: vi.fn(),
-  recheckThinking: vi.fn(),
-  thinkingMenuOpen: vi.fn(),
 }))
 
 vi.mock("@/lib/contexts", () => ({
   useModals: () => ({ setSignInModalOpen: vi.fn() }),
   useGit: () => ({ canBranch: true, handleBranchWithMessage: mocks.branch }),
 }))
-// Composer contract tests use a resolved capability snapshot. Native discovery
-// and interactive preference changes are covered separately in browser QA.
 vi.mock("./useThinkingPreference", () => ({
-  useThinkingPreference: (...args: unknown[]) => {
-    mocks.thinkingHook(...args)
-    return { thinking: mocks.thinking, setThinking: vi.fn(), capability: { levels: [] }, ready: mocks.thinkingReady,
-      checking: false, canRecheck: true, recheckThinking: mocks.recheckThinking, onThinkingMenuOpen: mocks.thinkingMenuOpen }
-  },
+  useThinkingPreference: () => ({ thinking: mocks.thinking, setThinking: vi.fn(), capability: { levels: [] } }),
 }))
 vi.mock("@/lib/query/hooks/useSettingsQuery", () => ({
   useSettingsQuery: () => ({ data: { customEndpoints: [], creditBalanceUsd: mocks.creditBalanceUsd } }),
@@ -87,39 +77,15 @@ beforeEach(() => {
   mocks.pendingFiles = []
   mocks.creditBalanceUsd = null
   mocks.thinking = "default"
-  mocks.thinkingReady = true
 })
 
 describe("composer thinking selection", () => {
-  it("passes turn startup hints and explicit discovery actions without claiming sandbox lifecycle state", () => {
-    const first = renderComposer({ status: "ready", backgroundSessionId: undefined })
-    renderComposer({ status: "creating" })
-    renderComposer({ status: "running", backgroundSessionId: "new-session" })
-    expect(mocks.thinkingHook.mock.calls.map(call => call[4])).toEqual([
-      { readinessKey: "ready:", isStarting: false },
-      { readinessKey: "creating:", isStarting: true },
-      { readinessKey: "running:new-session", isStarting: false },
-    ])
-    expect(first.recheckThinking).toBe(mocks.recheckThinking)
-    expect(first.onThinkingMenuOpen).toBe(mocks.thinkingMenuOpen)
-  })
   it("freezes the selected effort for an enqueued prompt", () => {
     mocks.thinking = "high"
     renderComposer().handleSend()
     expect(mocks.enqueue.mock.calls[0]).toContain("high")
     mocks.thinking = "low"
     expect(mocks.enqueue.mock.calls[0]).toContain("high")
-  })
-  it("keeps the draft while native capability discovery is pending", () => {
-    mocks.thinkingReady = false
-    const composer = renderComposer()
-    expect(composer.canSend).toBe(false)
-    composer.handleSend()
-    composer.handleBranchSend()
-    expect(mocks.send).not.toHaveBeenCalled()
-    expect(mocks.enqueue).not.toHaveBeenCalled()
-    expect(mocks.branch).not.toHaveBeenCalled()
-    expect(mocks.draftChanged).not.toHaveBeenCalled()
   })
 })
 

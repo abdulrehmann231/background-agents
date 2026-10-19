@@ -17,8 +17,6 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { validateThinking } from "../thinking"
-import { verifyThinkingRuntime } from "../thinking-runtime"
 import {
   CANCELLED_EXIT_CODE,
   type JobHandle,
@@ -140,9 +138,6 @@ class BackgroundSessionImpl implements BackgroundSession {
 
   private async startTurn(prompt: string, options: Omit<StartOptions, "prompt">): Promise<TurnHandle> {
     const opts: RunOptions = { ...this.defaults, ...options, prompt }
-    validateThinking(this.agent.name, opts.model, opts.thinking)
-    await verifyThinkingRuntime(this.agent.name, opts, this.sandbox)
-
     // Prepend conversation history when injecting context.
     if (options.history?.length) {
       opts.prompt = this.formatHistory(options.history) + "\n\n" + (opts.prompt ?? "")
