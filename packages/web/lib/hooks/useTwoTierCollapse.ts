@@ -36,7 +36,16 @@ export function useTwoTierCollapse() {
     if (!container || !leftNatural || !leftCollapsed || !rightNatural || !rightCollapsed) return
 
     const check = () => {
-      const available = container.clientWidth
+      // container.clientWidth includes the row's own padding, and doesn't
+      // account for the gap between the left/right groups — both of which
+      // eat into the space actually available to their content. Without
+      // subtracting them, this check thinks there's more room than there
+      // really is, so the real DOM can hit its own overflow/wrap point
+      // slightly before React re-renders with the correct collapsed state.
+      const style = getComputedStyle(container)
+      const padding = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0")
+      const gap = parseFloat(style.columnGap || style.gap || "0")
+      const available = container.clientWidth - padding - gap
       if (leftNatural.offsetWidth + rightNatural.offsetWidth <= available) {
         setShowLeft(true)
         setShowRight(true)
