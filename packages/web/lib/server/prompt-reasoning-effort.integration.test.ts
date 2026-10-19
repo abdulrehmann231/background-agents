@@ -7,33 +7,33 @@ let prisma: Database
 let queue: Queue
 let userId: string
 
-databaseDescribe("per-prompt thinking on the real server queue", () => {
+databaseDescribe("per-prompt reasoning effort on the real server queue", () => {
   beforeAll(async () => {
-    ;({ prisma, userId } = await createTestUser("thinking"))
+    ;({ prisma, userId } = await createTestUser("reasoning-effort"))
     queue = await import("./prompt-queue")
   })
   afterAll(() => deleteTestUser(prisma, userId))
-  const input = (thinking?: string) => ({ clientId: crypto.randomUUID(), content: `prompt-${thinking ?? "legacy"}`, agent: "codex", model: "gpt-6.1-sol", thinking })
+  const input = (reasoningEffort?: string) => ({ clientId: crypto.randomUUID(), content: `prompt-${reasoningEffort ?? "legacy"}`, agent: "codex", model: "gpt-6.1-sol", reasoningEffort })
 
   it("freezes each selection across concurrent submissions and one winning worker", async () => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entries = [input("low"), input("high"), input("default"), input()]
     await Promise.all(entries.map(entry => queue.enqueuePrompt(chat.id, entry)))
     const stored = await prisma.queuedPrompt.findMany({ where: { chatId: chat.id }, orderBy: { position: "asc" } })
-    for (const entry of entries) expect(stored.find(row => row.clientId === entry.clientId)?.thinking).toBe(entry.thinking === "default" ? null : entry.thinking ?? null)
+    for (const entry of entries) expect(stored.find(row => row.clientId === entry.clientId)?.reasoningEffort).toBe(entry.reasoningEffort === "default" ? null : entry.reasoningEffort ?? null)
     const claims = await Promise.all([queue.claimNextPrompt(chat.id), queue.claimNextPrompt(chat.id)])
     expect(claims.filter(Boolean)).toHaveLength(1)
-    expect(claims.find(Boolean)?.thinking).toBe(stored[0].thinking)
-    expect(queue.toQueuedMessage(stored[0]).thinking).toBe(stored[0].thinking ?? undefined)
+    expect(claims.find(Boolean)?.reasoningEffort).toBe(stored[0].reasoningEffort)
+    expect(queue.toQueuedMessage(stored[0]).reasoningEffort).toBe(stored[0].reasoningEffort ?? undefined)
   })
 
-  it("deduplicates retries but rejects a changed thinking value for the same ID", async () => {
+  it("deduplicates retries but rejects a changed reasoning effort value for the same ID", async () => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entry = input("low")
     const [first, retry] = await Promise.all([queue.enqueuePrompt(chat.id, entry), queue.enqueuePrompt(chat.id, entry)])
     expect(first.id).toBe(retry.id)
-    await expect(queue.enqueuePrompt(chat.id, { ...entry, thinking: "high" })).rejects.toThrow("different prompt")
-    await expect(queue.importLegacyPrompts(chat.id, [{ ...entry, thinking: "high" }], false)).rejects.toThrow("different prompt")
+    await expect(queue.enqueuePrompt(chat.id, { ...entry, reasoningEffort: "high" })).rejects.toThrow("different prompt")
+    await expect(queue.importLegacyPrompts(chat.id, [{ ...entry, reasoningEffort: "high" }], false)).rejects.toThrow("different prompt")
     expect(await prisma.queuedPrompt.count({ where: { chatId: chat.id } })).toBe(1)
   })
 
@@ -41,24 +41,24 @@ databaseDescribe("per-prompt thinking on the real server queue", () => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entries = [input("high"), input()]
     await queue.importLegacyPrompts(chat.id, entries, true)
-    const replay = await queue.enqueuePrompt(chat.id, { ...entries[1], thinking: "default" })
-    expect(replay.thinking).toBeNull()
+    const replay = await queue.enqueuePrompt(chat.id, { ...entries[1], reasoningEffort: "default" })
+    expect(replay.reasoningEffort).toBeNull()
     expect(await queue.claimNextPrompt(chat.id)).toBeNull()
     const row = await prisma.queuedPrompt.findUniqueOrThrow({ where: { chatId_clientId: { chatId: chat.id, clientId: entries[0].clientId } } })
-    expect(row.thinking).toBe("high")
+    expect(row.reasoningEffort).toBe("high")
   })
 
   it.each([
-    { agent: "claude-code", model: "sonnet", thinking: "high", changed: "low" },
+    { agent: "claude-code", model: "sonnet", reasoningEffort: "high", changed: "low" },
   ])("preserves $agent selections through offline import and dispatch", async ({ changed, ...selection }) => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entry = { ...input(), ...selection }
     await queue.importLegacyPrompts(chat.id, [entry], false)
     const replay = await queue.enqueuePrompt(chat.id, entry)
-    expect(replay.thinking).toBe(selection.thinking)
-    await expect(queue.enqueuePrompt(chat.id, { ...entry, thinking: changed })).rejects.toThrow("different prompt")
+    expect(replay.reasoningEffort).toBe(selection.reasoningEffort)
+    await expect(queue.enqueuePrompt(chat.id, { ...entry, reasoningEffort: changed })).rejects.toThrow("different prompt")
     const claim = await queue.claimNextPrompt(chat.id)
-    expect(claim?.thinking).toBe(selection.thinking)
-    expect(queue.toQueuedMessage(replay).thinking).toBe(selection.thinking)
+    expect(claim?.reasoningEffort).toBe(selection.reasoningEffort)
+    expect(queue.toQueuedMessage(replay).reasoningEffort).toBe(selection.reasoningEffort)
   })
 })

@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { thinkingArgs } from "../../thinking"
+import { reasoningEffortArgs } from "../../reasoning-effort"
 import type {
   AgentDefinition,
   CommandSpec,
@@ -58,7 +58,7 @@ export const opencodeAgent: AgentDefinition = {
       "--print-logs",
       "--log-level",
       "ERROR",
-      ...thinkingArgs("opencode", options.model, options.thinking).map(quote),
+      ...reasoningEffortArgs("opencode", options.model, options.reasoningEffort).map(quote),
     ]
 
     if (model) {

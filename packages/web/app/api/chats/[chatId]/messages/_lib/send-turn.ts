@@ -144,7 +144,7 @@ export async function sendChatTurn({
       model: resolveCliModel(payload.model, customEndpoints),
       env: Object.keys(env).length > 0 ? env : undefined,
       planMode: payload.planMode,
-      thinking: payload.thinking,
+      reasoningEffort: payload.reasoningEffort,
       mcpServers,
       skills: discoveredSkills.length > 0 ? discoveredSkills : undefined,
     })

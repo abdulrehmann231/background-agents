@@ -30,7 +30,7 @@ import type {
 import type { Event } from "../../types/events"
 import { parseCommandCodeLine } from "./parser"
 import { COMMAND_CODE_TOOL_MAPPINGS } from "./tools"
-import { thinkingArgs } from "../../thinking"
+import { reasoningEffortArgs } from "../../reasoning-effort"
 
 /**
  * Default environment applied to every Command Code invocation.
@@ -67,7 +67,7 @@ export const commandCodeAgent: AgentDefinition = {
 
   buildCommand(options: RunOptions): CommandSpec {
     const args: string[] = [
-      ...thinkingArgs("commandcode", options.model, options.thinking),
+      ...reasoningEffortArgs("commandcode", options.model, options.reasoningEffort),
       // NDJSON event frames + one final result line (see the parser).
       "--output-format",
       "json",

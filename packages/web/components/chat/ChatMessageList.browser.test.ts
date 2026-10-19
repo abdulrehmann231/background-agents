@@ -4,7 +4,7 @@ import { chromium, type Browser, type Page } from "playwright"
 import { fileURLToPath } from "node:url"
 import type { MessagePayload } from "@/app/api/chats/[chatId]/messages/_lib/types"
 
-const persistence = vi.hoisted(() => ({ rows: [] as Array<{ role: string; content: string; metadata: { thinking?: string } }> }))
+const persistence = vi.hoisted(() => ({ rows: [] as Array<{ role: string; content: string; metadata: { reasoningEffort?: string } }> }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: {
   $transaction: async (run: (tx: unknown) => Promise<void>) => run({
     message: {
@@ -35,7 +35,7 @@ beforeAll(async () => {
       const client=new QueryClient();
       const original={id:'chat',repo:'user/repo',baseBranch:'main',branch:null,sandboxId:'sandbox',sessionId:null,
         createdAt:1,updatedAt:2,status:'error',errorMessage:'Temporary launch failure',agent:'codex',model:'gpt-6.1-sol',
-        messages:[{id:'user',role:'user',content:'Keep this prompt',timestamp:1,agent:'codex',model:'gpt-6.1-sol',metadata:{thinking:'ultra'}}],
+        messages:[{id:'user',role:'user',content:'Keep this prompt',timestamp:1,agent:'codex',model:'gpt-6.1-sol',metadata:{reasoningEffort:'ultra'}}],
         ...window.initial};
       window.requests=[];
       function App(){
@@ -55,7 +55,7 @@ beforeAll(async () => {
         window.snapshot=()=>({chat,drafts:useChatSyncStore.getState().localChatState.drafts,sending:send.isSendingMessage});
         return <ChatMessageList chat={chat} isMobile={false} isRunning={false} isCreating={false} isNewRepo={false}
           git={{canBranch:false}} onSendMessage={send.handleSendMessage} currentAgent="codex" currentModel={window.currentModel??'gpt-6-luna'}
-          currentThinking={window.composerThinking??'high'} planModeEnabled={false} messagesContainerRef={{current:null}}
+          currentReasoningEffort={window.composerReasoningEffort??'high'} planModeEnabled={false} messagesContainerRef={{current:null}}
           messagesEndRef={{current:null}} onScroll={()=>{}} userHasScrolledUp={false} onScrollToBottom={()=>{}}/>;
       }
       createRoot(document.getElementById('root')).render(<App/>);
@@ -67,7 +67,7 @@ beforeAll(async () => {
           : args.path === "../MessageBubble" ? "export const MessageBubble=()=>null;"
             : "export const useServerQueue=()=>({enqueueMessage:()=>{},removeQueuedMessage:()=>{},resumeQueue:()=>{}});" }))
     } }],
-    alias: { "@": `${root}/packages/web`, react: `${root}/packages/web/node_modules/react`, "react-dom": `${root}/node_modules/react-dom`, "@background-agents/sdk/thinking": `${root}/packages/sdk/src/thinking.ts` },
+    alias: { "@": `${root}/packages/web`, react: `${root}/packages/web/node_modules/react`, "react-dom": `${root}/node_modules/react-dom`, "@background-agents/sdk/reasoning-effort": `${root}/packages/sdk/src/reasoning-effort.ts` },
     bundle: true, platform: "browser", write: false, define: { "process.env.NODE_ENV": '"development"' },
   })
   bundle = result.outputFiles[0].text
@@ -84,9 +84,9 @@ afterEach(async () => {
 async function mount(initial: Record<string, unknown> = {}) {
   persistence.rows = []
   const page = await browser.newPage()
-  await page.route("https://thinking-list.test/**", async route => {
+  await page.route("https://reasoning-effort-list.test/**", async route => {
     const url = new URL(route.request().url()).pathname
-    if (url.includes("/thinking")) return route.fulfill({ json: { status: "available", levels: ["low", "medium", "high"] } })
+    if (url.includes("/reasoning-effort")) return route.fulfill({ json: { status: "available", levels: ["low", "medium", "high"] } })
     if (url.includes("/messages") && route.request().method() === "POST") {
       const payload: MessagePayload = route.request().postDataJSON()
       await page.evaluate(data => { (window as unknown as { requests: unknown[] }).requests.push(data) }, payload)
@@ -97,7 +97,7 @@ async function mount(initial: Record<string, unknown> = {}) {
     if (url.includes("/api/")) return route.fulfill({ status: 503, json: { error: "Fixture unavailable" } })
     return route.fulfill({ contentType: "text/html", body: '<div id="root"></div>' })
   })
-  await page.goto("https://thinking-list.test/")
+  await page.goto("https://reasoning-effort-list.test/")
   await page.evaluate(value => Object.assign(window, { initial: value, authenticated: true }), initial)
   await page.addScriptTag({ content: bundle })
   return page
@@ -107,32 +107,32 @@ describe("message-list actions through actual send wrapper (controlled browser)"
   // Retry is a new send of the last prompt with what the composer shows now,
   // the same rule the base app already uses for agent/model.
   it.each([
-    { name: "a different model", currentModel: "gpt-6-luna", composerThinking: "high" },
-    { name: "the same model", currentModel: "gpt-6.1-sol", composerThinking: "default" },
-  ])("retries with the composer thinking on $name", async ({ currentModel, composerThinking }) => {
+    { name: "a different model", currentModel: "gpt-6-luna", composerReasoningEffort: "high" },
+    { name: "the same model", currentModel: "gpt-6.1-sol", composerReasoningEffort: "default" },
+  ])("retries with the composer reasoning effort on $name", async ({ currentModel, composerReasoningEffort }) => {
     const page = await mount()
-    await page.evaluate(value => { Object.assign(window, value); Reflect.get(window, "refresh")() }, { currentModel, composerThinking })
+    await page.evaluate(value => { Object.assign(window, value); Reflect.get(window, "refresh")() }, { currentModel, composerReasoningEffort })
     await page.getByRole("button", { name: "Retry", exact: true }).click()
     await vi.waitFor(async () => expect(await page.evaluate(() => Reflect.get(window, "requests").length)).toBe(1))
     expect(await page.evaluate(() => Reflect.get(window, "requests")[0]))
-      .toMatchObject({ message: "Keep this prompt", agent: "codex", model: currentModel, thinking: composerThinking })
+      .toMatchObject({ message: "Keep this prompt", agent: "codex", model: currentModel, reasoningEffort: composerReasoningEffort })
     expect(await page.getByRole("dialog").count()).toBe(0)
     await page.close()
   })
 
-  it.each(["high", "default"])("sends Commit changes with composer %s in payload and metadata", async thinking => {
+  it.each(["high", "default"])("sends Commit changes with composer %s in payload and metadata", async reasoningEffort => {
     const page = await mount({ status: "ready", uncommittedFilesCount: 2 })
-    await page.evaluate(value => { Object.assign(window, { composerThinking: value }); Reflect.get(window, "refresh")() }, thinking)
+    await page.evaluate(value => { Object.assign(window, { composerReasoningEffort: value }); Reflect.get(window, "refresh")() }, reasoningEffort)
     await page.getByTestId("uncommitted-files-commit").click()
     await vi.waitFor(async () => expect(await page.evaluate(() => Reflect.get(window, "requests").length)).toBe(1))
     const request = await page.evaluate(() => Reflect.get(window, "requests")[0])
-    expect(request).toMatchObject({ message: "Commit changes", thinking })
+    expect(request).toMatchObject({ message: "Commit changes", reasoningEffort })
     const snapshot = await page.evaluate(() => Reflect.get(window, "snapshot")())
-    expect(snapshot.chat.messages.find((message: { content: string }) => message.content === "Commit changes").metadata.thinking).toBe(thinking)
-    expect(snapshot.chat.messages.find((message: { id: string }) => message.id === "user").metadata.thinking).toBe("ultra")
+    expect(snapshot.chat.messages.find((message: { content: string }) => message.content === "Commit changes").metadata.reasoningEffort).toBe(reasoningEffort)
+    expect(snapshot.chat.messages.find((message: { id: string }) => message.id === "user").metadata.reasoningEffort).toBe("ultra")
     expect(persistence.rows).toHaveLength(2)
-    expect(persistence.rows.find(row => row.role === "user")).toMatchObject({ content: "Commit changes", metadata: { thinking } })
-    expect(persistence.rows.find(row => row.role === "assistant")?.metadata.thinking).toBe(thinking)
+    expect(persistence.rows.find(row => row.role === "user")).toMatchObject({ content: "Commit changes", metadata: { reasoningEffort } })
+    expect(persistence.rows.find(row => row.role === "assistant")?.metadata.reasoningEffort).toBe(reasoningEffort)
     await page.close()
   })
 })

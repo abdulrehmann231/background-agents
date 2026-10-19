@@ -75,10 +75,10 @@ export interface MessageDispatch {
     targetChatId?: string,
     planMode?: boolean,
     rejectedMessageId?: string,
-    thinking?: string
+    reasoningEffort?: string
   ) => Promise<void>
   stopAgent: () => Promise<void>
-  enqueueMessage: (content: string, agent?: string, model?: string, thinking?: string) => void
+  enqueueMessage: (content: string, agent?: string, model?: string, reasoningEffort?: string) => void
   removeQueuedMessage: (id: string) => void
   resumeQueue: () => void
 }
@@ -107,7 +107,7 @@ export function useMessageDispatch({
   const sendInFlight = useRef<Set<string>>(new Set())
   const stopInFlight = useRef<Set<string>>(new Set())
 
-  const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string, planMode?: boolean, rejectedMessageId?: string, thinking?: string) => {
+  const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string, planMode?: boolean, rejectedMessageId?: string, reasoningEffort?: string) => {
     let chatId = targetChatId || currentChatId
     if (!chatId) return
 
@@ -168,14 +168,14 @@ export function useMessageDispatch({
       )
 
       const now = Date.now()
-      const userMessage: Message = { id: nanoid(), role: "user", content, timestamp: now, metadata: { thinking: thinking ?? "default" } }
+      const userMessage: Message = { id: nanoid(), role: "user", content, timestamp: now, metadata: { reasoningEffort: reasoningEffort ?? "default" } }
       const assistantMessage: Message = { id: nanoid(), role: "assistant", content: "", timestamp: now + 1, toolCalls: [], contentBlocks: [] }
 
       // The POST may fail before any server messages exist, or may complete
       // after its response is lost. Retain a device copy, never an auto-retry.
       const retained = retainDirectSend(chatId, {
         id: userMessage.id, userMessageId: userMessage.id, content,
-        agent: selectedAgent, model: selectedModel, thinking, syncFailed: true,
+        agent: selectedAgent, model: selectedModel, reasoningEffort, syncFailed: true,
         directSend: { assistantMessageId: assistantMessage.id, timestamp: now,
           attachmentNames: files?.map((file) => file.name) },
       })
@@ -211,7 +211,7 @@ export function useMessageDispatch({
           assistantMessageId: assistantMessage.id,
           newBranch: newBranchForSend(chat),
           planMode: planMode || undefined,
-          thinking,
+          reasoningEffort,
         }
 
         const result = await sendMessageToApi(chatId, payload, files)

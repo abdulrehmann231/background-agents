@@ -35,7 +35,7 @@ import { NAVIGATE_TO_CHAT_EVENT, type NavigateToChatEventDetail } from "@/lib/no
 import { hasActiveQueue } from "@/lib/chat-state"
 import { queuedSendNotice } from "@/lib/composer-queue"
 import { exhaustedCreditProvider } from "@/lib/credit-limit"
-import { useThinkingPreference } from "./useThinkingPreference"
+import { useReasoningEffortPreference } from "./useReasoningEffortPreference"
 
 interface UseChatComposerArgs {
   chat: Chat | null
@@ -47,8 +47,8 @@ interface UseChatComposerArgs {
   isSending: boolean
   isAuthenticated: boolean
   showCreditDialog: (provider?: string, creditBalance?: number | null) => void
-  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, thinking?: string) => void
-  onEnqueueMessage?: (message: string, agent?: string, model?: string, thinking?: string) => void
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
+  onEnqueueMessage?: (message: string, agent?: string, model?: string, reasoningEffort?: string) => void
   onResumeQueue?: () => void
   onUpdateChat?: (updates: Partial<Chat>) => void
   onSlashCommand?: (command: SlashCommandType) => void
@@ -145,7 +145,7 @@ export function useChatComposer({
   const { data: settingsData } = useSettingsQuery()
   const customEndpoints = settingsData?.customEndpoints
   const currentModel = resolveChatModel(currentAgent, chat?.model, credentialFlags, settings.defaultModel, customEndpoints)
-  const { thinking, setThinking, capability: thinkingCapability } = useThinkingPreference(currentAgent, currentModel)
+  const { reasoningEffort, setReasoningEffort, capability: reasoningEffortCapability } = useReasoningEffortPreference(currentAgent, currentModel)
   const balanceUsd = settingsData?.creditBalanceUsd ?? null
   const creditGate = { agent: currentAgent, credentialFlags, balanceUsd, providerMultipliers: settingsData?.providerMultipliers }
   const blockedProvider = exhaustedCreditProvider({ ...creditGate, model: currentModel })
@@ -316,7 +316,7 @@ export function useChatComposer({
 
     // If the agent is running, queue the message instead of sending.
     if (isRunning && onEnqueueMessage) {
-      onEnqueueMessage(input.trim(), currentAgent, currentModel, thinking)
+      onEnqueueMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
       setInput("")
       textareaRef.current?.focus()
       return
@@ -326,7 +326,7 @@ export function useChatComposer({
     // with nothing typed, just resume draining.
     if (isPaused) {
       if (input.trim() && onEnqueueMessage) {
-        onEnqueueMessage(input.trim(), currentAgent, currentModel, thinking)
+        onEnqueueMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
         setInput("")
       } else {
         onResumeQueue?.()
@@ -343,7 +343,7 @@ export function useChatComposer({
     if (chat?.status === "ready" && !chat.id.startsWith("draft-") &&
         chat.messages.some((message) => !message.inherited) &&
         input.trim() && pendingFiles.length === 0 && !planModeEnabled && onEnqueueMessage) {
-      onEnqueueMessage(input.trim(), currentAgent, currentModel, thinking)
+      onEnqueueMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
       setInput("")
       textareaRef.current?.focus()
       return
@@ -351,7 +351,7 @@ export function useChatComposer({
 
     // Pass files to sendMessage - upload will happen after sandbox is ready
     const files = pendingFiles.length > 0 ? pendingFiles.map(pf => pf.file) : undefined
-    onSendMessage(input.trim(), currentAgent, currentModel, files, planModeEnabled || undefined, thinking)
+    onSendMessage(input.trim(), currentAgent, currentModel, files, planModeEnabled || undefined, reasoningEffort)
     setInput("")
     clearFiles()
     textareaRef.current?.focus()
@@ -366,7 +366,7 @@ export function useChatComposer({
         showCreditDialog(blockedProvider, balanceUsd)
         return
       }
-      git.handleBranchWithMessage(input.trim(), currentAgent, currentModel, thinking)
+      git.handleBranchWithMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
       setInput("")
       clearFiles()
       textareaRef.current?.focus()
@@ -458,9 +458,9 @@ export function useChatComposer({
     // plan mode
     planModeEnabled,
     setPlanModeEnabled,
-    thinking,
-    setThinking,
-    thinkingCapability,
+    reasoningEffort,
+    setReasoningEffort,
+    reasoningEffortCapability,
     // agent/model
     currentAgent,
     currentModel,

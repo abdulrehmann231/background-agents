@@ -1,5 +1,5 @@
 /**
- * Browser-safe Pi identity shared by the thinking levels and invocation.
+ * Browser-safe Pi identity shared by the reasoning-effort levels and invocation.
  * Backgrounder's Anthropic picker historically stores bare claude-* IDs, while
  * Pi's exact-model registry takes provider + ID. Unknown/custom patterns are
  * passed through unchanged.

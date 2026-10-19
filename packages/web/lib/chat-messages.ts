@@ -21,7 +21,7 @@ export interface SendMessagePayload {
   assistantMessageId: string
   newBranch?: string
   planMode?: boolean
-  thinking?: string
+  reasoningEffort?: string
 }
 
 export interface SendMessageResponse {

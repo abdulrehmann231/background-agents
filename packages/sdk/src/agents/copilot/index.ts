@@ -19,7 +19,7 @@ import type {
 import type { Event } from "../../types/events"
 import { parseCopilotLine } from "./parser"
 import { COPILOT_TOOL_MAPPINGS } from "./tools"
-import { thinkingArgs } from "../../thinking"
+import { reasoningEffortArgs } from "../../reasoning-effort"
 
 /**
  * GitHub Copilot CLI agent definition.
@@ -36,7 +36,7 @@ export const copilotAgent: AgentDefinition = {
   },
 
   buildCommand(options: RunOptions): CommandSpec {
-    const args = thinkingArgs("copilot", options.model, options.thinking)
+    const args = reasoningEffortArgs("copilot", options.model, options.reasoningEffort)
 
     // Prompt — must come right after -p
     if (options.prompt) {

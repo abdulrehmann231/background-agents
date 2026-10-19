@@ -25,13 +25,13 @@ interface ChatMessageListProps {
   git: GitContextValue
   onOpenFile?: (filePath: string) => void
   onReload?: (chatId: string) => Promise<void> | void
-  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, thinking?: string) => void
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => Promise<void> | void
   onChooseModel?: () => void
   currentAgent: Agent
   currentModel: string
-  currentThinking?: string
+  currentReasoningEffort?: string
   planModeEnabled: boolean
   messagesContainerRef: React.RefObject<HTMLDivElement | null>
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -60,7 +60,7 @@ export function ChatMessageList({
   onChooseModel,
   currentAgent,
   currentModel,
-  currentThinking,
+  currentReasoningEffort,
   planModeEnabled,
   messagesContainerRef,
   messagesEndRef,
@@ -165,7 +165,7 @@ export function ChatMessageList({
                   data-testid="uncommitted-files-commit"
                   onClick={() => {
                     setCommitRequested(true)
-                    onSendMessage("Commit changes", currentAgent, currentModel, undefined, planModeEnabled, currentThinking)
+                    onSendMessage("Commit changes", currentAgent, currentModel, undefined, planModeEnabled, currentReasoningEffort)
                   }}
                   className="underline underline-offset-2 hover:no-underline cursor-pointer"
                 >
@@ -236,7 +236,7 @@ export function ChatMessageList({
                   currentModel,
                   undefined,
                   planModeEnabled,
-                  currentThinking,
+                  currentReasoningEffort,
                 )
               : undefined
 
@@ -308,7 +308,7 @@ export function ChatMessageList({
                     <DropdownMenuContent align="end" className="min-w-[180px]">
                       {git.canBranch && (
                         <DropdownMenuItem
-                          onClick={() => git.handleBranchQueuedMessage(m.id, m.content, m.agent, m.model, m.thinking)}
+                          onClick={() => git.handleBranchQueuedMessage(m.id, m.content, m.agent, m.model, m.reasoningEffort)}
                         >
                           <GitBranchPlus className="h-3.5 w-3.5 mr-2" />
                           Branch to new chat

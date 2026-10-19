@@ -44,7 +44,7 @@ export interface SessionOptions {
   env?: Record<string, string>
   /** Working directory for the agent process */
   cwd?: string
-  thinking?: string
+  reasoningEffort?: string
   /** When true, use read-only plan mode. */
   planMode?: boolean
 }
@@ -185,7 +185,7 @@ async function createSessionWithId(
     env: options.env,
     cwd: options.cwd,
     planMode: options.planMode,
-    thinking: options.thinking,
+    reasoningEffort: options.reasoningEffort,
   })
 
   // A caller may explicitly start another turn on a reattached SDK session.

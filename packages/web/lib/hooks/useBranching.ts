@@ -60,7 +60,7 @@ interface UseBranchingOptions {
     chatId?: string,
     planMode?: boolean,
     rejectedMessageId?: string,
-    thinking?: string
+    reasoningEffort?: string
   ) => unknown
   removeQueuedMessage: (id: string) => void
   openSignInModal: (open: boolean) => void
@@ -81,7 +81,7 @@ interface UseBranchingResult {
    * dispatch the message to it in the background, and stay on the current chat.
    * If the user isn't signed in, the message is staged for replay after OAuth.
    */
-  handleBranchWithMessage: (message: string, agent: string, model: string, thinking?: string) => Promise<void>
+  handleBranchWithMessage: (message: string, agent: string, model: string, reasoningEffort?: string) => Promise<void>
   /**
    * Branch a *queued* message into a new background chat. Removes the queued
    * message first so it doesn't fire twice (once on the current chat when the
@@ -92,7 +92,7 @@ interface UseBranchingResult {
     message: string,
     agent?: string,
     model?: string,
-    thinking?: string
+    reasoningEffort?: string
   ) => Promise<void>
 }
 
@@ -135,7 +135,7 @@ export function useBranching({
       message?: string
       agent?: string
       model?: string
-      thinking?: string
+      reasoningEffort?: string
       /** Chat to branch off. Defaults to the current chat. */
       sourceChat?: Chat | null
       /** If true, save the message for retry after sign-in */
@@ -150,7 +150,7 @@ export function useBranching({
             message: options.message,
             agent: options.agent,
             model: options.model,
-            thinking: options.thinking,
+            reasoningEffort: options.reasoningEffort,
           })
         }
         openSignInModal(true)
@@ -184,7 +184,7 @@ export function useBranching({
       if (!chatId) return false
       // Send message to the new chat if provided (it runs in background)
       if (options?.message) {
-        sendMessage(options.message, options.agent, options.model, undefined, chatId, undefined, undefined, options.thinking)
+        sendMessage(options.message, options.agent, options.model, undefined, chatId, undefined, undefined, options.reasoningEffort)
       }
       return true
     },
@@ -204,17 +204,17 @@ export function useBranching({
   )
 
   const handleBranchWithMessage = useCallback(
-    async (message: string, agent: string, model: string, thinking?: string) => {
-      await createBranchAndSend({ message, agent, model, thinking, savePendingOnAuth: true })
+    async (message: string, agent: string, model: string, reasoningEffort?: string) => {
+      await createBranchAndSend({ message, agent, model, reasoningEffort, savePendingOnAuth: true })
     },
     [createBranchAndSend]
   )
 
   const handleBranchQueuedMessage = useCallback(
-    async (id: string, message: string, agent?: string, model?: string, thinking?: string) => {
+    async (id: string, message: string, agent?: string, model?: string, reasoningEffort?: string) => {
       // Remove from queue first so it doesn't fire on the current chat too
       removeQueuedMessage(id)
-      await createBranchAndSend({ message, agent, model, thinking })
+      await createBranchAndSend({ message, agent, model, reasoningEffort })
     },
     [createBranchAndSend, removeQueuedMessage]
   )

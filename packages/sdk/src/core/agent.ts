@@ -46,8 +46,8 @@ export interface RunOptions {
   env?: Record<string, string>
   /** Working directory for the agent process */
   cwd?: string
-  /** Native reasoning control for this invocation, independent of permissions. */
-  thinking?: string
+  /** Native reasoning-effort control for this invocation, independent of permissions. */
+  reasoningEffort?: string
   /** When true, use read-only plan mode; this is not reasoning effort. */
   planMode?: boolean
 }
