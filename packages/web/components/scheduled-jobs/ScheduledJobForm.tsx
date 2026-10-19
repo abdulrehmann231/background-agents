@@ -315,7 +315,7 @@ export function ScheduledJobForm({ open, job, onClose, onSuccess, isMobile = fal
                   {/* Left side items (repo / branch / MCP) */}
                   <div className={cn(
                     "flex items-center gap-2",
-                    isMobile ? "w-full @container/row1" : "flex-1"
+                    isMobile ? "w-full" : "flex-1"
                   )}>
                     {/* Repo selector */}
                     <RepoCombobox

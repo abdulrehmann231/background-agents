@@ -7,6 +7,7 @@ import { useModals } from "@/lib/contexts"
 import { useSpeechRecognition } from "@/lib/hooks/useSpeechRecognition"
 import { useCreditWarning } from "@/lib/hooks/useCreditWarning"
 import { useUpwardMenuMaxHeight } from "@/lib/hooks/useUpwardMenuMaxHeight"
+import { useCollapsibleLabel } from "@/lib/hooks/useCollapsibleLabel"
 import { isModKeyPressed } from "@/lib/keyboard"
 import type { Chat, Agent, CredentialFlags, PendingFile } from "@/lib/types"
 import { NEW_REPOSITORY, sharedPoolProviderForModel } from "@/lib/types"
@@ -268,6 +269,10 @@ export function ChatInput({
   const [showModeSheet, setShowModeSheet] = useState(false)
   const modeDropdownRef = useRef<HTMLDivElement>(null)
   const modeDropdownMaxHeight = useUpwardMenuMaxHeight(showModeDropdown, modeDropdownRef)
+  // The repo name is arbitrary-length user content (unlike the agent/mode
+  // labels), so it collapses to icon-only based on actual overflow rather
+  // than a fixed breakpoint — see useCollapsibleLabel for why.
+  const { itemRef: repoLinkRef, measureRef: repoLabelMeasureRef, showLabel: showRepoLabel } = useCollapsibleLabel<HTMLAnchorElement>()
 
   // Whether a "branch" modifier (Cmd/Alt/Ctrl) is currently held. When it is —
   // and branching is possible — the send button turns into a "send to new
@@ -571,7 +576,7 @@ export function ChatInput({
           isMobile ? "flex flex-col gap-1 px-3 pb-2 pt-1" : "flex items-center gap-3 px-4 py-2"
         )}>
           {/* Left side items */}
-          <div className={cn("flex items-center gap-2", isMobile ? "w-full @container/row1" : "flex-1")}>
+          <div className={cn("flex items-center gap-2", isMobile ? "w-full" : "flex-1")}>
             {/* Attachment button — same hit-target size as the mic/send/stop
                 buttons on the other side of the textarea. */}
             <button
@@ -619,18 +624,33 @@ export function ChatInput({
                 )}
               </div>
             ) : !isNewRepo && (
-              <a
-                href={`https://github.com/${chat.repo}/tree/${chat.branch}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-sm"
-                title={chat.repo}
-              >
-                <Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                <span className={cn(isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")}>
-                  {chat.repo ? basename(chat.repo) : undefined}
+              <>
+                <a
+                  ref={repoLinkRef}
+                  href={`https://github.com/${chat.repo}/tree/${chat.branch}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 overflow-hidden text-muted-foreground hover:text-foreground transition-colors text-sm"
+                  title={chat.repo}
+                >
+                  <Github className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                  <span className={cn("whitespace-nowrap", showRepoLabel ? "inline" : "hidden")}>
+                    {chat.repo ? basename(chat.repo) : undefined}
+                  </span>
+                </a>
+                {/* Hidden clone of the full icon+label content, measured by
+                    useCollapsibleLabel to decide whether the label above
+                    fits — see that hook for why this can't just measure the
+                    real (possibly already-collapsed) element. */}
+                <span
+                  ref={repoLabelMeasureRef}
+                  aria-hidden="true"
+                  className="pointer-events-none invisible fixed left-0 top-0 flex items-center gap-1 whitespace-nowrap text-sm"
+                >
+                  <Github className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                  <span>{chat.repo ? basename(chat.repo) : undefined}</span>
                 </span>
-              </a>
+              </>
             )}
 
             {/* MCP servers picker */}
