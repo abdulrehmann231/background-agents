@@ -16,20 +16,6 @@ export async function readCredentials(): Promise<string | null> {
   return row?.value ?? null
 }
 
-/**
- * Reads the shared Claude Code credentials row from Postgres, throwing when
- * it's absent. Use this on request paths that require credentials to exist.
- */
-export async function getClaudeCredentials(): Promise<string> {
-  const value = await readCredentials()
-  if (value === null) {
-    throw new Error(
-      `CcAuthInfo row '${CLAUDE_CREDS_KEY}' not found in database`,
-    )
-  }
-  return value
-}
-
 export class SharedClaudeCredentialsUnavailableError extends Error {
   constructor() {
     super("Shared Claude is temporarily unavailable. Please try again later.")
