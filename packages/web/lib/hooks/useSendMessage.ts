@@ -33,7 +33,9 @@ interface UseSendMessageOptions {
     model: string,
     files?: File[],
     chatId?: string,
-    planMode?: boolean
+    planMode?: boolean,
+    rejectedMessageId?: string,
+    thinking?: string
   ) => unknown
   setOptimisticDraft: React.Dispatch<React.SetStateAction<OptimisticDraft | null>>
   openSignInModal: (open: boolean) => void
@@ -46,7 +48,8 @@ interface UseSendMessageResult {
     agent: string,
     model: string,
     files?: File[],
-    planMode?: boolean
+    planMode?: boolean,
+    thinking?: string
   ) => void
   /** True while we've initiated a send but the server hasn't yet responded with an optimistic update. */
   isSendingMessage: boolean
@@ -101,13 +104,14 @@ export function useSendMessage({
       agent: string,
       model: string,
       files?: File[],
-      planMode?: boolean
+      planMode?: boolean,
+      thinking?: string
     ) => {
       // Always require sign-in to send messages
       if (!session) {
         // Store the pending message in sessionStorage (persists across OAuth redirect).
         // Note: files cannot be persisted, so we warn the user if they have attachments.
-        savePendingMessage({ message, agent, model })
+        savePendingMessage({ message, agent, model, thinking })
         openSignInModal(true)
         return
       }
@@ -155,7 +159,7 @@ export function useSendMessage({
         })
       }
 
-      const sendResult = sendMessage(message, agent, model, files, undefined, planMode)
+      const sendResult = sendMessage(message, agent, model, files, undefined, planMode, undefined, thinking)
 
       // Once the send settles, drop the optimistic draft messages. On success
       // the real chat is already showing (currentChatId changed, so the
