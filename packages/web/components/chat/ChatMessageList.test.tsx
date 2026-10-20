@@ -83,14 +83,6 @@ describe("chat execution presentation", () => {
     expect(html).not.toContain(">Retry</button>")
     expect(html).not.toContain(">Continue queued prompts</button>")
   })
-  it("does not claim a prompt was unsent when the acknowledgement is missing", () => {
-    const html = renderWarning(0, false, { queuedMessages: [{ id: "ambiguous", content: "Keep this prompt",
-      pendingSync: true, syncError: "HTTP 503", syncFailed: false }] })
-    expect(html).toContain("Send status unconfirmed: ")
-    expect(html).not.toContain("Not sent:")
-    expect(html).toContain("Keep this prompt")
-    expect(html).not.toContain("animate-pulse")
-  })
   it("explains a confirmed provider timeout after refresh without exposing raw logs", () => {
     const html = renderWarning(0, false, { status: "error", messages: [
       { id: "user", role: "user", content: "Please reply", timestamp: 1 },
@@ -127,31 +119,6 @@ describe("chat execution presentation", () => {
     expect(html).toContain("This model is no longer available. Choose another model before retrying.")
     expect(html).toContain(content ? ">Reload</button>" : ">Retry</button>")
     expect(html).not.toContain("The last run stopped before it finished.")
-  })
-  it("shows one honest direct-send recovery notice without a retry, queue, or fake agent error", () => {
-    const html = renderWarning(0, false, { status: "error", errorMessage: "Quota exceeded",
-      directSendRecovery: [{ id: "u1", userMessageId: "u1", content: "Keep original", syncFailed: true,
-        directSend: { assistantMessageId: "a1", timestamp: 1, attachmentNames: ["notes.txt"] } }],
-    })
-    expect(html.match(/data-testid="chat-error-banner"/g)).toHaveLength(1)
-    expect(html).toContain("Send status is unconfirmed")
-    expect(html).toContain("Keep original")
-    expect(html).toContain("Attachments are not saved on this device")
-    expect(html).toContain("Copy prompt")
-    expect(html).toContain("Dismiss local copy")
-    expect(html).not.toContain("The last run stopped")
-    expect(html).not.toContain(">Retry</button>")
-    expect(html).not.toContain('data-testid="prompt-queue"')
-  })
-  it("never describes a memory-only recovery copy as durably saved", () => {
-    const html = renderWarning(0, false, { status: "error", directSendRecovery: [
-      { id: "user", content: "Copy me", deviceStorage: "memory-only", directSend: { assistantMessageId: "reply", timestamp: 1 } },
-    ] })
-    expect(html).toContain("This copy is only in this open tab")
-    expect(html).toContain("Copy the prompt before refreshing or closing")
-    expect(html).not.toContain("This is a copy saved on this device")
-    expect(html).toContain("Copy prompt")
-    expect(html).not.toContain(">Retry</button>")
   })
   it("offers explicit continuation only for a server-confirmed terminal error", () => {
     const failed = { status: "error", recoverableAssistantMessageId: "failed-reply",
@@ -193,21 +160,5 @@ describe("chat execution presentation", () => {
     expect(html.match(/animate-pulse/g)).toHaveLength(1)
     expect(html).not.toContain("Sending…")
     expect(html).not.toContain("Starting…")
-  })
-
-  it("shows rejected submissions and pending removals without a running loader", () => {
-    const failed = renderWarning(0, false, {
-      queuedMessages: [{ id: "failed", content: "Rejected text", pendingSync: true, sendImmediately: true, syncError: "Invalid prompt", syncFailed: true }],
-    })
-    expect(failed).toContain("Not sent: ")
-    expect(failed).toContain("Invalid prompt")
-    expect(failed).not.toContain("Sending")
-    expect(failed).not.toContain("animate-pulse")
-    const removing = renderWarning(0, false, {
-      queuedMessages: [{ id: "pending", content: "Remove this", pendingSync: true, cancelRequested: true, syncError: "Failed to fetch" }],
-    })
-    expect(removing).toContain("Removal pending confirmation")
-    expect(removing).toContain("Could not confirm removal")
-    expect(removing).not.toContain("animate-pulse")
   })
 })

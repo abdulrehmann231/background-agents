@@ -3,23 +3,21 @@ import { prisma } from "@/lib/db/prisma"
 import { getChatWithAuth, isAuthError, notFound, requireAuth } from "@/lib/db/api-helpers"
 import {
   enqueuePrompt,
-  importLegacyPrompts,
   QueueIdConflict,
   toQueuedMessage,
   type QueueInput,
 } from "@/lib/server/prompt-queue"
-import { getDefaultModelForAgent, type Agent } from "@background-agents/common"
 import { readTerminalQueueRecovery, recoverTerminalQueue } from "@/lib/server/queue-recovery"
 
 type Params = { params: Promise<{ chatId: string }> }
 
-function validInput(value: unknown, fallbackAgent?: string, fallbackModel?: string): QueueInput | null {
+function validInput(value: unknown): QueueInput | null {
   if (!value || typeof value !== "object") return null
   const v = value as Record<string, unknown>
   const content = typeof v.content === "string" ? v.content.trim() : ""
   const clientId = typeof v.clientId === "string" ? v.clientId : ""
-  const agent = typeof v.agent === "string" && v.agent ? v.agent : fallbackAgent
-  const model = typeof v.model === "string" && v.model ? v.model : fallbackModel
+  const agent = typeof v.agent === "string" ? v.agent : ""
+  const model = typeof v.model === "string" ? v.model : ""
   if (!clientId || clientId.length > 128 || !content || content.length > 100_000 || !agent || !model) return null
   const reasoningEffort = typeof v.reasoningEffort === "string" && v.reasoningEffort ? v.reasoningEffort : undefined
   return { clientId, content, agent, model, reasoningEffort }
@@ -66,12 +64,11 @@ export async function GET(_req: NextRequest, { params }: Params): Promise<Respon
   })
 }
 
-/** Enqueue a new prompt or idempotently import a browser's old local queue. */
+/** Enqueue a new prompt. Retrying with the same clientId is idempotent. */
 export async function POST(req: NextRequest, { params }: Params): Promise<Response> {
   const { chatId } = await params
   const auth = await authorizedChat(chatId)
   if (auth.error) return auth.error
-  const chat = auth.chat!
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -80,19 +77,6 @@ export async function POST(req: NextRequest, { params }: Params): Promise<Respon
   }
 
   try {
-    if (Array.isArray(body.legacyItems)) {
-      if (body.legacyItems.length > 100) {
-        return Response.json({ error: "Too many queued prompts" }, { status: 400 })
-      }
-      const fallbackModel = chat.model ?? getDefaultModelForAgent(chat.agent as Agent, null)
-      const items = body.legacyItems.map((item) => validInput(item, chat.agent, fallbackModel))
-      if (items.some((item) => !item)) {
-        return Response.json({ error: "Invalid queued prompt" }, { status: 400 })
-      }
-      const imported = await importLegacyPrompts(chatId, items as QueueInput[], body.paused === true)
-      return Response.json({ imported: items.length, queuedMessages: imported.map(toQueuedMessage) })
-    }
-
     const input = validInput(body)
     if (!input) return Response.json({ error: "Invalid queued prompt" }, { status: 400 })
     const item = await enqueuePrompt(chatId, input)

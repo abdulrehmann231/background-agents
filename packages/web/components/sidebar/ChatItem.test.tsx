@@ -20,7 +20,7 @@ describe.each([false, true])("sidebar work indicator (mobile=%s)", (mobile) => {
   it("does not spin for a paused queue", () => {
     expect(renderSidebar(mobile, { status: "ready", queuePaused: true })).not.toContain("animate-spin")
   })
-  it.each([{ syncError: "Not sent" }, { syncFailed: true }, { cancelRequested: true }, { lastError: "Failed to start" }])("does not spin for blocked queue entries (%s)", (flags) => {
+  it.each([{ lastError: "Failed to start" }])("does not spin for blocked queue entries (%s)", (flags) => {
     expect(renderSidebar(mobile, { queuedMessages: [{ id: "blocked", content: "Not running", ...flags }] })).not.toContain("animate-spin")
   })
   it.each(["running", "creating", "ready"] as const)("still spins for %s active/dispatchable work", (status) => {

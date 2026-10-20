@@ -17,7 +17,6 @@ interface UsePendingMessageReplayOptions {
     files?: File[],
     chatId?: string,
     planMode?: boolean,
-    rejectedMessageId?: string,
     reasoningEffort?: string
   ) => void
   updateChatById: (chatId: string, updates: Partial<Chat>) => Promise<void>
@@ -109,6 +108,6 @@ export function usePendingMessageReplay({
     if (!chats.some((c) => c.id === pendingSend.chatId)) return
     const { message, agent, model, chatId, reasoningEffort } = pendingSend
     setPendingSend(null)
-    sendMessage(message, agent, model, undefined, chatId, undefined, undefined, reasoningEffort)
+    sendMessage(message, agent, model, undefined, chatId, undefined, reasoningEffort)
   }, [pendingSend, chats, sendMessage])
 }

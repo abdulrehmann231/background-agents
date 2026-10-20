@@ -87,7 +87,7 @@ test("rapid sends from one tab keep their order when the first enqueue is delaye
   }
 })
 
-test("a failed first enqueue cannot let the next prompt overtake it", async ({ page, context }) => {
+test("a failed enqueue goes back to the composer instead of retrying in the background", async ({ page, context }) => {
   await setupTestAuth(page, context)
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) })
   let chatId: string | undefined
@@ -104,11 +104,11 @@ test("a failed first enqueue cannot let the next prompt overtake it", async ({ p
     await page.route(`**/api/chats/${chatId}/queue/dispatch`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: '{"status":"skipped"}' })
     )
-    let failedOnce = false
+    let firstAttempts = 0
     await page.route(`**/api/chats/${chatId}/queue`, (route) => {
       if (route.request().method() === "POST" &&
-          route.request().postDataJSON()?.content === "First after failure" && !failedOnce) {
-        failedOnce = true
+          route.request().postDataJSON()?.content === "First after failure") {
+        firstAttempts++
         return route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"Temporary failure"}' })
       }
       return route.continue()
@@ -121,9 +121,12 @@ test("a failed first enqueue cannot let the next prompt overtake it", async ({ p
     await input.fill("Second after failure")
     await input.press("Enter")
 
-    await expect.poll(async () => db.queuedPrompt.count({ where: { chatId } })).toBe(2)
-    const rows = await db.queuedPrompt.findMany({ where: { chatId }, orderBy: { position: "asc" } })
-    expect(rows.map((row) => row.content)).toEqual(["First after failure", "Second after failure"])
+    await expect.poll(async () => db.queuedPrompt.count({ where: { chatId } })).toBe(1)
+    await expect(input).toHaveValue(/First after failure/)
+    await page.waitForTimeout(2_000)
+    const rows = await db.queuedPrompt.findMany({ where: { chatId } })
+    expect(rows.map((row) => row.content)).toEqual(["Second after failure"])
+    expect(firstAttempts).toBe(1)
   } finally {
     if (chatId) await db.chat.deleteMany({ where: { id: chatId } })
     await db.$disconnect()

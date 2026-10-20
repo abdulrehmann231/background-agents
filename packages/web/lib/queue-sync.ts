@@ -1,17 +1,6 @@
 import type { Chat, QueuedMessage } from "@/lib/types"
-import { ApiError, fetchChat, toMessageType, type PromptQueueResponse } from "@/lib/sync/api"
+import { fetchChat, toMessageType, type PromptQueueResponse } from "@/lib/sync/api"
 import { mergeMessages } from "@/lib/merge-messages"
-import { acknowledgeDirectSends } from "@/lib/direct-send-recovery"
-
-export function queueSyncFailure(error: unknown) {
-  return {
-    syncError: error instanceof Error ? error.message : "Could not reach the server",
-    // Authentication, request timeouts and rate limits can recover without
-    // changing the prompt. Invalid/forbidden requests must not retry forever.
-    syncFailed: error instanceof ApiError && error.status >= 400 && error.status < 500 &&
-      ![401, 408, 429].includes(error.status),
-  }
-}
 
 /** A queue item must not vanish before its user/assistant rows arrive. */
 type QueueSnapshot = Pick<Chat, "queuedMessages" | "activeAssistantMessageId" | "backgroundSessionId" | "messageCount" | "lastMessageId"> &
@@ -26,7 +15,7 @@ export function needsQueueMessages(previous: Chat | undefined, next: QueueSnapsh
     (next.status === "error" && next.updatedAt !== undefined && next.updatedAt > previous.updatedAt) ||
     (next.messageCount !== undefined && next.messageCount !== previous.messageCount) ||
     (!!next.lastMessageId && !previous.messages.some((message) => message.id === next.lastMessageId)) ||
-    local.some((item) => !item.directSend && !item.cancelRequested && !!item.userMessageId &&
+    local.some((item) => !!item.userMessageId &&
       !previous.messages.some((message) => message.id === item.userMessageId) &&
       !next.queuedMessages?.some((queued) => queued.clientId === item.id || queued.userMessageId === item.userMessageId)) ||
     (!!next.activeAssistantMessageId && !previous.messages.some((message) => message.id === next.activeAssistantMessageId)) ||
@@ -41,7 +30,6 @@ export function needsChatListMessages(previous: Chat | undefined, next: QueueSna
 /** Fetch before changing queue visibility; failed reads leave the old UI intact. */
 export async function loadQueueMessages(chatId: string) {
   const detail = await fetchChat(chatId)
-  acknowledgeDirectSends(chatId, detail.messages)
   return { ...detail, status: detail.status as Chat["status"], messages: detail.messages.map(toMessageType) }
 }
 

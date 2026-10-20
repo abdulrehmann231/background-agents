@@ -17,7 +17,6 @@ import { notifyCompletion } from "@/lib/notify"
 import type { SettingsData } from "@/lib/query/hooks/useSettingsQuery"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 import { applyRecoveredChat } from "@/lib/chat-recovery"
-import { acknowledgeDirectSends } from "@/lib/direct-send-recovery"
 
 const SSE_INITIAL_RETRY_DELAY = 1000
 const SSE_MAX_RETRY_DELAY = 30000
@@ -228,7 +227,6 @@ export function useStreaming(options: UseStreamingOptions = {}) {
           // Fetch any new messages created by the backend (delta sync)
           try {
             const chatData = await fetchChat(chatId, { afterMessageId: assistantMessageId })
-            acknowledgeDirectSends(chatId, chatData.messages)
             if (streamGenerations.current.get(chatId) !== generation) return
             const incomingMessages = chatData.messages.map(toMessageType)
             updateChatsCache((old) =>
@@ -312,7 +310,6 @@ export function useStreaming(options: UseStreamingOptions = {}) {
             useStreamStore.getState().stopStream(chatId)
             const observed = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())?.find((chat) => chat.id === chatId)
             const latestChat = await fetchChat(chatId)
-            acknowledgeDirectSends(chatId, latestChat.messages)
             if (!observed || streamGenerations.current.get(chatId) !== generation) return
             updateChatsCache((old) => old.map((c) => c.id === chatId ? applyRecoveredChat(c, latestChat, observed) : c))
             if (latestChat.status === "ready") wakeQueuedPrompt(chatId)

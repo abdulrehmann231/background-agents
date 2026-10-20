@@ -127,7 +127,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
   // Show the repo button if either action is available
   const showRepoButton = canSelectExistingRepo || canCreateRepo
   // Only show welcome screen if no messages AND not loading messages AND not a child chat
-  const isNewChat = chat.messages.length === 0 && !chat.directSendRecovery?.length && !chat.parentChatId && !isLoadingMessages
+  const isNewChat = chat.messages.length === 0 && !chat.parentChatId && !isLoadingMessages
 
   // File preview modal — built once, shared by the welcome and messages views.
   const filePreviewModal = previewFile ? (

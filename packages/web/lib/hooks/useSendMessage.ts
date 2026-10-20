@@ -34,7 +34,6 @@ interface UseSendMessageOptions {
     files?: File[],
     chatId?: string,
     planMode?: boolean,
-    rejectedMessageId?: string,
     reasoningEffort?: string
   ) => unknown
   setOptimisticDraft: React.Dispatch<React.SetStateAction<OptimisticDraft | null>>
@@ -159,7 +158,7 @@ export function useSendMessage({
         })
       }
 
-      const sendResult = sendMessage(message, agent, model, files, undefined, planMode, undefined, reasoningEffort)
+      const sendResult = sendMessage(message, agent, model, files, undefined, planMode, reasoningEffort)
 
       // Once the send settles, drop the optimistic draft messages. On success
       // the real chat is already showing (currentChatId changed, so the

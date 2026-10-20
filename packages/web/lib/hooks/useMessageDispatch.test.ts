@@ -6,7 +6,6 @@ import type { Chat } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 import { useChatSyncStore } from "@/lib/stores/chat-sync-store"
 import { queryKeys } from "@/lib/query"
-import { acknowledgeDirectSends } from "@/lib/direct-send-recovery"
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), fetchChat: vi.fn() }))
 vi.mock("./useServerQueue", () => ({ useServerQueue: () => ({ enqueueMessage: vi.fn(), removeQueuedMessage: vi.fn(), resumeQueue: vi.fn() }) }))
@@ -67,7 +66,7 @@ beforeEach(() => {
     key: (index: number) => [...stored.keys()][index] ?? null,
     get length() { return stored.size },
   })
-  useChatSyncStore.setState({ localChatState: { previewStates: {}, drafts: {}, queuePaused: {}, queuedMessages: {} } })
+  useChatSyncStore.setState({ localChatState: { previewStates: {}, drafts: {}, queuedMessages: {} } })
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -94,7 +93,6 @@ describe("direct-send failure ownership", () => {
     await sending
     expect(client.getQueryData<Chat[]>(queryKeys.chats.list())?.[0]).toEqual(newer)
     expect(stream).not.toHaveBeenCalled()
-    expect(useChatSyncStore.getState().localChatState.queuedMessages[chat.id] ?? []).toHaveLength(0)
   })
 
   it("does not remove acknowledged server rows when a delayed POST error arrives", async () => {
@@ -105,12 +103,10 @@ describe("direct-send failure ownership", () => {
     const sending = dispatch.sendMessage("Please say 4", "eliza", "eliza-classic-1.0")
     const pending = client.getQueryData<Chat[]>(queryKeys.chats.list())![0]
     const saved = { ...chat, pendingSend: true, pendingSendAssistantMessageId: pending.activeAssistantMessageId, updatedAt: 5, messages: pending.messages.map((message) => ({ ...message, content: message.role === "assistant" ? "4" : message.content })) }
-    acknowledgeDirectSends(chat.id, saved.messages)
     client.setQueryData(queryKeys.chats.list(), [saved])
     reject(new Error("Response lost"))
     await sending
     expect(client.getQueryData<Chat[]>(queryKeys.chats.list())?.[0]).toEqual({ ...saved, pendingSend: false, pendingSendAssistantMessageId: undefined })
-    expect(useChatSyncStore.getState().localChatState.queuedMessages[chat.id] ?? []).toHaveLength(0)
   })
 
   it("does not restart an acknowledged finished turn when its delayed POST success arrives", async () => {
@@ -120,7 +116,6 @@ describe("direct-send failure ownership", () => {
     const sending = dispatch.sendMessage("Please say 4", "eliza", "eliza-classic-1.0")
     const pending = client.getQueryData<Chat[]>(queryKeys.chats.list())![0]
     const finished = { ...chat, updatedAt: 5, messages: pending.messages.map((message) => ({ ...message, content: message.role === "assistant" ? "4" : message.content })) }
-    acknowledgeDirectSends(chat.id, finished.messages)
     client.setQueryData(queryKeys.chats.list(), [finished])
     release({ ok: true, data: { sandboxId: "sandbox-old", backgroundSessionId: "background-old", uploadedFiles: [], branch: null, previewUrlPattern: null } })
     await sending
@@ -128,40 +123,19 @@ describe("direct-send failure ownership", () => {
     expect(stream).not.toHaveBeenCalled()
   })
 
-  it("keeps an unconfirmed original as a labeled local copy, not an optimistic saved bubble", async () => {
+  it("keeps a failed prompt on screen with an error so it can be retried", async () => {
     mocks.send.mockRejectedValue(new Error("Gateway error"))
     mocks.fetchChat.mockRejectedValue(new Error("Still offline"))
-    const { dispatch, client, chat } = setup()
+    const { dispatch, client } = setup()
     await dispatch.sendMessage("Original text", "eliza", "eliza-classic-1.0")
-    expect(client.getQueryData<Chat[]>(queryKeys.chats.list())?.[0].messages).toHaveLength(0)
-    expect(client.getQueryData<Chat[]>(queryKeys.chats.list())?.[0].status).toBe("disconnected")
-    expect(useChatSyncStore.getState().localChatState.queuedMessages[chat.id]?.[0]).toMatchObject({ content: "Original text", directSend: { error: "Gateway error" } })
-  })
+    const current = client.getQueryData<Chat[]>(queryKeys.chats.list())![0]
+    expect(current.messages.map((message) => message.content)).toEqual(["Original text"])
+    expect(current).toMatchObject({ status: "error", errorMessage: "Gateway error" })
 
-  it("hands a known-rejected limit prompt to an explicitly selected fallback without retaining two device copies", async () => {
-    mocks.send.mockResolvedValueOnce({ ok: false, isDailyLimit: true, error: "DAILY_LIMIT_EXCEEDED" })
-    const initial = setup()
-    await initial.dispatch.sendMessage("Original limited prompt", "eliza", "eliza-classic-1.0")
-    const original = useChatSyncStore.getState().localChatState.queuedMessages[initial.chat.id]![0]
-    expect(original.content).toBe("Original limited prompt")
-    mocks.send.mockResolvedValueOnce({ ok: true, data: { sandboxId: "sandbox-fallback", backgroundSessionId: "background-fallback", uploadedFiles: [], branch: null, previewUrlPattern: null } })
-    const fallback = setup()
-    await Reflect.apply(fallback.dispatch.sendMessage, undefined,
-      [original.content, "opencode", undefined, undefined, initial.chat.id, undefined, original.id])
-    expect(mocks.send).toHaveBeenCalledTimes(2)
-    expect(useChatSyncStore.getState().localChatState.queuedMessages[initial.chat.id] ?? []).toHaveLength(0)
-  })
-
-  it("keeps the rejected original when the fallback cannot begin because another turn is running", async () => {
-    mocks.send.mockResolvedValueOnce({ ok: false, isDailyLimit: true, error: "DAILY_LIMIT_EXCEEDED" })
-    const initial = setup()
-    await initial.dispatch.sendMessage("Original limited prompt", "eliza", "eliza-classic-1.0")
-    const original = useChatSyncStore.getState().localChatState.queuedMessages[initial.chat.id]![0]
-    const fallback = setup({ chats: [{ ...initial.chat, status: "running", activeAssistantMessageId: "another-turn" }] })
-    await Reflect.apply(fallback.dispatch.sendMessage, undefined,
-      [original.content, "opencode", undefined, undefined, initial.chat.id, undefined, original.id])
-    expect(mocks.send).toHaveBeenCalledTimes(1)
-    expect(useChatSyncStore.getState().localChatState.queuedMessages[initial.chat.id]).toEqual([original])
+    // Retry replaces the failed bubble instead of adding a second copy.
+    await dispatch.sendMessage("Original text", "eliza", "eliza-classic-1.0")
+    const retried = client.getQueryData<Chat[]>(queryKeys.chats.list())![0]
+    expect(retried.messages.map((message) => message.content)).toEqual(["Original text"])
   })
 
   it.each([

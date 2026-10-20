@@ -2,14 +2,13 @@
  * LocalStorage utilities for Simple Chat
  *
  * Only device-specific state is stored here:
- * - currentChatId, previewItems, queuedMessages, queuePaused, drafts
+ * - currentChatId, previewItems, drafts
  * - unseenChatIds
  *
  * Server data (chats, messages, settings) is managed by TanStack Query.
  */
 
 import type { Chat, Settings } from "./types"
-import { clearQueueOutbox, migrateQueueOutbox, patchQueueOutbox, readQueueOutbox } from "./queue-outbox"
 
 // =============================================================================
 // Storage Keys
@@ -47,8 +46,6 @@ export interface PreviewState {
 export interface LocalState {
   currentChatId: string | null
   previewStates: Record<string, PreviewState>
-  queuedMessages: Record<string, Chat["queuedMessages"]>
-  queuePaused: Record<string, boolean>
   drafts: Record<string, string>
   draftChatConfig?: DraftChatConfig
 }
@@ -72,8 +69,6 @@ export const DEFAULT_SETTINGS: Settings = {
 const DEFAULT_LOCAL_STATE: LocalState = {
   currentChatId: null,
   previewStates: {},
-  queuedMessages: {},
-  queuePaused: {},
   drafts: {},
 }
 
@@ -114,29 +109,11 @@ export function writeJSON(key: string, value: unknown, label: string): void {
 // Local State (Device-Specific)
 // =============================================================================
 
-let storedStateOwner: Storage | undefined
-let lastStoredState = DEFAULT_LOCAL_STATE
-
-function loadStoredLocalState(): LocalState {
-  if (typeof window === "undefined") return DEFAULT_LOCAL_STATE
-  try {
-    const storage = localStorage
-    if (storage !== storedStateOwner) {
-      storedStateOwner = storage
-      lastStoredState = DEFAULT_LOCAL_STATE
-    }
-    const raw = storage.getItem(LOCAL_STATE_KEY)
-    lastStoredState = { ...DEFAULT_LOCAL_STATE, ...(raw ? JSON.parse(raw) as LocalState : {}) }
-  } catch (error) {
-    // A failed legacy-queue read must not look like another tab removed it.
-    console.error("Failed to load local state; retaining the last readable copy:", error)
-  }
-  return lastStoredState
-}
-
 export function loadLocalState(): LocalState {
-  const state = loadStoredLocalState()
-  return { ...state, queuedMessages: readQueueOutbox(state.queuedMessages) }
+  return {
+    ...DEFAULT_LOCAL_STATE,
+    ...readJSON<LocalState>(LOCAL_STATE_KEY, DEFAULT_LOCAL_STATE, "local state"),
+  }
 }
 
 function saveLocalState(state: LocalState): void {
@@ -148,16 +125,14 @@ function saveLocalState(state: LocalState): void {
  * Centralizes the load → mutate → save pattern used by every setter below.
  */
 function updateLocalState(updater: (state: LocalState) => LocalState): void {
-  // Keep the old queue array read-only. Serializing the merged outbox back into
-  // this shared record would reintroduce cross-tab whole-array overwrites.
-  saveLocalState(updater(loadStoredLocalState()))
+  saveLocalState(updater(loadLocalState()))
 }
 
 /**
  * Update a single keyed entry inside one of the per-chat record fields.
  * Passing `undefined` removes the entry; otherwise it is set.
  */
-function updateLocalStateRecord<K extends "previewStates" | "queuedMessages" | "queuePaused" | "drafts">(
+function updateLocalStateRecord<K extends "previewStates" | "drafts">(
   field: K,
   key: string,
   value: LocalState[K][string] | undefined,
@@ -182,16 +157,6 @@ export function setPreviewState(chatId: string, previewState: PreviewState | und
   updateLocalStateRecord("previewStates", chatId, previewState)
 }
 
-export function setQueuedMessages(chatId: string, messages: Chat["queuedMessages"], previous: NonNullable<Chat["queuedMessages"]> = loadLocalState().queuedMessages[chatId] ?? []): NonNullable<Chat["queuedMessages"]> {
-  const legacy = loadStoredLocalState().queuedMessages[chatId] ?? []
-  patchQueueOutbox(chatId, previous, messages ?? [], legacy)
-  return loadLocalState().queuedMessages[chatId] ?? []
-}
-
-export function setQueuePaused(chatId: string, paused: boolean): void {
-  updateLocalStateRecord("queuePaused", chatId, paused, () => false)
-}
-
 export function setDraft(chatId: string, draft: string | undefined): void {
   updateLocalStateRecord("drafts", chatId, draft, (v) => v === undefined || v === "")
 }
@@ -211,7 +176,7 @@ export function clearDraftChatConfig(): void {
 }
 
 // Per-chat record fields that live inside LocalState
-const CHAT_KEYED_FIELDS = ["previewStates", "queuedMessages", "queuePaused", "drafts"] as const
+const CHAT_KEYED_FIELDS = ["previewStates", "drafts"] as const
 
 /**
  * Move a single keyed entry from one id to another inside a record, if present.
@@ -230,7 +195,6 @@ function renameKey<T>(record: Record<string, T>, fromId: string, toId: string): 
  * Used when materializing a draft into a real database chat
  */
 export function migrateDraftToRealChat(draftId: string, realId: string): void {
-  migrateQueueOutbox(draftId, realId)
   updateLocalState((state) => {
     const next: LocalState = { ...state, currentChatId: realId, draftChatConfig: undefined }
     for (const field of CHAT_KEYED_FIELDS) {
@@ -242,7 +206,6 @@ export function migrateDraftToRealChat(draftId: string, realId: string): void {
 }
 
 export function clearLocalStateForChats(chatIds: string[]): void {
-  clearQueueOutbox(chatIds)
   updateLocalState((state) => {
     const next: LocalState = {
       ...state,
@@ -277,7 +240,6 @@ export function saveUnseenChatIds(ids: Set<string>): void {
 export function clearAllStorage(): void {
   if (typeof window === "undefined") return
   try {
-    clearQueueOutbox()
     localStorage.removeItem(LOCAL_STATE_KEY)
     localStorage.removeItem(UNSEEN_KEY)
     // Also clear legacy server cache key if it exists

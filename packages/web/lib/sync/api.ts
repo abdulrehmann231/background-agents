@@ -178,18 +178,6 @@ export async function enqueuePromptApi(
   return result.queuedMessage
 }
 
-export async function importLegacyPromptQueue(
-  chatId: string,
-  legacyItems: Array<{ clientId: string; content: string; agent?: string; model?: string; reasoningEffort?: string }>,
-  paused: boolean
-): Promise<QueuedMessage[]> {
-  const result = await fetchApi<{ queuedMessages: QueuedMessage[] }>(`/api/chats/${chatId}/queue`, {
-    method: "POST",
-    body: JSON.stringify({ legacyItems, paused }),
-  })
-  return result.queuedMessages
-}
-
 export async function removeQueuedPromptApi(chatId: string, promptId: string, clientId?: string): Promise<void> {
   await fetchApi(`/api/chats/${chatId}/queue/${encodeURIComponent(promptId)}`, {
     method: "DELETE",
