@@ -10,7 +10,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
   // Check for updates on startup (with delay)
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch((err) => {
-      console.log("Auto-update check failed:", err.message);
+      console.error("Auto-update check failed:", err.message);
     });
   }, 10000); // Wait 10 seconds after startup
 
@@ -18,7 +18,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
   setInterval(
     () => {
       autoUpdater.checkForUpdates().catch((err) => {
-        console.log("Auto-update check failed:", err.message);
+        console.error("Auto-update check failed:", err.message);
       });
     },
     60 * 60 * 1000

@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SortHeader } from "@/components/ui/SortHeader"
 import { formatMetricValue } from "@/components/charts/chartFormatters"
 import { UserModelBreakdownModal } from "./UserModelBreakdownModal"
 import type { TopupUser, UserBalance, UserUsage } from "@/lib/query/hooks"
@@ -133,54 +133,6 @@ function sortUsers(users: MergedUser[], field: SortField, order: SortOrder): Mer
   })
 }
 
-function SortHeader({
-  label,
-  field,
-  currentField,
-  currentOrder,
-  onSort,
-  align = "right",
-  className,
-}: {
-  label: string
-  field: SortField
-  currentField: SortField
-  currentOrder: SortOrder
-  onSort: (field: SortField) => void
-  align?: "left" | "right"
-  className?: string
-}) {
-  const isActive = currentField === field
-  return (
-    <th
-      className={cn(
-        "px-2 py-2 font-medium sm:px-3",
-        align === "right" ? "text-right" : "text-left",
-        className
-      )}
-    >
-      <button
-        onClick={() => onSort(field)}
-        className={cn(
-          "inline-flex items-center gap-1 hover:text-foreground",
-          align === "right" && "flex-row-reverse"
-        )}
-      >
-        {label}
-        {isActive ? (
-          currentOrder === "asc" ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3 w-3 opacity-40" />
-        )}
-      </button>
-    </th>
-  )
-}
-
 /** A checkbox that can also render its native `indeterminate` visual state,
  * which has no React prop and must be set on the DOM node directly. */
 function Checkbox({
@@ -307,6 +259,8 @@ export function UsageByUserTable({
               label="User"
               field="name"
               align="left"
+              className="px-2 py-2 sm:px-3"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
@@ -314,6 +268,9 @@ export function UsageByUserTable({
             <SortHeader
               label="Topped up"
               field="toppedUp"
+              align="right"
+              className="px-2 py-2 sm:px-3"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
@@ -321,6 +278,9 @@ export function UsageByUserTable({
             <SortHeader
               label="Balance"
               field="balance"
+              align="right"
+              className="px-2 py-2 sm:px-3"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
@@ -328,6 +288,9 @@ export function UsageByUserTable({
             <SortHeader
               label="Spent"
               field="spent"
+              align="right"
+              className="px-2 py-2 sm:px-3"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
@@ -335,6 +298,9 @@ export function UsageByUserTable({
             <SortHeader
               label="Tokens"
               field="tokens"
+              align="right"
+              className="px-2 py-2 sm:px-3"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
@@ -343,6 +309,9 @@ export function UsageByUserTable({
               <SortHeader
                 label="List value"
                 field="cost"
+                align="right"
+                className="px-2 py-2 sm:px-3"
+                inactiveIconClassName="opacity-40"
                 currentField={sortField}
                 currentOrder={sortOrder}
                 onSort={handleSort}
@@ -351,18 +320,22 @@ export function UsageByUserTable({
             <SortHeader
               label="On our pool"
               field="pool"
+              align="right"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
-              className="hidden sm:table-cell"
+              className="px-2 py-2 hidden sm:table-cell sm:px-3"
             />
             <SortHeader
               label="Models"
               field="models"
+              align="right"
+              inactiveIconClassName="opacity-40"
               currentField={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
-              className="hidden md:table-cell"
+              className="px-2 py-2 hidden md:table-cell sm:px-3"
             />
           </tr>
         </thead>
