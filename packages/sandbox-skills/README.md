@@ -87,6 +87,7 @@ import { searchSkills, SKILLS_API_BASE } from "@background-agents/sandbox-skills
 import {
   listAvailableSkills,
   installSkill,
+  installSkillArchive,
   installSkills,
   parseSkillHandle,
   uninstallSkill,

@@ -2,10 +2,12 @@
  * Install skills into a Daytona sandbox
  */
 
+import { randomUUID } from "node:crypto"
 import type { Sandbox } from "@daytonaio/sdk"
 import type { SkillRecord, SkillInstallResult, SkillsInstallResult } from "../types"
 import { extractCleanError } from "../utils"
 import { listAvailableSkills } from "./list"
+import { parseFrontmatter } from "./discover"
 
 /**
  * Parse a skill's fullHandle into source and skillId components.
@@ -77,6 +79,62 @@ export async function installSkill(
   }
 }
 
+/** Uploaded skill names end up in shell commands, so only allow safe characters. */
+const SAFE_SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+/** Single-quote a path for the sandbox shell (folder names come from the zip). */
+function quote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+/**
+ * Install an uploaded skill from a zip. The zip holds one skill: a SKILL.md
+ * (at the top level or inside one folder) and the files it uses.
+ *
+ * The zip is unpacked in the sandbox and installed with the same
+ * `skills add` command as skills.sh skills, using the local folder as the
+ * source. The returned fullHandle is "upload/<name>", with the name taken
+ * from SKILL.md.
+ */
+export async function installSkillArchive(
+  sandbox: Sandbox,
+  repoPath: string,
+  archive: Uint8Array
+): Promise<SkillInstallResult> {
+  const dir = `/tmp/skill-upload-${randomUUID()}`
+  const failed = (error: string): SkillInstallResult => ({ fullHandle: "upload", success: false, error })
+
+  try {
+    await sandbox.process.executeCommand(`mkdir -p ${dir}`)
+    await sandbox.fs.uploadFile(Buffer.from(archive), `${dir}/skill.zip`)
+    // unzip drops "../" path components, so the files stay inside the folder.
+    const unzip = await sandbox.process.executeCommand(
+      `cd ${dir} && unzip -q -o skill.zip -d files 2>&1 && find files -maxdepth 2 -name SKILL.md`
+    )
+    if (unzip.exitCode !== 0) return failed("Could not unzip the file")
+
+    const found = (unzip.result ?? "").trim().split("\n").filter(Boolean)
+    if (found.length !== 1) return failed("The zip must contain exactly one SKILL.md")
+
+    const skillMd = await sandbox.process.executeCommand(`cat ${quote(`${dir}/${found[0]}`)}`)
+    const meta = parseFrontmatter(skillMd.result ?? "")
+    if (!meta?.name || !SAFE_SKILL_NAME.test(meta.name)) {
+      return failed("SKILL.md needs a description and a name using only letters, numbers, dots, dashes or underscores")
+    }
+
+    const skillDir = `${dir}/${found[0].replace(/\/?SKILL\.md$/, "")}`
+    const result = await installSkill(sandbox, repoPath, quote(skillDir))
+    return { ...result, fullHandle: `upload/${meta.name}` }
+  } catch (error) {
+    return failed(error instanceof Error ? error.message : "Unknown error")
+  } finally {
+    // Best-effort cleanup: a leftover temp folder doesn't affect the install.
+    await sandbox.process.executeCommand(`rm -rf ${dir}`).catch((error) => {
+      console.warn("[skills/install] Could not remove the upload folder:", error)
+    })
+  }
+}
+
 /**
  * Callback for when a skill should be removed (e.g. stale DB record).
  * Called when a skill fails validation or installation.
@@ -125,6 +183,12 @@ export async function installSkills(
   const availableSkillsCache = new Map<string, Set<string> | null>()
 
   for (const skill of skills) {
+    if (skill.archive) {
+      // Uploaded skills can't be fetched again, so keep the record if this fails.
+      results.push(await installSkillArchive(sandbox, repoPath, skill.archive))
+      continue
+    }
+
     const { source, skillId } = parseSkillHandle(skill.fullHandle)
 
     // If there's a specific skillId, validate it exists in the repo

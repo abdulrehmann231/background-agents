@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { Search, X, Check, Loader2, Zap, Trash2, ExternalLink } from "lucide-react"
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react"
+import { Search, X, Check, Loader2, Zap, Trash2, ExternalLink, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Skill, SkillSearchResult } from "@/lib/types"
 
@@ -21,8 +21,10 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
   const [isInstalling, setIsInstalling] = useState(false)
   const [installProgress, setInstallProgress] = useState<{ installed: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"search" | "installed">("search")
   const inputRef = useRef<HTMLInputElement>(null)
+  const zipInputRef = useRef<HTMLInputElement>(null)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Fetch installed skills on open
@@ -184,16 +186,47 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
     }
   }
 
-  const handleUninstall = async (skillId: string) => {
+  const handleUploadZip = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = "" // Let the same file be picked again after fixing it.
+    if (!file) return
+
+    setIsInstalling(true)
+    setError(null)
     try {
-      const res = await fetch(`/api/skills/${skillId}?chatId=${encodeURIComponent(chatId)}`, {
+      const form = new FormData()
+      form.append("chatId", chatId)
+      form.append("file", file)
+      const res = await fetch("/api/skills/upload", { method: "POST", body: form })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? "Upload failed")
+      }
+      await fetchInstalledSkills()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setIsInstalling(false)
+    }
+  }
+
+  const handleUninstall = async (skill: Skill) => {
+    if (!confirm(`Remove the ${skill.name} skill from this repo?`)) return
+    setError(null)
+    setRemovingId(skill.id)
+    try {
+      const res = await fetch(`/api/skills/${skill.id}?chatId=${encodeURIComponent(chatId)}`, {
         method: "DELETE",
       })
       if (res.ok) {
-        setInstalledSkills((prev) => prev.filter((s) => s.id !== skillId))
+        setInstalledSkills((prev) => prev.filter((s) => s.id !== skill.id))
+      } else {
+        setError("Failed to uninstall skill")
       }
     } catch {
       setError("Failed to uninstall skill")
+    } finally {
+      setRemovingId(null)
     }
   }
 
@@ -423,6 +456,11 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
 
           {activeTab === "installed" && (
             <div className="max-h-[50vh] overflow-y-auto scrollbar-auto-hide">
+              {error && (
+                <div className="px-4 py-3 text-sm text-destructive bg-destructive/10">
+                  {error}
+                </div>
+              )}
               {installedSkills.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                   No skills installed for this repo.
@@ -460,15 +498,44 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
                       </a>
                     )}
                     <button
-                      onClick={() => handleUninstall(skill.id)}
-                      className="flex-shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
+                      onClick={() => handleUninstall(skill)}
+                      disabled={removingId === skill.id}
+                      className={cn(
+                        "flex-shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100",
+                        removingId === skill.id && "opacity-100"
+                      )}
                       title="Uninstall skill"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {removingId === skill.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </button>
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {/* Upload Bar */}
+          {activeTab === "installed" && (
+            <div className="flex items-center gap-3 px-4 py-3 border-t border-border bg-accent/30">
+              <span className="text-sm text-muted-foreground">
+                Upload your own skill: a .zip with its SKILL.md and files.
+              </span>
+              <div className="flex-1" />
+              <button
+                onClick={() => zipInputRef.current?.click()}
+                disabled={isInstalling}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {isInstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {isInstalling ? "Uploading…" : "Upload .zip"}
+              </button>
+              <input
+                ref={zipInputRef}
+                type="file"
+                accept=".zip"
+                className="hidden"
+                onChange={handleUploadZip}
+              />
             </div>
           )}
         </div>

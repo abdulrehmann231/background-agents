@@ -22,7 +22,7 @@ import type { DiscoveredSkill } from "../types"
  * Returns null if the frontmatter is missing or description is absent
  * (per spec: skills without a description must be skipped).
  */
-function parseFrontmatter(
+export function parseFrontmatter(
   content: string
 ): { name: string; description: string } | null {
   const lines = content.split("\n")
