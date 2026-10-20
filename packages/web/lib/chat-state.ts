@@ -154,24 +154,6 @@ export function computeUnseenTransitions(
 }
 
 // =============================================================================
-// Message queue operations
-// =============================================================================
-
-/** Append a message to a chat's queue. */
-export function enqueue(
-  queue: QueuedMessage[] | undefined,
-  item: QueuedMessage
-): QueuedMessage[] {
-  return [...(queue ?? []), item]
-}
-
-/** Split the head of a (non-empty) queue from the rest. */
-export function dequeue(queue: QueuedMessage[]): { next: QueuedMessage; rest: QueuedMessage[] } {
-  const [next, ...rest] = queue
-  return { next, rest }
-}
-
-// =============================================================================
 // Drafts
 // =============================================================================
 
