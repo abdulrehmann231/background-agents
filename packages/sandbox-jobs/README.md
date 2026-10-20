@@ -16,7 +16,7 @@ One job = one process = one directory:
 
 ```
 <root>/<jobId>/
-  meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version }
+  meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version, commandFingerprint }
   output.log    combined stdout+stderr, byte-exact, append-only
   exit          integer $?, also written after confirmed cancellation
   command-exit  wrapper-only foreground exit code (atomic publication)
@@ -150,6 +150,6 @@ throw. Custom `SandboxJobs` implementations must provide `abort()` and
 
 ```bash
 npm run typecheck
-npx vitest run tests/parse.test.ts        # pure unit tests, instant
-DAYTONA_API_KEY=... npx vitest run        # + integration (creates a sandbox)
+npm run test -w @background-agents/sandbox-jobs   # pure unit tests, instant
+DAYTONA_API_KEY=... npx vitest run                # + integration (creates a sandbox)
 ```
