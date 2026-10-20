@@ -7,6 +7,13 @@ export type ReasoningEffortLevel = typeof REASONING_EFFORT_LEVELS[number]
 export interface ReasoningEffortCapability {
   readonly levels: readonly ReasoningEffortLevel[]
   readonly control?: "codex-config" | "claude-effort" | "commandcode-effort" | "copilot-effort" | "droid-effort" | "pi-thinking" | "kimi-env"
+  /**
+   * The level the underlying CLI actually uses when no override is passed.
+   * Always one of `levels` (or undefined when `levels` is empty). The UI
+   * preselects this instead of showing a separate "Default" menu entry, so
+   * the user sees the true default up front rather than an opaque label.
+   */
+  readonly defaultLevel?: ReasoningEffortLevel
 }
 
 const basic = ["low", "medium", "high"] as const
@@ -22,18 +29,18 @@ const none: ReasoningEffortCapability = { levels: [] }
 function expectedReasoningEffortCapability(agent: string, model?: string): ReasoningEffortCapability {
   if (!model || model.startsWith("endpoint:")) return none
   if (agent === "codex") {
-    if (["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol"].includes(model)) return { levels: [...extended, "ultra"], control: "codex-config" }
-    if (model === "gpt-6-luna") return { levels: extended, control: "codex-config" }
-    if (model === "gpt-5.5") return { levels: [...basic, "xhigh"], control: "codex-config" }
+    if (["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol"].includes(model)) return { levels: [...extended, "ultra"], control: "codex-config", defaultLevel: "medium" }
+    if (model === "gpt-6-luna") return { levels: extended, control: "codex-config", defaultLevel: "medium" }
+    if (model === "gpt-5.5") return { levels: [...basic, "xhigh"], control: "codex-config", defaultLevel: "medium" }
   }
   if (agent === "claude") {
     // Aliases can resolve to different releases, so they only offer the levels
     // every release supports.
     if (["sonnet", "opus"].includes(model) || /^claude-(opus|sonnet)-4-6(?:-\d{8})?$/.test(model)) {
-      return { levels: [...basic, "max"], control: "claude-effort" }
+      return { levels: [...basic, "max"], control: "claude-effort", defaultLevel: "medium" }
     }
     if (model === "fable" || /^claude-(?:fable-5(?:-1)?|opus-(?:4-[78]|5(?:-5)?)|sonnet-5(?:-5)?|haiku-5-5)$/.test(model)) {
-      return { levels: extended, control: "claude-effort" }
+      return { levels: extended, control: "claude-effort", defaultLevel: "medium" }
     }
   }
   if (agent === "commandcode" || agent === "copilot") {
@@ -42,11 +49,17 @@ function expectedReasoningEffortCapability(agent: string, model?: string): Reaso
     const claude = /^claude-(?:fable-5(?:-1)?|opus-(?:4-[78]|5(?:-5)?)|sonnet-5(?:-5)?|haiku-5-5)$/.test(id)
     const openai = /^gpt-(?:6(?:-1)?-(?:sol|astra|luna)|5-6-(?:sol|terra|luna))$/.test(id)
     const older = /^gpt-5-(?:3-codex|4|5)$/.test(id)
-    if (claude || openai || older) return { levels: older ? [...basic, "xhigh"] : extended, control: agent === "copilot" ? "copilot-effort" : "commandcode-effort" }
+    if (claude || openai || older) {
+      return { levels: older ? [...basic, "xhigh"] : extended, control: agent === "copilot" ? "copilot-effort" : "commandcode-effort", defaultLevel: "medium" }
+    }
   }
   if (agent === "droid" && model.startsWith("factory/")) {
     // Droid's reasoning flag only applies to Factory-hosted models, not BYOK.
     const id = model.slice(8)
+    // Factory docs: GPT-hosted models start on "medium"; Anthropic-hosted
+    // models default to "off" (no extended thinking unless requested).
+    // Gemini/GLM defaults aren't documented; the lowest offered level is the
+    // closest approximation of their out-of-the-box behavior.
     const levels: readonly ReasoningEffortLevel[] | undefined =
       ["gpt-6.1-sol", "gpt-6-astra", "claude-opus-5-5"].includes(id) ? extended :
       ["gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"].includes(id) ? ["none", ...extended] :
@@ -55,18 +68,22 @@ function expectedReasoningEffortCapability(agent: string, model?: string): Reaso
       ["gemini-3.8-flash", "gemini-3.1-pro-preview"].includes(id) ? basic :
       ["gemini-3.5-flash", "gemini-3-flash-preview"].includes(id) ? ["minimal", ...basic] :
       id === "glm-5.2" ? ["off", "high", "max"] : undefined
-    if (levels) return { levels, control: "droid-effort" }
+    if (levels) {
+      const isClaude = id.startsWith("claude-")
+      const defaultLevel = isClaude ? "off" : id.startsWith("gpt-") ? "medium" : levels[0]
+      return { levels, control: "droid-effort", defaultLevel }
+    }
   }
   if (agent === "pi" && piModelIdentity(model)) {
-    return { levels: ["off", "minimal", ...extended], control: "pi-thinking" }
+    return { levels: ["off", "minimal", ...extended], control: "pi-thinking", defaultLevel: "medium" }
   }
   // K2.5/K2.6 have an on/off switch, not effort levels. K2.7 always thinks.
-  if (agent === "kimi" && ["kimi-k2.5", "kimi-k2.6"].includes(model)) return { levels: ["on", "off"], control: "kimi-env" }
+  if (agent === "kimi" && ["kimi-k2.5", "kimi-k2.6"].includes(model)) return { levels: ["on", "off"], control: "kimi-env", defaultLevel: "on" }
   // Eliza is a fake, regex-based test agent with no real reasoning-effort flag
   // to forward — this exists only so the composer has something to exercise
   // the selector against. No `control`, since buildCommand() never calls
   // reasoningEffortArgs(): whatever level is picked here is silently ignored.
-  if (agent === "eliza") return { levels: extended }
+  if (agent === "eliza") return { levels: extended, defaultLevel: "medium" }
   return none
 }
 

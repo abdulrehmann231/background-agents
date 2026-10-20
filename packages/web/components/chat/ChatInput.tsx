@@ -455,7 +455,7 @@ export function ChatInput({
     onReasoningEffortChange && reasoningEffortCapability && reasoningEffortCapability.levels.length > 0
   )
   const reasoningEffortLabelText = !reasoningEffort || reasoningEffort === "default"
-    ? "Default"
+    ? reasoningEffortLabel(reasoningEffortCapability?.defaultLevel ?? "medium")
     : reasoningEffortLabel(reasoningEffort)
   const modeLabelText = planModeEnabled ? "Plan" : "Edit"
   const modelLabelText = getModelLabel(currentAgent, currentModel, endpointsForLabels)

@@ -17,8 +17,8 @@ export function ReasoningEffortSelector({ capability, value, onChange, isMobile 
   forceShowLabel?: boolean
 }) {
   const helpId = useId()
-  const explanation = "Default uses the agent and model's own reasoning effort setting, without an override. It does not select a different model or always mean Medium. Changes apply to future prompts."
-  // Models without adjustable levels only have Default, so there is nothing to choose.
+  const explanation = "How hard the model thinks before responding. The preselected level is this agent and model's own default. Changes apply to future prompts."
+  // Models without adjustable levels have nothing to choose.
   if (!capability.levels.length) return null
   return <div className={cn("relative flex shrink-0 items-center gap-1 text-sm text-muted-foreground", isMobile && "max-w-[45%] flex-wrap justify-end")}>
     <Select value={value} onValueChange={onChange}>
@@ -41,7 +41,6 @@ export function ReasoningEffortSelector({ capability, value, onChange, isMobile 
         ))}><SelectValue /></div>
       </SelectTrigger>
       <SelectContent side="top" align="end" className="max-h-[min(28rem,var(--radix-select-content-available-height))] max-w-[calc(100vw-2rem)]">
-        <SelectItem value="default" title={explanation} aria-describedby={helpId}>Default</SelectItem>
         {capability.levels.map(level => <SelectItem key={level} value={level}>{reasoningEffortLabel(level)}</SelectItem>)}
       </SelectContent>
     </Select>

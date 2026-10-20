@@ -13,9 +13,9 @@ describe("ReasoningEffortSelector", () => {
     expect(render({ levels: [] })).toBe("")
   })
 
-  it("shows the selected level with the Default explanation", () => {
-    const html = render({ levels: ["low", "high"], control: "claude-effort" }, "high")
+  it("shows the selected level with the explanation", () => {
+    const html = render({ levels: ["low", "high"], control: "claude-effort", defaultLevel: "low" }, "high")
     expect(html).toContain('aria-label="Reasoning effort"')
-    expect(html).toContain("Default uses the agent and model&#x27;s own reasoning effort setting")
+    expect(html).toContain("this agent and model&#x27;s own default")
   })
 })
