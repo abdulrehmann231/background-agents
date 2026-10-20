@@ -8,8 +8,8 @@ import { reasoningEffortCapability } from "@/lib/reasoning-effort"
 export function useReasoningEffortPreference(agent: string, model: string) {
   const key = `backgrounder-reasoning-effort:${JSON.stringify([agent, model])}`
   const capability = reasoningEffortCapability(agent, model)
-  const fallback = capability.defaultLevel ?? "default"
-  const [selection, setSelection] = useState({ key: "", value: fallback })
+  const fallback: string = capability.defaultLevel ?? "default"
+  const [selection, setSelection] = useState<{ key: string; value: string }>({ key: "", value: fallback })
 
   useLayoutEffect(() => {
     let saved: string | null = null
