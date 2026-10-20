@@ -21,11 +21,9 @@ export function ReasoningEffortSelector({ capability, value, onChange, isMobile 
   const unconfirmedExplanation = "How hard the model thinks before responding. The preselected level is our best guess at this agent and model's own default — the CLI doesn't document it explicitly, so it may be wrong. Changes apply to future prompts."
   // Models without adjustable levels have nothing to choose.
   if (!capability.levels.length) return null
-  const isUnconfirmedDefault = value === capability.defaultLevel && capability.defaultLevelConfidence === "guess"
-  const title = isUnconfirmedDefault ? unconfirmedExplanation : explanation
   return <div className={cn("relative flex shrink-0 items-center gap-1 text-sm text-muted-foreground", isMobile && "max-w-[45%] flex-wrap justify-end")}>
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label="Reasoning effort" aria-describedby={helpId} title={title}
+      <SelectTrigger aria-label="Reasoning effort" aria-describedby={helpId} title={explanation}
         className={cn("h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2", isMobile && "min-h-9")}
         iconClassName={isMobile ? "h-4 w-4" : undefined}>
         <Brain aria-hidden="true" className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
@@ -55,6 +53,6 @@ export function ReasoningEffortSelector({ capability, value, onChange, isMobile 
         })}
       </SelectContent>
     </Select>
-    <span id={helpId} className="sr-only">{title}</span>
+    <span id={helpId} className="sr-only">{explanation}</span>
   </div>
 }
