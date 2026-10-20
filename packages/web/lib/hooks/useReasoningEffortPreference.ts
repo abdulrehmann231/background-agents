@@ -8,7 +8,8 @@ import { reasoningEffortCapability } from "@/lib/reasoning-effort"
 export function useReasoningEffortPreference(agent: string, model: string) {
   const key = `backgrounder-reasoning-effort:${JSON.stringify([agent, model])}`
   const capability = reasoningEffortCapability(agent, model)
-  const [selection, setSelection] = useState({ key: "", value: "default" })
+  const fallback = capability.defaultLevel ?? "default"
+  const [selection, setSelection] = useState({ key: "", value: fallback })
 
   useLayoutEffect(() => {
     let saved: string | null = null
@@ -18,12 +19,13 @@ export function useReasoningEffortPreference(agent: string, model: string) {
       // Blocked storage only means the choice isn't remembered across reloads.
       console.warn("[reasoning-effort] Could not read the saved level:", error)
     }
-    setSelection({ key, value: saved || "default" })
-  }, [key])
+    setSelection({ key, value: saved || fallback })
+  }, [key, fallback])
 
-  const saved = selection.key === key ? selection.value : "default"
-  // A saved level this model doesn't offer falls back to Default.
-  const reasoningEffort = supportsReasoningEffort(capability, saved) ? saved : "default"
+  const saved = selection.key === key ? selection.value : fallback
+  // A saved level this model doesn't offer (or the old "Default" sentinel)
+  // falls back to the CLI's real default level instead of a "Default" label.
+  const reasoningEffort = saved !== "default" && supportsReasoningEffort(capability, saved) ? saved : fallback
 
   function setReasoningEffort(value: string) {
     setSelection({ key, value })
