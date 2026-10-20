@@ -25,7 +25,6 @@ import type { useStreaming } from "./useStreaming"
 import type { useSuggestNameMutation } from "@/lib/query"
 import { queryKeys, type SettingsData } from "@/lib/query"
 import { resolveAgentAndModel } from "@/lib/types"
-import { retainDirectSend, markDirectSendUnconfirmed, dismissDirectSend, acknowledgeDirectSends } from "@/lib/direct-send-recovery"
 import { fetchChat } from "@/lib/sync/api"
 import { applyRecoveredChat } from "@/lib/chat-recovery"
 import {
@@ -74,7 +73,6 @@ export interface MessageDispatch {
     files?: File[],
     targetChatId?: string,
     planMode?: boolean,
-    rejectedMessageId?: string,
     reasoningEffort?: string
   ) => Promise<void>
   stopAgent: () => Promise<void>
@@ -107,7 +105,7 @@ export function useMessageDispatch({
   const sendInFlight = useRef<Set<string>>(new Set())
   const stopInFlight = useRef<Set<string>>(new Set())
 
-  const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string, planMode?: boolean, rejectedMessageId?: string, reasoningEffort?: string) => {
+  const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string, planMode?: boolean, reasoningEffort?: string) => {
     let chatId = targetChatId || currentChatId
     if (!chatId) return
 
@@ -171,23 +169,14 @@ export function useMessageDispatch({
       const userMessage: Message = { id: nanoid(), role: "user", content, timestamp: now, metadata: { reasoningEffort: reasoningEffort ?? "default" } }
       const assistantMessage: Message = { id: nanoid(), role: "assistant", content: "", timestamp: now + 1, toolCalls: [], contentBlocks: [] }
 
-      // The POST may fail before any server messages exist, or may complete
-      // after its response is lost. Retain a device copy, never an auto-retry.
-      const retained = retainDirectSend(chatId, {
-        id: userMessage.id, userMessageId: userMessage.id, content,
-        agent: selectedAgent, model: selectedModel, reasoningEffort, syncFailed: true,
-        directSend: { assistantMessageId: assistantMessage.id, timestamp: now,
-          attachmentNames: files?.map((file) => file.name) },
-      })
-      // Only the explicit usage-limit fallback supplies this known-rejected ID.
-      // Keep its copy until the replacement has passed every send guard and is
-      // durably retained; an unconfirmed transport failure is never retried here.
-      if (retained && rejectedMessageId) dismissDirectSend(chatId, rejectedMessageId)
-
-      // Optimistic update
-      updateChatsCache((old) => old.map((c) =>
-        c.id === chatId ? applyOptimisticSend(c, userMessage, assistantMessage, now) : c
-      ))
+      // Optimistic update. Retry resends a prompt that just failed, so it
+      // replaces that bubble instead of showing the prompt twice.
+      updateChatsCache((old) => old.map((c) => {
+        if (c.id !== chatId) return c
+        const failed = c.status === "error" ? c.messages.at(-1) : undefined
+        const messages = failed?.role === "user" && failed.content === content ? c.messages.slice(0, -1) : c.messages
+        return applyOptimisticSend({ ...c, messages }, userMessage, assistantMessage, now)
+      }))
 
       // Switch to the real chat in the same synchronous block as the optimistic
       // update above, so both commit in one render (no empty-chat flash).
@@ -224,7 +213,6 @@ export function useMessageDispatch({
           // indicator + Abort Merge) — same as a merge/rebase conflict. The user
           // then re-sends to have the agent resolve it, or aborts the merge.
           if ("isPullConflict" in result) {
-            dismissDirectSend(chatId, userMessage.id)
             updateChatsCache((old) => old.map((c) =>
               c.id === chatId ? removeOptimisticMessages(c, [userMessage.id, assistantMessage.id]) : c
             ))
@@ -246,7 +234,6 @@ export function useMessageDispatch({
 
           // Handle daily limit exceeded error
           if (result.isDailyLimit) {
-            markDirectSendUnconfirmed(chatId, userMessage.id, "The server rejected this send because its usage limit was reached.")
             // Remove the optimistic messages
             updateChatsCache((old) => old.map((c) =>
               c.id === chatId ? removeOptimisticMessages(c, [userMessage.id, assistantMessage.id]) : c
@@ -255,7 +242,7 @@ export function useMessageDispatch({
             // Show the limit reached dialog with pending message info
             setLimitReachedState({
               show: true,
-              pendingMessage: { chatId, content, files, planMode, rejectedMessageId: userMessage.id },
+              pendingMessage: { chatId, content, files, planMode },
               provider: result.provider,
               creditBalance: result.creditBalance,
             })
@@ -263,7 +250,6 @@ export function useMessageDispatch({
           }
 
           if (result.isChatBusy) {
-            dismissDirectSend(chatId, userMessage.id)
             // The server did not persist this turn. Remove the optimistic
             // bubbles and put the text back where the user can retry it.
             updateChatsCache((old) => old.map((c) =>
@@ -281,7 +267,6 @@ export function useMessageDispatch({
         }
 
         const { data } = result
-        dismissDirectSend(chatId, userMessage.id)
         const owner = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())?.find((c) => c.id === chatId)
         // A delayed response for A must not replace B or revive a turn which
         // an authoritative read has already confirmed finished.
@@ -298,35 +283,33 @@ export function useMessageDispatch({
       } catch (error) {
         settlePendingSend()
         const errorMessage = error instanceof Error ? error.message : "Unknown error"
-        markDirectSendUnconfirmed(chatId, userMessage.id, errorMessage)
-        const isUnconfirmed = useChatSyncStore.getState().localChatState.queuedMessages[chatId]
-          ?.some((item) => item.id === userMessage.id && !!item.directSend)
-        updateChatsCache((old) => old.map((c) =>
-          isUnconfirmed && c.id === chatId && (!c.activeAssistantMessageId || c.activeAssistantMessageId === assistantMessage.id)
-            ? { ...c, status: "disconnected", pendingSend: false, errorKind: "incomplete", errorMessage,
-                // Keep the unsaved original only in the explicitly labeled
-                // device copy. A fresh server acknowledgment removes that copy
-                // before merging rows, so late errors cannot remove saved text.
-                messages: c.messages.filter((message) => message.id !== userMessage.id &&
-                  (message.id !== assistantMessage.id || !!message.content || !!message.toolCalls?.length)) }
-            : c
-        ))
-        // The only acknowledgment is a fresh server row with our exact ID.
-        // Missing rows do not prove rejection while the original POST may run.
+        // Keep the prompt on screen with the error, so Retry can send it again.
+        // Skip this if another turn took over or the server already answered.
+        updateChatsCache((old) => old.map((c) => {
+          if (c.id !== chatId || (c.activeAssistantMessageId && c.activeAssistantMessageId !== assistantMessage.id)) return c
+          const reply = c.messages.find((message) => message.id === assistantMessage.id)
+          if (reply?.content || reply?.toolCalls?.length) return c
+          return { ...c, status: "error", pendingSend: false, errorMessage,
+            messages: c.messages.filter((message) => message.id !== assistantMessage.id) }
+        }))
+        // The response may have been lost after the server saved the turn. If it
+        // has our message, show the real state instead of offering a resend.
         const observed = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())?.find((c) => c.id === chatId)
         try {
           const saved = await fetchChat(chatId)
-          acknowledgeDirectSends(chatId, saved.messages)
-          if (observed) updateChatsCache((old) => old.map((c) => c.id === chatId ? applyRecoveredChat(c, saved, observed) : c))
-        } catch { /* Keep the unconfirmed device copy and offer an explicit read. */ }
+          if (observed && saved.messages.some((message) => message.id === userMessage.id)) {
+            updateChatsCache((old) => old.map((c) => c.id === chatId ? applyRecoveredChat(c, saved, observed) : c))
+          }
+        } catch (readError) {
+          console.warn("[message-dispatch] Could not check whether the failed send was saved:", readError)
+        }
       }
     } finally {
       sendInFlight.current.delete(chatId)
     }
   }, [currentChatId, chats, session, settings, credentialFlags, updateChatsCache, startStreaming, suggestNameMutation, isDraftChatId, materializeDraft, queryClient, reloadMessages, setLimitReachedState, onConflictStateChangeRef])
 
-  // Queue management is server-owned; this hook syncs it across browsers and
-  // imports any prompts saved by the previous localStorage-only version.
+  // Queue management is server-owned; this hook syncs it across browsers.
   const { enqueueMessage, removeQueuedMessage, resumeQueue } = useServerQueue({
     isHydrated,
     isAuthenticated: !!session,

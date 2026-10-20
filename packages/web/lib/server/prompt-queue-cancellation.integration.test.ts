@@ -16,12 +16,11 @@ databaseDescribe("idempotent prompt cancellation on a real database", () => {
   afterAll(() => deleteTestUser(prisma, userId))
   const input = (clientId: string) => ({ clientId, content: "cancel this prompt", agent: "eliza", model: "eliza-classic-1.0" })
 
-  it("remembers removal before a delayed send or import arrives", async () => {
+  it("remembers removal before a delayed send arrives", async () => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const prompt = input(`before-${run}`)
     expect(await queue.cancelQueuedPrompt(chat.id, { clientId: prompt.clientId })).toBe(true)
     expect((await queue.enqueuePrompt(chat.id, prompt)).status).toBe("cancelled")
-    expect((await queue.importLegacyPrompts(chat.id, [prompt], false))[0].status).toBe("cancelled")
     expect(await queue.claimNextPrompt(chat.id)).toBeNull()
     expect(await prisma.queuedPrompt.count({ where: { chatId: chat.id } })).toBe(1)
   })

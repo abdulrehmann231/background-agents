@@ -33,27 +33,24 @@ databaseDescribe("per-prompt reasoning effort on the real server queue", () => {
     const [first, retry] = await Promise.all([queue.enqueuePrompt(chat.id, entry), queue.enqueuePrompt(chat.id, entry)])
     expect(first.id).toBe(retry.id)
     await expect(queue.enqueuePrompt(chat.id, { ...entry, reasoningEffort: "high" })).rejects.toThrow("different prompt")
-    await expect(queue.importLegacyPrompts(chat.id, [{ ...entry, reasoningEffort: "high" }], false)).rejects.toThrow("different prompt")
     expect(await prisma.queuedPrompt.count({ where: { chatId: chat.id } })).toBe(1)
   })
 
-  it("imports offline selections unchanged and treats legacy/default identically", async () => {
+  it("stores selections unchanged and treats a missing value and Default identically", async () => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entries = [input("high"), input()]
-    await queue.importLegacyPrompts(chat.id, entries, true)
+    for (const entry of entries) await queue.enqueuePrompt(chat.id, entry)
     const replay = await queue.enqueuePrompt(chat.id, { ...entries[1], reasoningEffort: "default" })
     expect(replay.reasoningEffort).toBeNull()
-    expect(await queue.claimNextPrompt(chat.id)).toBeNull()
     const row = await prisma.queuedPrompt.findUniqueOrThrow({ where: { chatId_clientId: { chatId: chat.id, clientId: entries[0].clientId } } })
     expect(row.reasoningEffort).toBe("high")
   })
 
   it.each([
     { agent: "claude-code", model: "sonnet", reasoningEffort: "high", changed: "low" },
-  ])("preserves $agent selections through offline import and dispatch", async ({ changed, ...selection }) => {
+  ])("preserves $agent selections through enqueue and dispatch", async ({ changed, ...selection }) => {
     const chat = await prisma.chat.create({ data: { userId, repo: "__new__", status: "ready" } })
     const entry = { ...input(), ...selection }
-    await queue.importLegacyPrompts(chat.id, [entry], false)
     const replay = await queue.enqueuePrompt(chat.id, entry)
     expect(replay.reasoningEffort).toBe(selection.reasoningEffort)
     await expect(queue.enqueuePrompt(chat.id, { ...entry, reasoningEffort: changed })).rejects.toThrow("different prompt")

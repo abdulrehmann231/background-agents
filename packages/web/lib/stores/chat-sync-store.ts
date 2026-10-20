@@ -44,8 +44,6 @@ export interface LimitReachedState {
     content: string
     files?: File[]
     planMode?: boolean
-    /** The server explicitly rejected this attempt before running it. */
-    rejectedMessageId?: string
   }
   /** Shared-pool provider the blocked run would have used. */
   provider?: string
@@ -94,7 +92,7 @@ export const useChatSyncStore = create<ChatSyncStore>((set, get) => ({
   isHydrated: false,
   unseenChatIds: new Set(),
   deletingChatIds: new Set(),
-  localChatState: { previewStates: {}, queuedMessages: {}, queuePaused: {}, drafts: {} },
+  localChatState: { previewStates: {}, queuedMessages: {}, drafts: {} },
   draftChatConfig: undefined,
   limitReachedState: { show: false },
 
@@ -105,8 +103,8 @@ export const useChatSyncStore = create<ChatSyncStore>((set, get) => ({
       unseenChatIds: loadUnseenChatIds(),
       localChatState: {
         previewStates: s.previewStates,
-        queuedMessages: s.queuedMessages,
-        queuePaused: s.queuePaused,
+        // Prompts still being saved live only in this tab's memory.
+        queuedMessages: get().localChatState.queuedMessages,
         // Remounts can hydrate again after a device write failed. The open
         // tab's newer draft (including an intentional clear) must win then.
         drafts: get().isHydrated ? get().localChatState.drafts : s.drafts,

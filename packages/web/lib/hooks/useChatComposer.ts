@@ -187,12 +187,12 @@ export function useChatComposer({
   const queueNotice = queuedSendNotice({ isRunning, isPaused, hasFiles: pendingFiles.length > 0,
     planMode: planModeEnabled, hasText: !!input.trim() })
   // When the agent is running, text-only messages are queued for later dispatch.
-  const canQueue = !chat?.stopPending && !chat?.directSendRecovery?.length && !needsRecovery && !queueNotice && !!onEnqueueMessage && !!input.trim() && pendingFiles.length === 0
+  const canQueue = !chat?.stopPending && !needsRecovery && !queueNotice && !!onEnqueueMessage && !!input.trim() && pendingFiles.length === 0
   // Paused queue: always show the send button (either to enqueue a new prompt
   // at the end or to resume draining with nothing typed).
   // A new direct send must not skip prompts waiting behind a failed turn.
   // Reload first to reconcile that turn; it never implicitly resumes the queue.
-  const canSend = !chat?.stopPending && !chat?.directSendRecovery?.length && !queueNotice && !(needsRecovery && hasQueued) && (
+  const canSend = !chat?.stopPending && !queueNotice && !(needsRecovery && hasQueued) && (
     (hasContent && !isRunning && !isCreating && !isPaused) ||
     (isRunning && canQueue) ||
     isPaused)

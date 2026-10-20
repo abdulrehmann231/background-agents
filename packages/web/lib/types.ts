@@ -183,8 +183,6 @@ export interface Chat {
 
   /** Messages queued while the agent was running. The next one is dispatched automatically on completion. */
   queuedMessages?: QueuedMessage[]
-  /** Device-only direct sends awaiting a server acknowledgment; never queued jobs. */
-  directSendRecovery?: QueuedMessage[]
   /** When true, auto-dispatch of queued messages is suspended (e.g. user clicked Stop). Cleared when the user sends or queues again. */
   queuePaused?: boolean
 
@@ -273,26 +271,17 @@ export interface QueuedMessage {
   reasoningEffort?: string
   id: string
   content: string
-  /** This tab's fallback could not be saved durably; never serialized to storage. */
-  deviceStorage?: "memory-only"
   agent?: string
   model?: string
   clientId?: string
   lastError?: string
+  /** Still being saved to the server queue from this tab. */
   pendingSync?: boolean
-  /** Local persistence failed; terminal failures need removal or a corrected send. */
-  syncError?: string
-  syncFailed?: boolean
-  /** Keep the intent until the server confirms cancellation, including offline. */
-  cancelRequested?: boolean
-  cancelFailed?: boolean
   /** Stable identity for reconciling the queue with its persisted user bubble. */
   userMessageId?: string
   status?: string
   /** Client presentation only; does not bypass server ordering. */
   sendImmediately?: boolean
-  /** Retained separately from the queue after a direct POST has an unknown outcome. */
-  directSend?: { assistantMessageId: string; timestamp: number; error?: string; attachmentNames?: string[] }
 }
 
 export type Theme = "light" | "dark" | "system"

@@ -168,15 +168,6 @@ describe("composer submission while Stop is being confirmed", () => {
 })
 
 describe("composer after a failed turn", () => {
-  it.each(["ready", "running"] as const)("keeps a newer draft editable but does not send past an unconfirmed direct request while %s", (status) => {
-    const composer = renderComposer({ status, directSendRecovery: [{ id: "pending", content: "Original", directSend: { assistantMessageId: "assistant", timestamp: 1 } }] }, "Newer draft")
-    expect(composer.canSend).toBe(false)
-    expect(composer.canQueue).toBe(false)
-    composer.handleSend()
-    expect(mocks.send).not.toHaveBeenCalled()
-    expect(mocks.enqueue).not.toHaveBeenCalled()
-    expect(mocks.draftChanged).not.toHaveBeenCalled()
-  })
   it.each(["error", "disconnected"] as const)("does not present a %s chat with waiting prompts as running", (status) => {
     const composer = renderComposer({ status, queuePaused: false, backgroundSessionId: undefined,
       activeAssistantMessageId: undefined, queuedMessages: [{ id: "later", content: "Keep this queued" }] })

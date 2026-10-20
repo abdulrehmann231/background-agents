@@ -38,7 +38,7 @@ export class QueueIdConflict extends Error {
 /** One idempotent insert, with the FIFO position allocated by the chat row. */
 export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<QueuedPrompt> {
   return prisma.$transaction(async (tx) => {
-    // Serialize inserts and imports for this chat before checking clientId.
+    // Serialize inserts for this chat before checking clientId.
     // Otherwise two tabs can both observe no row and one gets a unique-key
     // failure instead of the same idempotent result.
     await tx.chat.update({ where: { id: chatId }, data: { queueSequence: { increment: 0 } } })
@@ -70,57 +70,6 @@ export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<
         userMessageId: randomUUID(),
         assistantMessageId: randomUUID(),
       },
-    })
-  })
-}
-
-/**
- * Idempotently import the old browser queue before clearing localStorage.
- * A retry or a second tab importing the same IDs cannot create duplicates.
- */
-export async function importLegacyPrompts(
-  chatId: string,
-  items: QueueInput[],
-  paused: boolean
-): Promise<QueuedPrompt[]> {
-  return prisma.$transaction(async (tx) => {
-    await tx.chat.update({ where: { id: chatId }, data: { queueSequence: { increment: 0 } } })
-    for (const input of items) {
-      const existing = await tx.queuedPrompt.findUnique({
-        where: { chatId_clientId: { chatId, clientId: input.clientId } },
-      })
-      if (existing) {
-        if (existing.status === "cancelled") continue
-        if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model || (existing.reasoningEffort ?? "default") !== (input.reasoningEffort ?? "default")) {
-          throw new QueueIdConflict()
-        }
-        continue
-      }
-      const chat = await tx.chat.update({
-        where: { id: chatId },
-        data: { queueSequence: { increment: 1 } },
-        select: { queueSequence: true },
-      })
-      await tx.queuedPrompt.create({
-        data: {
-          chatId,
-          clientId: input.clientId,
-          position: chat.queueSequence,
-          content: input.content,
-          agent: input.agent,
-          model: input.model,
-          reasoningEffort: input.reasoningEffort === "default" ? null : input.reasoningEffort,
-          userMessageId: randomUUID(),
-          assistantMessageId: randomUUID(),
-        },
-      })
-    }
-    if (paused && items.length > 0) {
-      await tx.chat.update({ where: { id: chatId }, data: { queuePaused: true } })
-    }
-    return tx.queuedPrompt.findMany({
-      where: { chatId, clientId: { in: items.map((item) => item.clientId) } },
-      orderBy: { position: "asc" },
     })
   })
 }

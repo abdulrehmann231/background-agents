@@ -7,8 +7,6 @@ import { ErrorBanner } from "./ErrorBanner"
 import { MessageBubble } from "../MessageBubble"
 import { getPendingSubmission } from "@/lib/chat-state"
 import { latestFailedAssistant, persistedProviderFailure, unsupportedModelFailure } from "@/lib/turn-error-presentation"
-import { dismissDirectSend } from "@/lib/direct-send-recovery"
-import { useToastStore } from "@/lib/stores/toast-store"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,7 +73,6 @@ export function ChatMessageList({
   const activeMessage = chat.messages.find((message) => message.id === chat.activeAssistantMessageId && message.role === "assistant")
   const streamingId = (chat.status === "running" || chat.status === "creating") ? activeMessage?.id : undefined
   const showStarting = !streamingId && (isCreating || chat.status === "running" || !!pending)
-  const directRecovery = chat.pendingSend ? [] : (chat.directSendRecovery ?? [])
 
   // Hide the uncommitted-files banner the moment the user asks the agent to
   // commit, rather than leaving it up until the triggered turn finishes and
@@ -187,34 +184,7 @@ export function ChatMessageList({
               - "disconnected": the SSE stream died before the turn finished. The
                 agent may still be running in the background, so the action is
                 Reload (refresh the chat history) rather than resending. */}
-          {directRecovery.map((item) => (
-            <div key={item.id} data-testid="direct-send-recovery" className="space-y-2">
-              {!chat.messages.some((message) => message.id === item.userMessageId) && (
-                <MessageBubble message={{ id: item.id, role: "user", content: item.content, timestamp: item.directSend?.timestamp ?? 0 }} isMobile={isMobile} />
-              )}
-              <div>
-                <ErrorBanner
-                  message={item.deviceStorage === "memory-only"
-                    ? "Send status is unconfirmed. This copy is only in this open tab. Copy the prompt before refreshing or closing it. It will not be resent automatically."
-                    : "Send status is unconfirmed. This is a copy saved on this device. Reload to check whether the server received it. It will not be resent automatically."}
-                  isMobile={isMobile}
-                  onRetry={onReload ? () => onReload(chat.id) : undefined}
-                  actionLabel="Reload"
-                  actionPendingLabel="Reloading…"
-                />
-              </div>
-              {item.directSend?.error && <p className="text-xs text-muted-foreground">{item.directSend.error}</p>}
-              {!!item.directSend?.attachmentNames?.length && <p className="text-xs text-muted-foreground">Attachments are not saved on this device. Reattach them if you send again: {item.directSend.attachmentNames.join(", ")}</p>}
-              <div className="flex gap-3 text-xs">
-                <button type="button" className="underline" onClick={() => {
-                  void navigator.clipboard.writeText(item.content).catch(() => useToastStore.getState().addToast({ title: "Could not copy prompt", body: "Select and copy the prompt text above.", chatId: chat.id }))
-                }}>Copy prompt</button>
-                <button type="button" className="underline" onClick={() => dismissDirectSend(chat.id, item.id)}>Dismiss local copy</button>
-              </div>
-              <p className="text-xs text-muted-foreground">Dismissing this copy does not stop or cancel a server run.</p>
-            </div>
-          ))}
-          {chat.status === "disconnected" && directRecovery.length === 0 && (
+          {chat.status === "disconnected" && (
             <ErrorBanner
               key={chat.id}
               message={chat.errorMessage || "Connection to the agent was lost."}
@@ -224,7 +194,7 @@ export function ChatMessageList({
               actionPendingLabel="Reloading…"
             />
           )}
-          {chat.status === "error" && directRecovery.length === 0 && (() => {
+          {chat.status === "error" && (() => {
             const providerFailure = persistedProviderFailure(chat)
             const failureMessage = providerFailure || unsupportedModelFailure(chat.errorMessage) || chat.errorMessage
             const unsupportedModel = !!unsupportedModelFailure(failureMessage)
@@ -287,14 +257,8 @@ export function ChatMessageList({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-sm text-foreground/80">{m.content}</div>
-                    {m.cancelRequested && <div className="text-xs text-muted-foreground">Removal pending confirmation…</div>}
-                    {m.pendingSync && !m.syncError && !m.cancelRequested && <div className="text-xs text-muted-foreground">Saving to queue…</div>}
-                    {m.syncError && <div className="text-xs text-destructive">
-                      {m.cancelRequested || m.cancelFailed ? "Could not confirm removal: " : m.syncFailed ? "Not sent: " : "Send status unconfirmed: "}{m.syncError}
-                      {!m.syncFailed && " — retrying when the connection recovers."}
-                    </div>}
+                    {m.pendingSync && <div className="text-xs text-muted-foreground">Saving to queue…</div>}
                     {m.lastError && <div className="text-xs text-destructive">Paused: {m.lastError}</div>}
-                    {m.deviceStorage === "memory-only" && <div className="text-xs text-destructive">This copy is only in this open tab. Copy it before refreshing or closing.</div>}
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -315,7 +279,7 @@ export function ChatMessageList({
                         </DropdownMenuItem>
                       )}
                       {onRemoveQueuedMessage && (
-                        <DropdownMenuItem disabled={m.cancelRequested} onClick={() => onRemoveQueuedMessage(m.id)}>
+                        <DropdownMenuItem onClick={() => onRemoveQueuedMessage(m.id)}>
                           <Trash2 className="h-3.5 w-3.5 mr-2" />
                           Remove from queue
                         </DropdownMenuItem>

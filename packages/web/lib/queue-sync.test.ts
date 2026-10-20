@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { applyQueueSnapshot, needsQueueMessages, needsChatListMessages, queueSyncFailure } from "./queue-sync"
+import { applyQueueSnapshot, needsQueueMessages, needsChatListMessages } from "./queue-sync"
 import { getPendingSubmission, mergeLocalState } from "./chat-state"
 import type { Chat } from "./types"
 import type { PromptQueueResponse } from "./sync/api"
-import { ApiError } from "./sync/api"
 
 const pending = { id: "queue-1", clientId: "client-1", userMessageId: "user-1", content: "same text", status: "dispatching" }
 const chat = { id: "chat-1", status: "creating", updatedAt: 1, messages: [], queuedMessages: [pending] } as unknown as Chat
@@ -59,38 +58,13 @@ describe("queue presentation across server transitions", () => {
     expect(needsChatListMessages({ ...failed, messages: [] }, snapshot)).toBe(false)
   })
 
-  it("does not repeatedly load history merely because an unsaved prompt is failing", () => {
+  it("does not repeatedly load history merely because a prompt is still being saved", () => {
     const ready = { ...chat, status: "ready", queuedMessages: [], messageCount: 0 } as Chat
     const server = { queuedMessages: [], messageCount: 0 }
-    expect(needsQueueMessages(ready, server, [{ id: "local", content: "not saved", syncFailed: true }])).toBe(false)
+    expect(needsQueueMessages(ready, server, [{ id: "local", content: "not saved", pendingSync: true }])).toBe(false)
     expect(needsQueueMessages(ready, server, [{ id: "local", content: "saved", userMessageId: "user-saved" }])).toBe(true)
     expect(needsQueueMessages(ready, { ...server, queuedMessages: [{ id: "server", clientId: "local", content: "saved" }] },
       [{ id: "local", content: "saved", userMessageId: "user-saved" }])).toBe(false)
-  })
-
-  it("does not present rejected or cancelling local work as actively sending", () => {
-    expect(getPendingSubmission({ ...chat, queuedMessages: [{ ...pending, syncError: "Invalid prompt", syncFailed: true }] })).toBeUndefined()
-    expect(getPendingSubmission({ ...chat, queuedMessages: [{ ...pending, cancelRequested: true }] })).toBeUndefined()
-  })
-
-  it("keeps retryable failures distinct from permanently rejected requests", () => {
-    for (const status of [400, 403, 404, 409, 413, 422]) {
-      expect(queueSyncFailure(new ApiError("Rejected", status))).toEqual({ syncError: "Rejected", syncFailed: true })
-    }
-    for (const status of [401, 408, 429, 500, 502, 503]) {
-      expect(queueSyncFailure(new ApiError("Try later", status)).syncFailed).toBe(false)
-    }
-    expect(queueSyncFailure(new TypeError("Failed to fetch")).syncFailed).toBe(false)
-  })
-
-  it("retains a local cancellation on the corresponding server queue row", () => {
-    const local = { previewStates: {}, drafts: {}, queuePaused: {}, queuedMessages: {
-      "chat-1": [{ ...pending, id: "client-1", pendingSync: true, cancelRequested: true }],
-    } }
-    const merged = mergeLocalState([chat], local)[0]
-    expect(merged.queuedMessages).toHaveLength(1)
-    expect(merged.queuedMessages?.[0].cancelRequested).toBe(true)
-    expect(getPendingSubmission(merged)).toBeUndefined()
   })
 
   it("reconciles messages and queue together without repeating the submitted text", () => {
@@ -100,7 +74,7 @@ describe("queue presentation across server transitions", () => {
     } as Parameters<typeof applyQueueSnapshot>[2])
     expect(next.messages).toHaveLength(1)
     expect(next.queuedMessages).toEqual([])
-    const merged = mergeLocalState([next], { previewStates: {}, drafts: {}, queuePaused: {}, queuedMessages: {
+    const merged = mergeLocalState([next], { previewStates: {}, drafts: {}, queuedMessages: {
       "chat-1": [{ ...pending, id: "client-1", pendingSync: true }],
     } })[0]
     expect(merged.queuedMessages).toEqual([])
@@ -121,7 +95,7 @@ describe("queue presentation across server transitions", () => {
   })
 
   it("does not collapse repeated text with distinct request identities", () => {
-    const next = mergeLocalState([chat], { previewStates: {}, drafts: {}, queuePaused: {}, queuedMessages: {
+    const next = mergeLocalState([chat], { previewStates: {}, drafts: {}, queuedMessages: {
       "chat-1": [{ id: "different", content: "same text" }],
     } })[0]
     expect(next.queuedMessages).toHaveLength(2)

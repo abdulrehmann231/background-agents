@@ -59,7 +59,6 @@ interface UseBranchingOptions {
     files?: File[],
     chatId?: string,
     planMode?: boolean,
-    rejectedMessageId?: string,
     reasoningEffort?: string
   ) => unknown
   removeQueuedMessage: (id: string) => void
@@ -184,7 +183,7 @@ export function useBranching({
       if (!chatId) return false
       // Send message to the new chat if provided (it runs in background)
       if (options?.message) {
-        sendMessage(options.message, options.agent, options.model, undefined, chatId, undefined, undefined, options.reasoningEffort)
+        sendMessage(options.message, options.agent, options.model, undefined, chatId, undefined, options.reasoningEffort)
       }
       return true
     },

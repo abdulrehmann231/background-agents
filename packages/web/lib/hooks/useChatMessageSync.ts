@@ -17,7 +17,6 @@ import type { Chat, Message } from "@/lib/types"
 import { fetchChat, toMessageType } from "@/lib/sync/api"
 import { mergeMessages } from "./useStreaming"
 import { applyRecoveredChat } from "@/lib/chat-recovery"
-import { acknowledgeDirectSends } from "@/lib/direct-send-recovery"
 
 interface UseChatMessageSyncArgs {
   chats: Chat[]
@@ -68,7 +67,6 @@ export function useChatMessageSync({
     const loadMessages = async () => {
       try {
         const chatData = await fetchChat(currentChatId)
-        acknowledgeDirectSends(currentChatId, chatData.messages)
         const incomingMessages = chatData.messages.map(toMessageType)
 
         updateChatsCache((old) =>
@@ -101,7 +99,6 @@ export function useChatMessageSync({
   const reloadMessages = useCallback(async (chatId: string) => {
     try {
       const chatData = await fetchChat(chatId)
-      acknowledgeDirectSends(chatId, chatData.messages)
       const incomingMessages = chatData.messages.map(toMessageType)
       updateChatsCache((old) =>
         old.map((c) =>
@@ -131,7 +128,6 @@ export function useChatMessageSync({
 
       // Fetch only new messages (after lastMessageId)
       const chatData = await fetchChat(chatId, lastMessageId ? { afterMessageId: lastMessageId } : undefined)
-      acknowledgeDirectSends(chatId, chatData.messages)
       const incomingMessages = chatData.messages.map(toMessageType)
 
       updateChatsCache((old) =>
@@ -155,7 +151,6 @@ export function useChatMessageSync({
       const observed = chatsRef.current.find((chat) => chat.id === chatId)
       if (!observed) return
       const chatData = await fetchChat(chatId)
-      acknowledgeDirectSends(chatId, chatData.messages)
       updateChatsCache((old) =>
         old.map((c) => c.id === chatId ? applyRecoveredChat(c, chatData, observed) : c)
       )
