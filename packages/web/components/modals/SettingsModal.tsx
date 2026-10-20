@@ -563,7 +563,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
               </aside>
 
               {/* Right pane */}
-              <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 flex flex-col min-h-0 min-w-0">
                 <div ref={contentRef} className="flex-1 overflow-y-auto px-6 pt-5 pb-6">
                   <Dialog.Title className="text-xl font-medium pb-4 mb-5 border-b border-border">
                     {activeTitle}
