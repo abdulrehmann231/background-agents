@@ -462,7 +462,7 @@ class BackgroundSessionImpl implements BackgroundSession {
         type: "agent_crashed",
         message:
           `Model "${modelNotAvailableMatch[1]}" is not available on your GitHub Copilot plan. ` +
-          `Select a different model (e.g. gpt-5-mini, gpt-4o, claude-haiku-4.5).`,
+          `Select a different model (e.g. gpt-5.6-terra, gpt-6-sol, claude-haiku-4.5).`,
       }
     }
 
