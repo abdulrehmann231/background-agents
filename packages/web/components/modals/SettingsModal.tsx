@@ -11,7 +11,7 @@ import { useDragToClose } from "@/lib/hooks/useDragToClose"
 import { useElectron, type LicenseDetectResult } from "@/lib/hooks/useElectron"
 import { isModKeyPressed } from "@/lib/keyboard"
 import type { Settings, Theme, Agent, Credentials, CredentialFlags, CustomEndpoint } from "@/lib/types"
-import { agentModels, resolveAgent, getDefaultModelForAgent } from "@/lib/types"
+import { agentModels, resolveAgent, resolveModelForAgent, getDefaultModelForAgent } from "@/lib/types"
 import {
   CREDENTIAL_KEYS,
   type CredentialId,
@@ -137,8 +137,10 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     [settings.defaultAgent]
   )
   const initialDefaultModel = useMemo<string>(
-    () => settings.defaultModel ?? getDefaultModelForAgent(initialDefaultAgent, credentialFlags),
-    [settings.defaultModel, initialDefaultAgent, credentialFlags]
+    () => initialDefaultAgent === "codex"
+      ? resolveModelForAgent(initialDefaultAgent, credentialFlags, settings.defaultModel, initialEndpoints)
+      : settings.defaultModel ?? getDefaultModelForAgent(initialDefaultAgent, credentialFlags),
+    [settings.defaultModel, initialDefaultAgent, credentialFlags, initialEndpoints]
   )
 
   const [defaultAgent, setDefaultAgent] = useState<Agent>(initialDefaultAgent)
@@ -561,7 +563,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
               </aside>
 
               {/* Right pane */}
-              <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 flex flex-col min-h-0 min-w-0">
                 <div ref={contentRef} className="flex-1 overflow-y-auto px-6 pt-5 pb-6">
                   <Dialog.Title className="text-xl font-medium pb-4 mb-5 border-b border-border">
                     {activeTitle}

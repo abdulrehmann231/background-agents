@@ -1,5 +1,7 @@
 "use client"
 
+import { useState } from "react"
+
 import {
   ChatHeader,
   MobileConflictBar,
@@ -19,11 +21,11 @@ interface ChatPanelProps {
   chat: Chat | null
   settings: Settings
   credentialFlags: CredentialFlags
-  showClaudeLimitDialog: () => void
-  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
   /** Refresh the chat history after the SSE stream died (status === "disconnected"). */
   onReload?: (chatId: string) => Promise<void> | void
-  onEnqueueMessage?: (message: string, agent?: string, model?: string) => void
+  onEnqueueMessage?: (message: string, agent?: string, model?: string, reasoningEffort?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => void
   onStopAgent: () => void
@@ -51,7 +53,8 @@ interface ChatPanelProps {
   isAuthenticated?: boolean
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
+  const [modelPickerRequest, setModelPickerRequest] = useState<{ chatId: string; sequence: number }>()
   const composer = useChatComposer({
     chat,
     settings,
@@ -61,6 +64,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
     isMobile,
     isSending,
     isAuthenticated,
+    showCreditDialog,
     onSendMessage,
     onEnqueueMessage,
     onResumeQueue,
@@ -90,6 +94,9 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
     hasLinkedRepo,
     planModeEnabled,
     setPlanModeEnabled,
+    reasoningEffort,
+    setReasoningEffort,
+    reasoningEffortCapability,
     currentAgent,
     currentModel,
     rebaseConflict,
@@ -140,6 +147,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
   const chatInput = (
     <ChatInput
       chat={chat}
+      modelPickerRequest={modelPickerRequest}
       input={input}
       onInputChange={setInput}
       onSend={handleSend}
@@ -192,11 +200,14 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
       credentialFlags={credentialFlags}
       currentAgent={currentAgent}
       currentModel={currentModel}
-      showClaudeLimitDialog={showClaudeLimitDialog}
+      showCreditDialog={showCreditDialog}
       // Plan mode
       planModeEnabled={planModeEnabled}
       planModeSupported={agentSupportsPlanMode[currentAgent]}
       onSetPlanMode={setPlanModeEnabled}
+      reasoningEffort={reasoningEffort}
+      onReasoningEffortChange={setReasoningEffort}
+      reasoningEffortCapability={reasoningEffortCapability}
       // MCP servers — only show when authenticated and we have a chat to attach to.
       showMcpButton={isAuthenticated && !!chat?.id && !!onMaterializeDraftForMcp}
       isDraftChat={isDraftChat}
@@ -264,8 +275,11 @@ export function ChatPanel({ chat, settings, credentialFlags, showClaudeLimitDial
         onReload={onReload}
         onSendMessage={onSendMessage}
         onRemoveQueuedMessage={onRemoveQueuedMessage}
+        onResumeQueue={onResumeQueue}
+        onChooseModel={() => setModelPickerRequest(previous => ({ chatId: chat.id, sequence: (previous?.sequence ?? 0) + 1 }))}
         currentAgent={currentAgent}
         currentModel={currentModel}
+        currentReasoningEffort={reasoningEffort}
         planModeEnabled={planModeEnabled}
         messagesContainerRef={messagesContainerRef}
         messagesEndRef={messagesEndRef}

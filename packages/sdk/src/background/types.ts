@@ -27,6 +27,8 @@ export interface PollResult {
   cursor: string
   running: boolean
   runPhase: BackgroundRunPhase
+  /** A known, fenced launch attempt exists but has not started its command. */
+  launchPreparedAt?: string
 }
 
 /**
@@ -50,6 +52,10 @@ export interface SessionMeta {
   startedAt?: string
   /** The current turn was user-cancelled (suppresses crash synthesis). */
   cancelled?: boolean
+  /** Durable launch/cancel protocol; absent on older sessions. */
+  launchProtocol?: 1
+  /** When this attempt was prepared, before any process could be launched. */
+  launchPreparedAt?: string
 }
 
 /**
@@ -75,6 +81,7 @@ export interface StartOptions {
   cwd?: string
   /** Previous conversation history to inject as context for this turn. */
   history?: readonly HistoryMessage[]
-  /** When true, agent should use extended thinking / plan mode */
+  reasoningEffort?: string
+  /** When true, use read-only plan mode. */
   planMode?: boolean
 }

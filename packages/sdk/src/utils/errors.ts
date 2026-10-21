@@ -127,7 +127,7 @@ const RULES: { category: AgentErrorCategory; test: RegExp; hint: string }[] = [
   },
   {
     category: "model_unavailable",
-    test: /model[^.]*(not\s+found|not\s+available|unavailable|does\s+not\s+exist|unknown|invalid|no\s+such)|unsupported\s+model|no\s+such\s+model/i,
+    test: /model[^.]*(not\s+found|not\s+available|unavailable|does\s+not\s+exist|unknown|invalid|no\s+such)|\bmodel\b(?:\s+['"]?[\w./:-]+['"]?)?\s+(?:is\s+)?not\s+supported\b|unsupported\s+model|no\s+such\s+model/i,
     hint: "select a different model for this agent",
   },
   {

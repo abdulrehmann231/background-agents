@@ -2,9 +2,9 @@
 
 import { useState } from "react"
 import { formatDistanceToNow } from "date-fns"
-import { Search, ChevronLeft, ChevronRight, Shield, ShieldOff, ArrowUp, ArrowDown, ArrowUpDown, Crown, Mail, Github } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight, Shield, ShieldOff, Mail, Github } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Plan } from "@/lib/server/usage-budgets"
+import { SortHeader } from "@/components/ui/SortHeader"
 
 interface User {
   id: string
@@ -13,32 +13,10 @@ interface User {
   image: string | null
   githubId: string | null
   isAdmin: boolean
-  plan: Plan
   totalMessages: number
   lastActivityAt: string | null
   lastActivityAction: string | null
   createdAt: string
-}
-
-/** Admin-cycle order for the plan control: free → pro → unlimited → free. */
-const PLAN_CYCLE: Record<Plan, Plan> = {
-  free: "pro",
-  pro: "unlimited",
-  unlimited: "free",
-}
-
-const PLAN_LABEL: Record<Plan, string> = {
-  free: "Free",
-  pro: "Pro",
-  unlimited: "Unlimited",
-}
-
-/** Pill styling per plan for the admin table. */
-const PLAN_STYLE: Record<Plan, string> = {
-  free: "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400",
-  pro: "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400",
-  unlimited:
-    "bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-400",
 }
 
 interface Pagination {
@@ -54,7 +32,6 @@ export type SortField =
   | "totalMessages"
   | "lastActivityAt"
   | "createdAt"
-  | "plan"
   | "isAdmin"
 export type SortOrder = "asc" | "desc"
 
@@ -69,59 +46,19 @@ interface UserTableProps {
   onPageChange: (page: number) => void
   onSortChange: (field: SortField) => void
   onToggleAdmin: (userId: string, isAdmin: boolean) => void
-  onPlanChange: (userId: string, plan: Plan) => void
   isUpdating?: string | null
   currentUserId?: string
-}
-
-function SortHeader({
-  label,
-  field,
-  currentField,
-  currentOrder,
-  onSort,
-  align = "left"
-}: {
-  label: string
-  field: SortField
-  currentField: SortField
-  currentOrder: SortOrder
-  onSort: (field: SortField) => void
-  align?: "left" | "center"
-}) {
-  const isActive = currentField === field
-  return (
-    <th className={`px-4 py-3 font-medium ${align === "center" ? "text-center" : "text-left"}`}>
-      <button
-        onClick={() => onSort(field)}
-        className="inline-flex items-center gap-1 hover:text-foreground"
-      >
-        {label}
-        {isActive ? (
-          currentOrder === "asc" ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3 w-3 opacity-50" />
-        )}
-      </button>
-    </th>
-  )
 }
 
 // Mobile card view for users
 function MobileUserCard({
   user,
   onToggleAdmin,
-  onPlanChange,
   isUpdating,
   currentUserId,
 }: {
   user: User
   onToggleAdmin: (userId: string, isAdmin: boolean) => void
-  onPlanChange: (userId: string, plan: Plan) => void
   isUpdating?: string | null
   currentUserId?: string
 }) {
@@ -176,19 +113,6 @@ function MobileUserCard({
       {/* Actions row */}
       <div className="flex items-center gap-2 pt-1">
         <button
-          onClick={() => onPlanChange(user.id, PLAN_CYCLE[user.plan])}
-          disabled={isUpdating === user.id}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-            PLAN_STYLE[user.plan],
-            "disabled:cursor-not-allowed disabled:opacity-50"
-          )}
-          title={`Click to change plan (→ ${PLAN_LABEL[PLAN_CYCLE[user.plan]]})`}
-        >
-          <Crown className="h-3 w-3" />
-          {PLAN_LABEL[user.plan]}
-        </button>
-        <button
           onClick={() => onToggleAdmin(user.id, !user.isAdmin)}
           disabled={isUpdating === user.id || user.id === currentUserId}
           className={cn(
@@ -227,7 +151,6 @@ export function UserTable({
   onPageChange,
   onSortChange,
   onToggleAdmin,
-  onPlanChange,
   isUpdating,
   currentUserId,
 }: UserTableProps) {
@@ -289,7 +212,6 @@ export function UserTable({
               key={user.id}
               user={user}
               onToggleAdmin={onToggleAdmin}
-              onPlanChange={onPlanChange}
               isUpdating={isUpdating}
               currentUserId={currentUserId}
             />
@@ -308,7 +230,6 @@ export function UserTable({
                 <SortHeader label="Messages" field="totalMessages" currentField={sortField} currentOrder={sortOrder} onSort={onSortChange} align="center" />
                 <SortHeader label="Last Active" field="lastActivityAt" currentField={sortField} currentOrder={sortOrder} onSort={onSortChange} />
                 <SortHeader label="Joined" field="createdAt" currentField={sortField} currentOrder={sortOrder} onSort={onSortChange} />
-                <SortHeader label="Plan" field="plan" currentField={sortField} currentOrder={sortOrder} onSort={onSortChange} align="center" />
                 <SortHeader label="Admin" field="isAdmin" currentField={sortField} currentOrder={sortOrder} onSort={onSortChange} align="center" />
               </tr>
             </thead>
@@ -337,14 +258,11 @@ export function UserTable({
                     <td className="px-4 py-3 text-center">
                       <div className="mx-auto h-6 w-12 rounded bg-muted animate-pulse" />
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="mx-auto h-6 w-12 rounded bg-muted animate-pulse" />
-                    </td>
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     No users found
                   </td>
                 </tr>
@@ -404,21 +322,6 @@ export function UserTable({
                       {formatDistanceToNow(new Date(user.createdAt), {
                         addSuffix: true,
                       })}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => onPlanChange(user.id, PLAN_CYCLE[user.plan])}
-                        disabled={isUpdating === user.id}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors",
-                          PLAN_STYLE[user.plan],
-                          "disabled:cursor-not-allowed disabled:opacity-50"
-                        )}
-                        title={`Click to change plan (→ ${PLAN_LABEL[PLAN_CYCLE[user.plan]]})`}
-                      >
-                        <Crown className="h-3 w-3" />
-                        {PLAN_LABEL[user.plan]}
-                      </button>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button

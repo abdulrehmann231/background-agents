@@ -12,7 +12,6 @@ import {
   Github,
   Lock,
   Globe,
-  ChevronDown,
   Loader2,
   Plus,
   RefreshCw,
@@ -22,6 +21,7 @@ import { fetchAllRepos } from "@/lib/github"
 import { basename } from "@/lib/format"
 import { signInWithGitHub } from "@/lib/auth-utils"
 import type { GitHubRepo } from "@/lib/types"
+import { ComboboxTriggerButton } from "./ComboboxTriggerButton"
 import {
   Popover,
   PopoverContent,
@@ -48,7 +48,10 @@ interface RepoComboboxProps {
   disabled?: boolean
   /** Mobile layout */
   isMobile?: boolean
-  /** Always show label regardless of container width */
+  /**
+   * Forces the label on (`true`) or off (`false`) regardless of available
+   * space. Omit to let the trigger decide for itself.
+   */
   showLabel?: boolean
   /** If true, clicking the button opens the create modal directly instead of showing the dropdown */
   createOnly?: boolean
@@ -60,7 +63,7 @@ export function RepoCombobox({
   onRequestCreate,
   disabled = false,
   isMobile = false,
-  showLabel = false,
+  showLabel,
   createOnly = false,
 }: RepoComboboxProps) {
   const { status } = useSession()
@@ -149,47 +152,29 @@ export function RepoCombobox({
   // If createOnly mode, render a simple button that opens the create modal directly
   if (createOnly) {
     return (
-      <button
-        type="button"
+      <ComboboxTriggerButton
         disabled={disabled}
+        isMobile={isMobile}
+        showLabel={showLabel}
         onClick={() => onRequestCreate?.()}
-        className={cn(
-          "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-sm",
-          disabled && "opacity-50 cursor-not-allowed"
-        )}
         title="Create new repository"
-      >
-        <Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-        <span className={cn(
-          showLabel ? "inline" : (isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")
-        )}>
-          {displayLabel}
-        </span>
-        <ChevronDown className={cn(isMobile ? "h-4 w-4 hidden @[16rem]/row1:block" : "h-3.5 w-3.5")} />
-      </button>
+        icon={<Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />}
+        label={displayLabel}
+      />
     )
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <ComboboxTriggerButton
           disabled={disabled}
-          className={cn(
-            "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-sm",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
+          isMobile={isMobile}
+          showLabel={showLabel}
           title={value || "Select repository"}
-        >
-          <Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-          <span className={cn(
-            showLabel ? "inline" : (isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")
-          )}>
-            {displayLabel}
-          </span>
-          <ChevronDown className={cn(isMobile ? "h-4 w-4 hidden @[16rem]/row1:block" : "h-3.5 w-3.5")} />
-        </button>
+          icon={<Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />}
+          label={displayLabel}
+        />
       </PopoverTrigger>
       <PopoverContent
         className="w-72 p-0"

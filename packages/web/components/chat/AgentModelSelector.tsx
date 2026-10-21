@@ -5,10 +5,12 @@ import { ChevronDown, Cpu, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import { useUpwardMenuMaxHeight } from "@/lib/hooks/useUpwardMenuMaxHeight"
+import { useCollapsibleLabel } from "@/lib/hooks/useCollapsibleLabel"
 import type { Agent, ModelOption, CredentialFlags, Chat } from "@/lib/types"
 import { getAgentModels, getFreeModelForAgent, agentLabels, getModelLabel, hasCredentialsForModel, agentHasFreeUsage, agentIsReady, agentSharedPoolExhausted, agentUsesSharedPool, resolveModelForAgent, sharedPoolProviderForModel, formatTokenRate, ALL_AGENTS } from "@/lib/types"
 import { chargeableUsd, creditTier } from "@/lib/server/credits"
 import { fmtCreditAmount } from "@/lib/format"
+import { exhaustedCreditProvider } from "@/lib/credit-limit"
 import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { AgentIcon } from "../icons/agent-icons"
 import { MobileSelect } from "../ui/MobileBottomSheet"
@@ -33,16 +35,23 @@ import {
 
 interface AgentModelSelectorProps {
   chat: Chat | null
+  modelPickerRequest?: { chatId: string; sequence: number }
   credentialFlags: CredentialFlags
   currentAgent: Agent
   currentModel: string
   onUpdateChat?: (updates: Partial<Chat>) => void
-  showClaudeLimitDialog: () => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
   isMobile: boolean
   /** Called when a dropdown opens, so parent can close other dropdowns */
   onDropdownOpen?: () => void
   /** When true, close all dropdowns (controlled by parent) */
   closeDropdowns?: boolean
+  /**
+   * Forces both the agent and model labels on (`true`) or off (`false`)
+   * regardless of available space — e.g. a parent coordinating this with
+   * other triggers as one group. Omit to let each decide for itself.
+   */
+  forceShowLabel?: boolean
 }
 
 // Env override so Eliza can be forced on in tests/CI regardless of the stored
@@ -126,18 +135,20 @@ export function AgentModelSelector({
   currentAgent,
   currentModel,
   onUpdateChat,
-  showClaudeLimitDialog,
+  showCreditDialog,
   isMobile,
   onDropdownOpen,
   closeDropdowns,
+  modelPickerRequest,
+  forceShowLabel,
 }: AgentModelSelectorProps) {
   const modals = useModals()
 
   // User's custom endpoints — merged into each agent's model list by name.
   const { data: settingsData } = useSettingsQuery()
   const endpoints = settingsData?.customEndpoints
-  // Null for anyone the balance doesn't gate (unlimited plan, own keys
-  // everywhere, logged out) — those users never get a credit-coloured dot.
+  // Null for anyone the balance doesn't gate (own keys everywhere, logged
+  // out) — those users never get a credit-coloured dot.
   const creditBalanceUsd = settingsData?.creditBalanceUsd ?? null
   // Admin-set pricing multiplier per provider — empty when logged out or still
   // loading, which getModelPrice reads the same as "no multiplier configured"
@@ -157,8 +168,28 @@ export function AgentModelSelector({
   const [showAgentSheet, setShowAgentSheet] = useState(false)
   const [showModelSheet, setShowModelSheet] = useState(false)
   const [search, setSearch] = useState("")
+  const handledRequest = useRef(modelPickerRequest)
+  useEffect(() => {
+    if (!modelPickerRequest || handledRequest.current === modelPickerRequest) return
+    handledRequest.current = modelPickerRequest
+    if (modelPickerRequest.chatId !== chat?.id) return
+    setSearch("")
+    setShowAgentDropdown(false)
+    setShowAgentSheet(false)
+    if (isMobile) setShowModelSheet(true)
+    else setShowModelDropdown(true)
+    onDropdownOpen?.()
+  }, [modelPickerRequest, chat?.id, isMobile, onDropdownOpen])
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const agentDropdownMaxHeight = useUpwardMenuMaxHeight(showAgentDropdown, agentDropdownRef)
+  // The model label can be a user-named custom endpoint — arbitrary length,
+  // unlike the agent label (always one of a fixed, short set) — so when no
+  // parent is coordinating label visibility, it collapses to icon-only
+  // based on actual overflow rather than a fixed breakpoint. See
+  // useCollapsibleLabel.
+  const { itemRef: modelButtonRef, measureRef: modelLabelMeasureRef, showLabel: modelFits } = useCollapsibleLabel<HTMLButtonElement>()
+  const showAgentLabel = forceShowLabel
+  const showModelLabel = forceShowLabel ?? modelFits
 
   const availableModels = getAgentModels(currentAgent, endpoints)
   const selectedModelConfig = availableModels.find(m => m.value === currentModel)
@@ -197,7 +228,8 @@ export function AgentModelSelector({
     // and so does an agent with an always-free, no-key model (OpenCode), whose
     // free tier never touches the balance.
     if (agentSharedPoolExhausted(agent, credentialFlags) && !getFreeModelForAgent(agent)) {
-      showClaudeLimitDialog()
+      const model = resolveModelForAgent(agent, credentialFlags, settingsData?.settings?.defaultModel, endpoints)
+      showCreditDialog(sharedPoolProviderForModel(agent, model, credentialFlags) ?? undefined, creditBalanceUsd)
       return
     }
 
@@ -227,11 +259,22 @@ export function AgentModelSelector({
         }
       }
     }
-  }, [chat, currentAgent, currentModel, credentialFlags, endpoints, settingsData, onUpdateChat, showClaudeLimitDialog, modals])
+  }, [chat, currentAgent, currentModel, credentialFlags, endpoints, settingsData, creditBalanceUsd, onUpdateChat, showCreditDialog, modals])
 
   const handleModelChange = useCallback((model: string) => {
     setShowModelDropdown(false)
     setShowModelSheet(false)
+    const blockedProvider = exhaustedCreditProvider({
+      agent: currentAgent,
+      model,
+      credentialFlags,
+      balanceUsd: creditBalanceUsd,
+      providerMultipliers,
+    })
+    if (blockedProvider) {
+      showCreditDialog(blockedProvider, creditBalanceUsd)
+      return
+    }
     if (chat && onUpdateChat) {
       const prevModel = currentModel
       onUpdateChat({ model })
@@ -249,7 +292,7 @@ export function AgentModelSelector({
         }
       }
     }
-  }, [chat, availableModels, credentialFlags, currentAgent, currentModel, onUpdateChat, modals])
+  }, [chat, availableModels, credentialFlags, currentAgent, currentModel, creditBalanceUsd, providerMultipliers, onUpdateChat, showCreditDialog, modals])
 
   // Determine which section heading a model belongs to
   const getModelSection = useCallback((model: ModelOption): string => {
@@ -365,27 +408,26 @@ export function AgentModelSelector({
         {/* Agent selector - Mobile */}
         <button
           onClick={() => setShowAgentSheet(true)}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          aria-label={`Select agent: ${agentLabels[currentAgent]}`}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           title={agentLabels[currentAgent]}
         >
           <AgentIcon agent={currentAgent} className="h-4 w-4" />
-          <span className="hidden @[18rem]/row2:inline">{agentLabels[currentAgent]}</span>
-          <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
         </button>
 
         {/* Model selector - Mobile */}
         <button
           onClick={() => setShowModelSheet(true)}
+          aria-label={`Select model: ${getModelLabel(currentAgent, currentModel, endpoints)}`}
           className={cn(
-            "flex items-center gap-1 text-sm transition-colors cursor-pointer",
+            "flex h-9 min-w-0 flex-1 items-center gap-1 text-left text-sm transition-colors cursor-pointer",
             !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
           )}
           title={getModelLabel(currentAgent, currentModel, endpoints)}
         >
-          {!hasRequiredCredentials && <Lock className="h-4 w-4" />}
-          <Cpu className="h-4 w-4 @[18rem]/row2:hidden" />
-          <span className="hidden @[18rem]/row2:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
-          <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
+          {!hasRequiredCredentials && <Lock className="h-4 w-4 shrink-0" />}
+          <span className="truncate">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
+          <ChevronDown className="h-4 w-4 shrink-0" />
         </button>
 
         {/* Mobile Bottom Sheets */}
@@ -426,7 +468,12 @@ export function AgentModelSelector({
           title={agentLabels[currentAgent]}
         >
           <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
-          <span className="hidden @[32rem]:inline">{agentLabels[currentAgent]}</span>
+          <span className={cn(
+            "whitespace-nowrap",
+            forceShowLabel === undefined ? "hidden @[32rem]:inline" : (showAgentLabel ? "inline" : "hidden")
+          )}>
+            {agentLabels[currentAgent]}
+          </span>
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
         {showAgentDropdown && (
@@ -475,18 +522,35 @@ export function AgentModelSelector({
       }}>
         <PopoverTrigger asChild>
           <button
+            ref={modelButtonRef}
             className={cn(
-              "flex items-center gap-1 text-sm transition-colors cursor-pointer",
+              "flex items-center gap-1 overflow-hidden text-sm transition-colors cursor-pointer",
               !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
             )}
             title={getModelLabel(currentAgent, currentModel, endpoints)}
           >
-            {!hasRequiredCredentials && <Lock className="h-3.5 w-3.5" />}
-            <Cpu className="h-3.5 w-3.5 @[32rem]:hidden" />
-            <span className="hidden @[32rem]:inline">{getModelLabel(currentAgent, currentModel, endpoints)}</span>
-            <ChevronDown className="h-3.5 w-3.5" />
+            {!hasRequiredCredentials && <Lock className="h-3.5 w-3.5 shrink-0" />}
+            <Cpu className="h-3.5 w-3.5 shrink-0" />
+            <span className={cn("whitespace-nowrap", showModelLabel ? "inline" : "hidden")}>
+              {getModelLabel(currentAgent, currentModel, endpoints)}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
           </button>
         </PopoverTrigger>
+        {/* Hidden clone measuring this trigger's full natural width — see
+            useCollapsibleLabel for why measuring the real element (which
+            may already be collapsed) wouldn't work. Not needed when a parent
+            is already forcing the label on or off. */}
+        {forceShowLabel === undefined && (
+          <span
+            ref={modelLabelMeasureRef}
+            aria-hidden="true"
+            className="pointer-events-none invisible fixed left-0 top-0 flex items-center gap-1 whitespace-nowrap text-sm"
+          >
+            <Cpu className="h-3.5 w-3.5 shrink-0" />
+            <span>{getModelLabel(currentAgent, currentModel, endpoints)}</span>
+          </span>
+        )}
         <PopoverContent
           className="w-64 p-0 max-h-[var(--radix-popover-content-available-height)] overflow-hidden"
           align="end"

@@ -64,14 +64,14 @@ await sandbox.delete()
 |----------|-------------|
 | Claude | `claude -p --output-format stream-json --verbose --dangerously-skip-permissions -- "prompt"` |
 | Codex | `codex exec --json --skip-git-repo-check --yolo -- "prompt"` |
-| Command Code | `commandcode --output-format json --skip-onboarding --trust --no-auto-update --yolo -m <model> -p "prompt"` |
+| Command Code | `commandcode --output-format json --skip-onboarding --trust --no-auto-update --yolo --model <model> -p "prompt"` |
 | Copilot | `copilot -p "prompt" --output-format=json --silent --autopilot` |
 | Droid | `droid exec --output-format stream-json --auto high -m <model> "prompt"` |
 | Gemini | `gemini --output-format stream-json --skip-trust --yolo -p "prompt"` |
 | Goose | `goose run --output-format stream-json --text "prompt"` |
 | Kilo | `kilo run --format json --auto -- "prompt" 2>&1` |
 | Kimi | `kimi -m <model> --output-format stream-json -p "prompt"` |
-| OpenCode | `opencode run --format json --print-logs --log-level ERROR --variant medium -- "prompt" 2>&1` |
+| OpenCode | `opencode run --format json --print-logs --log-level ERROR -- "prompt" 2>&1` |
 | Pi | `pi --mode json -p "prompt"` |
 | Eliza | Built-in deterministic agent (no CLI) |
 
@@ -198,6 +198,17 @@ Starts a background task. Returns immediately with a `TurnHandle` (`{ executionI
 const { executionId, pid, outputFile } = await session.start("Your task here")
 ```
 
+### Per-turn reasoning effort
+
+`reasoningEffort` sets the reasoning effort for a session or for a single turn. It is separate from `planMode`.
+
+```typescript
+const session = await createSession("codex", { sandbox, model: "gpt-6.1-sol", reasoningEffort: "low" })
+await session.start("Investigate this failure", { reasoningEffort: "high" })
+```
+
+The value is passed to the agent's own flag (for example `--effort` for Claude and `model_reasoning_effort` for Codex). `"default"` sends no flag, so the CLI keeps its own setting. `getReasoningEffortCapability(agent, model).levels` lists the levels offered for a model. Values aren't validated: like an unknown model, an unsupported level is left to the CLI.
+
 ### `session.getEvents()`
 
 Polls for new events since last call.
@@ -217,7 +228,10 @@ Returns `true` while the agent is running.
 
 ### `session.cancel()`
 
-Kills the running agent process.
+Stops a running (or not-yet-started) task. It resolves only after cancellation
+is confirmed — a transport or metadata error isn't proof the agent stopped, so
+retain the session id and retry inspection/cancellation rather than starting a
+replacement concurrently.
 
 ### `getSession(sessionId, options)`
 
@@ -262,7 +276,7 @@ type Event =
 | Provider | Example | Docs |
 |----------|---------|------|
 | **Claude** | `model: "sonnet"`, `model: "opus"`, `model: "haiku"` | [Claude Code](https://code.claude.com/docs/en/model-config#model-aliases) |
-| **Codex** | `model: "gpt-6.1-sol"`, `model: "gpt-5.5"` | [Codex CLI models](https://developers.openai.com/codex/models) |
+| **Codex** | `model: "gpt-6.1-sol"` (Backgrounder default); `gpt-5.5` requires API-key authentication, not ChatGPT sign-in | [Codex CLI models](https://learn.chatgpt.com/docs/models) |
 | **Command Code** | `model: "xiaomi/mimo-v2.6-pro"`, `model: "claude-sonnet-5"`, `model: "deepseek/deepseek-v4-flash"` | [Command Code models](https://commandcode.ai/docs/reference/cli/models) |
 | **Copilot** | `model: "gpt-5-mini"`, `model: "claude-sonnet-5"`, `model: "gpt-5.5"` | [GitHub Copilot](https://docs.github.com/en/copilot) |
 | **Droid** | `model: "claude-sonnet-4-5-20250929"` (BYOK), `model: "gpt-5"`, `model: "factory/<id>"` (Factory-hosted) | [Factory Droid](https://docs.factory.ai/cli/) |
@@ -325,6 +339,12 @@ Then retrieve your credentials:
 | Windows | `type %USERPROFILE%\.claude\.credentials.json` |
 
 Pass the output as `CLAUDE_CODE_CREDENTIALS`. The SDK automatically writes it to `~/.claude/.credentials.json` in the sandbox.
+
+### Shared hosts: token recovery instead of a static credential
+
+Instead of `CLAUDE_CODE_CREDENTIALS`, a host running sessions for many users can set `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK fetches an access token at startup and refreshes it automatically if a request is rejected, so there's no refresh token or `CLAUDE_CODE_CREDENTIALS` blob to manage per session. This requires Node 20.3+ (for `AbortSignal.any`/`AbortSignal.timeout`). Access tokens stay in memory; the endpoint capability is kept out of the child CLI's environment.
+
+The credential endpoint should authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host.
 
 ---
 

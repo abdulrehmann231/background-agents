@@ -29,7 +29,9 @@ import { useBranching } from "@/lib/hooks/useBranching"
 import { useChatNavigation } from "@/lib/hooks/useChatNavigation"
 import { useRepoSelectHandler } from "@/lib/hooks/useRepoSelectHandler"
 import { LocalSyncManager } from "@/lib/hooks/useLocalSync"
+import { getElectronAPI } from "@/lib/hooks/useElectron"
 import { useToastStore } from "@/lib/stores/toast-store"
+import { NAVIGATE_TO_CHAT_EVENT, type NavigateToChatEventDetail } from "@/lib/notify"
 import {
   ChatProvider,
   ModalProvider,
@@ -40,7 +42,7 @@ import {
   type ChatContextValue,
   type GitContextValue,
 } from "@/lib/contexts"
-import { NEW_REPOSITORY, type Message } from "@/lib/types"
+import { NEW_REPOSITORY, getFreeModelForAgent, type Message } from "@/lib/types"
 import { useReposQuery, useBranchesQuery, useServersQuery } from "@/lib/query"
 import type { GitHubRepo, GitHubBranch } from "@/lib/github"
 import { hasPendingMessage } from "@/lib/pending-message"
@@ -370,6 +372,32 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     gitDialogs,
   })
 
+  // Clicking a "finished"/"push" notification (an in-app toast, or a native OS
+  // notification relayed from Electron's main process) should bring that chat
+  // into view. Both paths funnel through the same window event so there's one
+  // place that decides what "navigate to chat" means (select it, switch out of
+  // the scheduled-jobs view, update the URL). Scrolling to the relevant message
+  // once there is handled separately in useChatComposer, since that's the only
+  // place that owns the message-list scroll position.
+  useEffect(() => {
+    const handleNavigate = (chatId: string) => {
+      if (chatId) handleSelectChat(chatId)
+    }
+    const handleWindowEvent = (event: Event) => {
+      const chatId = (event as CustomEvent<NavigateToChatEventDetail>).detail?.chatId
+      if (chatId) handleNavigate(chatId)
+    }
+    window.addEventListener(NAVIGATE_TO_CHAT_EVENT, handleWindowEvent)
+
+    const api = getElectronAPI()
+    const cleanupElectron = api?.onNavigateToChat(handleNavigate)
+
+    return () => {
+      window.removeEventListener(NAVIGATE_TO_CHAT_EVENT, handleWindowEvent)
+      cleanupElectron?.()
+    }
+  }, [handleSelectChat])
+
   // Repo selection for the current chat (+ the transient setup-remote error toast).
   const { errorBanner, handleRepoSelect } = useRepoSelectHandler({
     displayCurrentChat,
@@ -672,8 +700,10 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   chat={displayCurrentChat}
                   settings={settings}
                   credentialFlags={credentialFlags}
-                  showClaudeLimitDialog={() => {
-                    setLimitReachedState({ show: true, provider: "claude" })
+                  showCreditDialog={(provider, creditBalance) => {
+                    // Keep any server-rejected message available for an explicit retry.
+                    if (limitReachedState.show) return
+                    setLimitReachedState({ show: true, provider, creditBalance })
                   }}
                   onSendMessage={handleSendMessage}
                   onReload={reloadChat}
@@ -761,7 +791,14 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
         limitReachedState={limitReachedState}
         onDismissLimitReached={dismissLimitReached}
-        onContinueWithOpenCode={retryWithOpenCode}
+        onContinueWithOpenCode={() => {
+          if (limitReachedState.pendingMessage) {
+            retryWithOpenCode()
+          } else {
+            handleUpdateChatProp({ agent: "opencode", model: getFreeModelForAgent("opencode") })
+            dismissLimitReached()
+          }
+        }}
       />
     </div>
     </GitProvider>

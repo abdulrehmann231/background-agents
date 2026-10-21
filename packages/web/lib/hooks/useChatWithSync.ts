@@ -99,7 +99,6 @@ export function useChatWithSync() {
 
   const settings = settingsQuery.data?.settings ?? DEFAULT_SETTINGS
   const credentialFlags = settingsQuery.data?.credentialFlags ?? {}
-  const planIsPro = settingsQuery.data?.planIsPro ?? false
   const currentChat = useMemo(() => chats.find((c) => c.id === currentChatId) ?? null, [chats, currentChatId])
   // While NextAuth is still resolving the session, the chats/settings queries
   // are disabled (enabled: isAuthenticated). A disabled React Query reports
@@ -239,8 +238,9 @@ export function useChatWithSync() {
     .filter((c) => c.status === "running" && c.backgroundSessionId && c.sandboxId)
     .map((c) => {
       // Id of the most recent assistant message, or "" if none yet.
-      const lastAssistantId =
-        [...c.messages].reverse().find((m) => m.role === "assistant")?.id ?? ""
+      const lastAssistantId = c.messages.some((m) => m.id === c.activeAssistantMessageId && m.role === "assistant")
+        ? c.activeAssistantMessageId ?? ""
+        : ""
       return `${c.id}:${c.backgroundSessionId}:${c.sandboxId}:${lastAssistantId}`
     })
     .sort()
@@ -253,7 +253,7 @@ export function useChatWithSync() {
 
     for (const chat of runningChats) {
       if (useStreamStore.getState().isStreaming(chat.id)) continue
-      const lastAssistantMsg = [...chat.messages].reverse().find((m) => m.role === "assistant")
+      const lastAssistantMsg = chat.messages.find((m) => m.id === chat.activeAssistantMessageId && m.role === "assistant")
       if (lastAssistantMsg) {
         startStreaming(chat.id, chat.sandboxId!, "project", chat.backgroundSessionId!, lastAssistantMsg.id, chat.previewUrlPattern, chat.branch, abortController.signal)
       }
@@ -342,7 +342,6 @@ export function useChatWithSync() {
     currentChatId,
     settings,
     credentialFlags,
-    planIsPro,
     isHydrated,
     isLoading,
     isLoadingMessages,

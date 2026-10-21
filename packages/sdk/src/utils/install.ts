@@ -1,12 +1,17 @@
 import type { ProviderName } from "../types/index"
 
+/** Keep in sync with the sandbox image's Claude package pin. */
+export const CLAUDE_CODE_VERSION = "2.1.283"
+/** Reviewed Codex release, not a minimum. Keep in sync with the image pin. */
+export const CODEX_CLI_VERSION = "0.159.3"
+
 /**
  * CLI package information for each provider.
  * Note: goose uses a shell script installer, not npm.
  */
 const PROVIDER_PACKAGES: Record<ProviderName, string> = {
-  claude: "@anthropic-ai/claude-code",
-  codex: "@openai/codex",
+  claude: `@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}`,
+  codex: `@openai/codex@${CODEX_CLI_VERSION}`,
   commandcode: "command-code",
   copilot: "@github/copilot",
   droid: "", // droid uses a shell script installer, not npm

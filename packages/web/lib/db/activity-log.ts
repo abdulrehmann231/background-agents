@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client"
+import { headers } from "next/headers"
 import { classifyAgentError } from "@background-agents/sdk"
 import { prisma } from "./prisma"
+import { getClientIpFromHeaders } from "@/lib/request-ip"
 
 /**
  * Activity action types for tracking user behavior
@@ -24,6 +26,10 @@ export type ActivityAction =
   // correction. Stripe purchases are not logged here; they live in the
   // CreditTransaction ledger with their Stripe ids attached.
   | "credits_adjusted"
+  // An admin handed out bonus credits (repo star, PR, issue, …) to one, many
+  // or all users from the /admin Credits panel. One row per batch; the
+  // per-user rows are in CreditTransaction with metadata.batchId.
+  | "credits_bonus_granted"
   // An admin changed a provider's pricing multiplier from the /admin Pricing
   // panel (see lib/db/provider-pricing). The row itself already carries
   // `updatedBy`/`updatedAt`; this is what makes the change show up in the
@@ -63,6 +69,32 @@ export type ActivityMetadata = {
 }
 
 /**
+ * Best-effort client IP for the request that caused this activity.
+ *
+ * Every call site today runs inside a Next.js route handler — including the
+ * cron-triggered ones (`app/api/cron/**`) — so `headers()` is normally
+ * available. It's wrapped defensively anyway since activity logging should
+ * never break the caller (e.g. a unit test that calls `logActivity` directly
+ * has no request scope at all).
+ *
+ * Note: for cron-triggered actions (e.g. `daily_limit_reached` from the
+ * agent-lifecycle cron, `message_sent` dispatched by the prompt-queue cron),
+ * this captures whatever hit the cron endpoint, not a real end user's
+ * browser — there's no live user request to read an IP from in that case.
+ */
+async function getRequestIp(): Promise<string | undefined> {
+  try {
+    return getClientIpFromHeaders(await headers())
+  } catch (error) {
+    console.error(
+      "[ActivityLog] Failed to read client IP:",
+      error instanceof Error ? error.message : error
+    )
+    return undefined
+  }
+}
+
+/**
  * Log a user activity for analytics tracking
  *
  * @param userId - The ID of the user performing the action
@@ -75,11 +107,14 @@ export async function logActivity(
   metadata?: ActivityMetadata
 ): Promise<void> {
   try {
+    const ip = metadata?.ip ?? (await getRequestIp())
+    const fullMetadata: ActivityMetadata | undefined = ip ? { ...metadata, ip } : metadata
+
     await prisma.activityLog.create({
       data: {
         userId,
         action,
-        metadata: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
+        metadata: fullMetadata ? (fullMetadata as Prisma.InputJsonValue) : undefined,
       },
     })
   } catch (error) {

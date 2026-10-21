@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parseKimiLine, KIMI_TOOL_MAPPINGS } from "../../src/agents/index.js"
+import { parseFixtureEvents } from "./helpers.js"
 
 describe("parseKimiLine", () => {
   const mappings = KIMI_TOOL_MAPPINGS
@@ -46,25 +47,12 @@ describe("parseKimiLine", () => {
   // ─── Fixture-driven ──────────────────────────────────────────────────────
 
   it("success stream: parses the reference fixture into tokens, tools and one end", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/kimi.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
-    const tokens: string[] = []
-    const types: string[] = []
-    let sessionId: string | undefined
-    for (const line of lines) {
-      const ev = parseKimiLine(line, mappings)
-      if (!ev) continue
-      for (const e of Array.isArray(ev) ? ev : [ev]) {
-        types.push(e.type)
-        if (e.type === "token") tokens.push((e as { text: string }).text)
-        if (e.type === "session") sessionId = (e as { id: string }).id
-      }
-    }
+    const events = parseFixtureEvents("kimi.jsonl", (line) =>
+      parseKimiLine(line, mappings)
+    ) as { type: string; text?: string; id?: string }[]
+    const types = events.map((e) => e.type)
+    const tokens = events.filter((e) => e.type === "token").map((e) => e.text!)
+    const sessionId = events.find((e) => e.type === "session")?.id
     expect(tokens.join("")).toContain("2 + 2 = 4")
     expect(types).toContain("tool_start")
     expect(types).toContain("tool_end")
@@ -73,17 +61,9 @@ describe("parseKimiLine", () => {
   })
 
   it("out-of-credits stream: surfaces a classified balance error (not a silent crash)", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/kimi-error.jsonl"),
-      "utf-8"
-    )
-    const lines = fixture.split("\n").filter(Boolean)
-    const events = lines
-      .map((l: string) => parseKimiLine(l, mappings))
-      .filter(Boolean)
-      .flat() as { type: string; error?: string }[]
+    const events = parseFixtureEvents("kimi-error.jsonl", (line) =>
+      parseKimiLine(line, mappings)
+    ) as { type: string; error?: string }[]
     const end = events.find((e) => e.type === "end")
     expect(end).toBeDefined()
     // The raw provider detail is preserved …

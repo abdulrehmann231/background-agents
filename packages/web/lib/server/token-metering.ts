@@ -32,7 +32,7 @@ import {
 import { chargeTurnToCredits } from "@/lib/db/credits"
 import { getProviderMultipliers } from "@/lib/db/provider-pricing"
 import { microToUsd } from "@/lib/server/credits"
-import { isFreeModel, type Plan } from "@/lib/server/usage-budgets"
+import { isFreeModel } from "@/lib/server/usage-budgets"
 import {
   collapseEntriesByModel,
   cursorForModel,
@@ -207,6 +207,17 @@ async function meterTurnUsage(
   // see the winner's committed rows on its own read, which a snapshot level
   // would hide, leaving it to write the very duplicate this prevents.
   try {
+    // Read the pricing multipliers BEFORE opening the transaction, never inside
+    // it. getProviderMultipliers reads through the global client, not `tx`, and
+    // the production pool holds one connection per instance (lib/db/prisma). On
+    // a cache miss, a read issued inside the transaction waits for the very
+    // connection the transaction is holding, so it hangs until
+    // METER_TX_TIMEOUT_MS kills the transaction and the whole turn goes
+    // unmetered (P2028 on the next `tx` statement). Reading here costs nothing:
+    // it is cached, and a value read a moment earlier is no staler than the
+    // cache already allows.
+    const multipliers = await getProviderMultipliers()
+
     return await prisma.$transaction(
       async (tx) => {
         await lockSessionForMetering(sessionId, tx)
@@ -219,7 +230,7 @@ async function meterTurnUsage(
         // history against today's budget and lock the user out. Detect that
         // case and backdate the baseline rows: they still advance the diff
         // cursor (getSessionCumulatives has no date filter) but fall outside
-        // every budget window (sumSharedUsage filters createdAt >= start of
+        // every budget window (sumSharedSpend filters createdAt >= start of
         // day). Only turns after the baseline charge.
         //
         // Age is the decisive test and is checked first, so a chat created
@@ -355,28 +366,14 @@ async function meterTurnUsage(
         if (rows.length === 0) return 0
 
         // There is no free daily tier any more: a chargeable turn is debited
-        // straight from purchased credits in full (dailyLeft: 0 makes
-        // splitTurnCost send the whole cost to credits — see
-        // lib/server/credits). The only carve-out is the `unlimited` plan,
-        // which never touches credits at all. Skipped entirely for baseline
-        // rows: they are backdated out of every budget window precisely so
-        // the pre-metering backlog charges nobody, and charging it to a real
-        // balance would drain a top-up on a chat's first metered turn.
-        let chargeCredits = false
-        if (!baselineAt) {
-          const user = await tx.user.findUnique({
-            where: { id: userId },
-            select: { plan: true },
-          })
-          chargeCredits = ((user?.plan as Plan) ?? "free") !== "unlimited"
-        }
-
+        // straight from credits in full (dailyLeft: 0 makes splitTurnCost send
+        // the whole cost to credits — see lib/server/credits). Skipped entirely
+        // for baseline rows: they are backdated out of every budget window
+        // precisely so the pre-metering backlog charges nobody, and charging it
+        // to a real balance would drain a top-up on a chat's first metered turn.
         const inserted = await insertTokenUsageRows(rows, tx)
 
-        if (chargeCredits) {
-          // Cached (see lib/db/provider-pricing) — this is not a Postgres round
-          // trip on every metered turn.
-          const multipliers = await getProviderMultipliers()
+        if (!baselineAt) {
           const debited = await chargeTurnToCredits(
             { userId, chatId, rows: inserted, dailyLeft: 0, multipliers },
             tx

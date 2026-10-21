@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils"
 import { MessageBubble } from "@/components/MessageBubble"
 import { type ScheduledJob, type ScheduledJobRun } from "@/lib/scheduled-jobs/types"
 import type { Message } from "@/lib/types"
-import { getRunStatusIcon, formatRunLabel, formatDuration } from "./helpers"
+import { getRunStatusIcon, formatRunLabel } from "./helpers"
+import { formatDurationRange } from "@/lib/format"
 
 interface JobRunDetailProps {
   job: ScheduledJob
@@ -117,7 +118,7 @@ export function JobRunDetail({ job, runs, selectedRun, onSelectRun, messages }: 
                     <div className="flex items-start gap-2 text-sm">
                       <Check className="h-3.5 w-3.5 mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
                       <span className="text-muted-foreground">
-                        Agent finished after {formatDuration(selectedRun.startedAt, selectedRun.completedAt)}.
+                        Agent finished after {formatDurationRange(selectedRun.startedAt, selectedRun.completedAt)}.
                       </span>
                     </div>
                   )}

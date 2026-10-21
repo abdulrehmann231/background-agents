@@ -49,7 +49,7 @@ export const NO_REPOSITORY = "__none__"
 export const ARCHIVED_CHATS = "__archived__"
 export const MIN_WIDTH = 140
 export const MAX_WIDTH = 400
-export const COLLAPSED_WIDTH = 64
+export const COLLAPSED_WIDTH = 56
 export const COLLAPSE_THRESHOLD = 100
 
 export function SidebarProvider({ children }: SidebarProviderProps) {

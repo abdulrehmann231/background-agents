@@ -1,22 +1,31 @@
 "use client"
 
-import { useRef, useEffect, useCallback, useState } from "react"
-import { AlertTriangle, ArrowUp, Square, ChevronDown, Github, X, Paperclip, Pencil, ListChecks, Mic, GitBranch } from "lucide-react"
+import { useRef, useEffect, useCallback, useState, type ReactNode } from "react"
+import { AlertTriangle, ArrowUp, Square, ChevronDown, Clock, Github, Paperclip, Pencil, ListChecks, Mic, GitBranch, Cpu, Brain, Plug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import { useSpeechRecognition } from "@/lib/hooks/useSpeechRecognition"
 import { useCreditWarning } from "@/lib/hooks/useCreditWarning"
 import { useUpwardMenuMaxHeight } from "@/lib/hooks/useUpwardMenuMaxHeight"
+import { useTwoTierCollapse } from "@/lib/hooks/useTwoTierCollapse"
+import { useCollapsibleLabel } from "@/lib/hooks/useCollapsibleLabel"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { isModKeyPressed } from "@/lib/keyboard"
 import type { Chat, Agent, CredentialFlags, PendingFile } from "@/lib/types"
-import { NEW_REPOSITORY } from "@/lib/types"
+import { NEW_REPOSITORY, sharedPoolProviderForModel, agentLabels, getModelLabel } from "@/lib/types"
 import { basename } from "@/lib/format"
+import { queuedSendNotice } from "@/lib/composer-queue"
 import { PendingFilesDisplay } from "./PendingFilesDisplay"
+import { DismissButton } from "./DismissButton"
 import { AgentModelSelector } from "./AgentModelSelector"
+import { ReasoningEffortSelector } from "./ReasoningEffortSelector"
+import type { ReasoningEffortCapability } from "@background-agents/sdk/reasoning-effort"
+import { reasoningEffortLabel } from "@background-agents/sdk/reasoning-effort"
 import { CreditWarningBanner } from "./CreditWarningBanner"
 import { RepoCombobox } from "./RepoCombobox"
 import { BranchCombobox } from "./BranchCombobox"
 import { McpServersCombobox } from "./McpServersCombobox"
+import { AgentIcon } from "../icons/agent-icons"
 import { SlashCommandMenu, type SlashCommandType } from "../SlashCommandMenu"
 import { MobileSelect } from "../ui/MobileBottomSheet"
 
@@ -26,6 +35,7 @@ import { MobileSelect } from "../ui/MobileBottomSheet"
 
 interface ChatInputProps {
   chat: Chat
+  modelPickerRequest?: { chatId: string; sequence: number }
   input: string
   onInputChange: (value: string) => void
   onSend: () => void
@@ -78,11 +88,14 @@ interface ChatInputProps {
   credentialFlags: CredentialFlags
   currentAgent: Agent
   currentModel: string
-  showClaudeLimitDialog: () => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
   // Plan mode
   planModeEnabled: boolean
   planModeSupported: boolean
   onSetPlanMode: (enabled: boolean) => void
+  reasoningEffort?: string
+  onReasoningEffortChange?: (value: string) => void
+  reasoningEffortCapability?: ReasoningEffortCapability
   // MCP servers (chat-scoped, draft-aware)
   showMcpButton: boolean
   isDraftChat: boolean
@@ -92,6 +105,7 @@ interface ChatInputProps {
 }
 
 interface ChatActionSlotProps {
+  canStop?: boolean
   isRunning: boolean
   canQueue: boolean
   canSend: boolean
@@ -109,6 +123,7 @@ interface ChatActionSlotProps {
  * hit target and can receive a click that was intended to stop the agent.
  */
 export function ChatActionSlot({
+  canStop = true,
   isRunning,
   canQueue,
   canSend,
@@ -136,16 +151,19 @@ export function ChatActionSlot({
             isMobile ? "h-9 w-9" : "h-7 w-7"
           )}
         >
-          <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+          {/* Clock (not ArrowUp) so a queued send reads differently from an
+              immediate one at a glance, not just via the tooltip. */}
+          <Clock className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
         </button>
       ) : isRunning ? (
         <button
           type="button"
           onClick={onStop}
-          title="Stop agent"
+          disabled={!canStop}
+          title={canStop ? "Stop agent" : "Agent is starting"}
           aria-label="Stop agent"
           className={cn(
-            "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors cursor-pointer",
+            "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-wait",
             isMobile ? "h-9 w-9" : "h-7 w-7"
           )}
         >
@@ -173,7 +191,40 @@ export function ChatActionSlot({
   )
 }
 
+interface ComposerGroupItem {
+  icon: ReactNode
+  /** Omit entirely (not just empty string) to render this item icon-only. */
+  label?: string
+  chevron?: boolean
+}
+
+/**
+ * Hidden, off-screen twin of one composer trigger group (left or right),
+ * rendered at its full natural footprint — real icons and real label text,
+ * but no interactivity or data fetching — purely so useTwoTierCollapse can
+ * measure how much room the group would need without touching what's
+ * actually on screen (see that hook for why).
+ */
+function ComposerGroupMeasure({ groupRef, items }: { groupRef: React.Ref<HTMLDivElement>; items: ComposerGroupItem[] }) {
+  return (
+    <div
+      ref={groupRef}
+      aria-hidden="true"
+      className="pointer-events-none invisible fixed left-0 top-0 flex items-center gap-2"
+    >
+      {items.map((item, index) => (
+        <span key={index} className="flex items-center gap-1 whitespace-nowrap">
+          {item.icon}
+          {item.label !== undefined && <span>{item.label}</span>}
+          {item.chevron && <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export function ChatInput({
+  modelPickerRequest,
   chat,
   input,
   onInputChange,
@@ -224,11 +275,14 @@ export function ChatInput({
   credentialFlags,
   currentAgent,
   currentModel,
-  showClaudeLimitDialog,
+  showCreditDialog,
   // Plan mode
   planModeEnabled,
   planModeSupported,
   onSetPlanMode,
+  reasoningEffort = "default",
+  onReasoningEffortChange,
+  reasoningEffortCapability,
   // MCP servers
   showMcpButton,
   isDraftChat,
@@ -237,6 +291,9 @@ export function ChatInput({
   isMobile,
 }: ChatInputProps) {
   const modals = useModals()
+  const queueNotice = queuedSendNotice({ isRunning,
+    isPaused: !!chat.queuePaused && !!chat.queuedMessages?.length,
+    hasFiles: pendingFiles.length > 0, planMode: planModeEnabled, hasText: !!input.trim() })
   // Keyed off the *current* agent+model, so switching to a free model or an
   // own-key one clears the warning along with the charge it was warning about.
   const creditWarning = useCreditWarning({
@@ -248,6 +305,29 @@ export function ChatInput({
   const [showModeSheet, setShowModeSheet] = useState(false)
   const modeDropdownRef = useRef<HTMLDivElement>(null)
   const modeDropdownMaxHeight = useUpwardMenuMaxHeight(showModeDropdown, modeDropdownRef)
+  // The left (repo/branch/MCP) and right (mode/reasoning effort/agent/model)
+  // trigger groups collapse their labels to icon-only as a pair, in
+  // priority order — right first, left only once right is already fully
+  // collapsed and it's still not enough — rather than each trigger (or a
+  // fixed breakpoint) deciding independently. See useTwoTierCollapse.
+  const {
+    containerRef: composerRowRef,
+    leftNaturalRef, leftCollapsedRef,
+    rightNaturalRef, rightCollapsedRef,
+    showLeft: showLeftLabels, showRight: showRightLabels,
+  } = useTwoTierCollapse()
+  // Desktop's left/right groups sit in one shared horizontal row and
+  // compete for the same space, so they collapse as a coordinated pair
+  // above. Mobile stacks them as two independent full-width rows instead —
+  // summing both groups' widths against one shared "available" measurement
+  // would be wrong there — so the repo link (the one plain, ungrouped
+  // trigger shared between both layouts) keeps its own independent
+  // auto-detect for mobile specifically.
+  const { itemRef: mobileRepoLinkRef, measureRef: mobileRepoLabelMeasureRef, showLabel: mobileRepoLinkFits } = useCollapsibleLabel<HTMLAnchorElement>()
+  // Custom endpoints are needed to resolve the model label the same way
+  // AgentModelSelector does; React Query dedupes this against its fetch.
+  const { data: settingsDataForLabels } = useSettingsQuery()
+  const endpointsForLabels = settingsDataForLabels?.customEndpoints
 
   // Whether a "branch" modifier (Cmd/Alt/Ctrl) is currently held. When it is —
   // and branching is possible — the send button turns into a "send to new
@@ -349,6 +429,72 @@ export function ChatInput({
     { value: "plan", label: "Plan", icon: <ListChecks className="h-5 w-5" /> },
   ]
 
+  const agentModelSelector = (
+    <AgentModelSelector
+      chat={chat}
+      modelPickerRequest={modelPickerRequest}
+      credentialFlags={credentialFlags}
+      currentAgent={currentAgent}
+      currentModel={currentModel}
+      onUpdateChat={onUpdateChat}
+      showCreditDialog={showCreditDialog}
+      isMobile={isMobile}
+      onDropdownOpen={() => setShowModeDropdown(false)}
+      closeDropdowns={showModeDropdown}
+      forceShowLabel={showRightLabels}
+    />
+  )
+
+  // Label text for the left/right measurement clones below — mirrors what
+  // each real trigger actually displays (see useTwoTierCollapse).
+  const repoLabelText = showRepoButton
+    ? (isNewRepo ? "Repository" : (chat.repo ? basename(chat.repo) : "Repository"))
+    : (chat.repo ? basename(chat.repo) : "")
+  const branchLabelText = chat.branch || chat.baseBranch || ""
+  const showReasoningEffortTrigger = Boolean(
+    onReasoningEffortChange && reasoningEffortCapability && reasoningEffortCapability.levels.length > 0
+  )
+  const reasoningEffortLabelText = !reasoningEffort || reasoningEffort === "default"
+    ? reasoningEffortLabel(reasoningEffortCapability?.defaultLevel ?? "medium")
+    : reasoningEffortLabel(reasoningEffort)
+  const modeLabelText = planModeEnabled ? "Plan" : "Edit"
+  const modelLabelText = getModelLabel(currentAgent, currentModel, endpointsForLabels)
+
+  const leftGroupItems: ComposerGroupItem[] = [
+    { icon: <Paperclip className="h-3.5 w-3.5 shrink-0" /> },
+    ...(showRepoButton || !isNewRepo ? [{
+      icon: <Github className="h-3.5 w-3.5 shrink-0" />,
+      label: repoLabelText,
+      chevron: showRepoButton,
+    }] : []),
+    ...(showRepoButton && !isNewRepo && isNewChat ? [{
+      icon: <GitBranch className="h-3.5 w-3.5 shrink-0" />,
+      label: branchLabelText,
+      chevron: true,
+    }] : []),
+    ...(showMcpButton ? [{
+      icon: <Plug className="h-3.5 w-3.5 shrink-0" />,
+      label: "MCP",
+      chevron: true,
+    }] : []),
+  ]
+  const rightGroupItems: ComposerGroupItem[] = [
+    ...(planModeSupported ? [{
+      icon: planModeEnabled ? <ListChecks className="h-3.5 w-3.5 shrink-0" /> : <Pencil className="h-3.5 w-3.5 shrink-0" />,
+      label: modeLabelText,
+      chevron: true,
+    }] : []),
+    ...(showReasoningEffortTrigger ? [{
+      icon: <Brain className="h-3.5 w-3.5 shrink-0" />,
+      label: reasoningEffortLabelText,
+      chevron: true,
+    }] : []),
+    { icon: <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />, label: agentLabels[currentAgent], chevron: true },
+    { icon: <Cpu className="h-3.5 w-3.5 shrink-0" />, label: modelLabelText, chevron: true },
+  ]
+  const withoutLabels = (items: ComposerGroupItem[]): ComposerGroupItem[] =>
+    items.map(({ icon, chevron }) => ({ icon, chevron }))
+
   return (
     <div className={cn(
       "w-full mx-auto",
@@ -362,7 +508,7 @@ export function ChatInput({
           <CreditWarningBanner
             tier={creditWarning.tier}
             balanceUsd={creditWarning.balanceUsd}
-            onBuyCredits={() => modals.openSettingsSection("credits")}
+            onAddCredits={() => showCreditDialog(sharedPoolProviderForModel(currentAgent, currentModel, credentialFlags) ?? undefined, creditWarning.balanceUsd)}
             onDismiss={creditWarning.dismiss}
             isMobile={isMobile}
           />
@@ -445,7 +591,7 @@ export function ChatInput({
               onPaste={onPaste}
               placeholder={
                 isCreating
-                  ? "Creating sandbox..."
+                  ? (chat.sandboxId ? "Starting agent..." : "Creating sandbox...")
                   : isRunning
                   ? "Agent is working..."
                   : isNewChat
@@ -501,6 +647,7 @@ export function ChatInput({
           {/* Send / stop / queue button — the slot remains mounted while idle
               so the adjacent microphone never replaces its hit target. */}
           <ChatActionSlot
+            canStop={chat.status === "running" && !!chat.backgroundSessionId && !!chat.activeAssistantMessageId}
             isRunning={isRunning}
             canQueue={canQueue}
             canSend={canSend}
@@ -511,6 +658,12 @@ export function ChatInput({
           />
         </div>
 
+        {queueNotice && (
+          <p role="status" data-testid="queue-options-notice" className={cn("text-muted-foreground", isMobile ? "mx-3 mb-2 text-sm" : "mx-4 mb-2 text-xs")}>
+            {queueNotice}
+          </p>
+        )}
+
         {/* File upload error message */}
         {fileError && (
           <div className={cn(
@@ -519,30 +672,25 @@ export function ChatInput({
           )}>
             <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
             <span className="flex-1">{fileError}</span>
-            <button
-              onClick={onClearFileError}
-              className="shrink-0 text-destructive/70 hover:text-destructive transition-colors"
-              aria-label="Dismiss error"
-            >
-              <X className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-            </button>
+            <DismissButton label="Dismiss error" onClick={onClearFileError} isMobile={isMobile} variant="destructive" />
           </div>
         )}
 
         {/* Bottom row with selectors */}
-        <div className={cn(
+        <div ref={composerRowRef} className={cn(
           "@container",
-          isMobile ? "flex flex-col gap-1 px-3 py-2" : "flex items-center gap-3 px-4 py-2"
+          isMobile ? "flex flex-col gap-1 px-3 pb-2 pt-1" : "flex items-center gap-3 px-4 py-2"
         )}>
           {/* Left side items */}
-          <div className={cn("flex items-center gap-2", isMobile ? "w-full @container/row1" : "flex-1")}>
-            {/* Attachment button */}
+          <div className={cn("flex items-center gap-2", isMobile ? "w-full" : "grow shrink-0 basis-auto")}>
+            {/* Attachment button — same hit-target size as the mic/send/stop
+                buttons on the other side of the textarea. */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className={cn(
                 "shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
-                isMobile ? "h-7 w-7" : "h-6 w-6"
+                isMobile ? "h-9 w-9" : "h-7 w-7"
               )}
               title="Attach files"
               aria-label="Attach files"
@@ -561,6 +709,7 @@ export function ChatInput({
                   onRequestCreate={() => modals.setRepoCreateOpen(true)}
                   createOnly={!canSelectExistingRepo && isNewRepo}
                   isMobile={isMobile}
+                  showLabel={isMobile ? undefined : showLeftLabels}
                 />
                 {!isNewRepo && isNewChat && (
                   <BranchCombobox
@@ -571,37 +720,46 @@ export function ChatInput({
                     }}
                     defaultBranch={defaultBranch}
                     isMobile={isMobile}
+                    showLabel={isMobile ? undefined : showLeftLabels}
                   />
                 )}
                 {!isNewRepo && onUpdateChat && canSelectExistingRepo && (
-                  <button
+                  <DismissButton
+                    label="Remove repository"
                     onClick={() => onUpdateChat({ repo: NEW_REPOSITORY, baseBranch: "main" })}
-                    className={cn(
-                      "text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
-                      isMobile ? "p-1.5" : "p-0.5"
-                    )}
-                    title="Remove repository"
-                  >
-                    <X className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
-                  </button>
+                    isMobile={isMobile}
+                  />
                 )}
               </div>
             ) : !isNewRepo && (
-              <a
-                href={`https://github.com/${chat.repo}/tree/${chat.branch}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors",
-                  isMobile ? "text-sm" : "text-sm"
+              <>
+                <a
+                  ref={isMobile ? mobileRepoLinkRef : undefined}
+                  href={`https://github.com/${chat.repo}/tree/${chat.branch}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 overflow-hidden text-muted-foreground hover:text-foreground transition-colors text-sm"
+                  title={chat.repo}
+                >
+                  <Github className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+                  <span className={cn("whitespace-nowrap", (isMobile ? mobileRepoLinkFits : showLeftLabels) ? "inline" : "hidden")}>
+                    {chat.repo ? basename(chat.repo) : undefined}
+                  </span>
+                </a>
+                {/* Mobile-only measurement clone — see the mobileRepoLinkRef
+                    comment above for why mobile can't use the desktop
+                    left/right coordinator. */}
+                {isMobile && (
+                  <span
+                    ref={mobileRepoLabelMeasureRef}
+                    aria-hidden="true"
+                    className="pointer-events-none invisible fixed left-0 top-0 flex items-center gap-1 whitespace-nowrap text-sm"
+                  >
+                    <Github className="h-4 w-4 shrink-0" />
+                    <span>{chat.repo ? basename(chat.repo) : undefined}</span>
+                  </span>
                 )}
-                title={chat.repo}
-              >
-                <Github className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                <span className={cn(isMobile ? "hidden @[16rem]/row1:inline" : "hidden @[32rem]:inline")}>
-                  {chat.repo ? basename(chat.repo) : undefined}
-                </span>
-              </a>
+              </>
             )}
 
             {/* MCP servers picker */}
@@ -614,22 +772,34 @@ export function ChatInput({
                 open={modals.mcpServersModalOpen}
                 onOpenChange={modals.setMcpServersModalOpen}
                 isMobile={isMobile}
+                showLabel={isMobile ? undefined : showLeftLabels}
               />
+            )}
+
+            {/* Hidden measurement twins deciding showLeftLabels — see
+                useTwoTierCollapse and ComposerGroupMeasure. */}
+            {!isMobile && (
+              <>
+                <ComposerGroupMeasure groupRef={leftNaturalRef} items={leftGroupItems} />
+                <ComposerGroupMeasure groupRef={leftCollapsedRef} items={withoutLabels(leftGroupItems)} />
+              </>
             )}
 
             {/* Spacer - only on desktop */}
             {!isMobile && <div className="flex-1" />}
           </div>
 
-          {/* Right side items */}
-          <div className={cn("flex items-center gap-2", isMobile && "w-full @container/row2")}>
+          {/* Agent/model first on mobile; keep keyboard order aligned with the layout. */}
+          <div className={cn("flex items-center gap-2 min-w-0", isMobile ? "w-full @container/row2 border-t border-border/50 pt-1" : "shrink-0 flex-nowrap")}>
+            {isMobile && agentModelSelector}
             {/* Mode selector dropdown (Edit/Plan) - only show if agent supports plan mode */}
             {planModeSupported && (
               isMobile ? (
                 <>
                   <button
                     onClick={() => setShowModeSheet(true)}
-                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    aria-label={planModeEnabled ? "Plan mode" : "Edit mode"}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                     title={planModeEnabled ? "Plan mode — agent will plan before acting" : "Edit mode — agent will edit code directly"}
                   >
                     {planModeEnabled ? (
@@ -637,10 +807,6 @@ export function ChatInput({
                     ) : (
                       <Pencil className="h-4 w-4" />
                     )}
-                    <span className="hidden @[18rem]/row2:inline">
-                      {planModeEnabled ? "Plan" : "Edit"}
-                    </span>
-                    <ChevronDown className="h-4 w-4 hidden @[18rem]/row2:block" />
                   </button>
                   <MobileSelect
                     open={showModeSheet}
@@ -666,7 +832,7 @@ export function ChatInput({
                     ) : (
                       <Pencil className="h-3.5 w-3.5" />
                     )}
-                    <span className="hidden @[32rem]:inline">
+                    <span className={cn("whitespace-nowrap", showRightLabels ? "inline" : "hidden")}>
                       {planModeEnabled ? "Plan" : "Edit"}
                     </span>
                     <ChevronDown className="h-3.5 w-3.5" />
@@ -709,18 +875,26 @@ export function ChatInput({
               )
             )}
 
+            {onReasoningEffortChange && reasoningEffortCapability && (
+              <ReasoningEffortSelector
+                isMobile={isMobile}
+                capability={reasoningEffortCapability}
+                value={reasoningEffort}
+                onChange={onReasoningEffortChange}
+                forceShowLabel={showRightLabels}
+              />
+            )}
             {/* Agent and Model selectors */}
-            <AgentModelSelector
-              chat={chat}
-              credentialFlags={credentialFlags}
-              currentAgent={currentAgent}
-              currentModel={currentModel}
-              onUpdateChat={onUpdateChat}
-              showClaudeLimitDialog={showClaudeLimitDialog}
-              isMobile={isMobile}
-              onDropdownOpen={() => setShowModeDropdown(false)}
-              closeDropdowns={showModeDropdown}
-            />
+            {!isMobile && agentModelSelector}
+
+            {/* Hidden measurement twins deciding showRightLabels — see
+                useTwoTierCollapse and ComposerGroupMeasure. */}
+            {!isMobile && (
+              <>
+                <ComposerGroupMeasure groupRef={rightNaturalRef} items={rightGroupItems} />
+                <ComposerGroupMeasure groupRef={rightCollapsedRef} items={withoutLabels(rightGroupItems)} />
+              </>
+            )}
           </div>
         </div>
       </div>

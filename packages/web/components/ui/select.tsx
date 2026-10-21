@@ -22,12 +22,15 @@ export const SelectValue = SelectPrimitive.Value
 
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+    /** Override the trailing chevron's size (defaults to h-3.5 w-3.5). */
+    iconClassName?: string
+  }
+>(({ className, children, iconClassName, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-8 w-full items-center justify-between rounded-md border border-border bg-background px-2.5 py-1.5 text-sm transition-colors",
+      "flex h-8 w-full items-center justify-between rounded-md border border-border bg-background px-2.5 py-1.5 text-sm transition-colors cursor-pointer",
       "placeholder:text-muted-foreground/60",
       "focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-ring/40",
       "disabled:cursor-not-allowed disabled:opacity-50",
@@ -39,7 +42,7 @@ export const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 ml-1" />
+      <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground flex-shrink-0 ml-1", iconClassName)} />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))

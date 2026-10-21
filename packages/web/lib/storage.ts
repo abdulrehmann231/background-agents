@@ -2,7 +2,7 @@
  * LocalStorage utilities for Simple Chat
  *
  * Only device-specific state is stored here:
- * - currentChatId, previewItems, queuedMessages, queuePaused, drafts
+ * - currentChatId, previewItems, drafts
  * - unseenChatIds
  *
  * Server data (chats, messages, settings) is managed by TanStack Query.
@@ -46,8 +46,6 @@ export interface PreviewState {
 export interface LocalState {
   currentChatId: string | null
   previewStates: Record<string, PreviewState>
-  queuedMessages: Record<string, Chat["queuedMessages"]>
-  queuePaused: Record<string, boolean>
   drafts: Record<string, string>
   draftChatConfig?: DraftChatConfig
 }
@@ -71,8 +69,6 @@ export const DEFAULT_SETTINGS: Settings = {
 const DEFAULT_LOCAL_STATE: LocalState = {
   currentChatId: null,
   previewStates: {},
-  queuedMessages: {},
-  queuePaused: {},
   drafts: {},
 }
 
@@ -136,7 +132,7 @@ function updateLocalState(updater: (state: LocalState) => LocalState): void {
  * Update a single keyed entry inside one of the per-chat record fields.
  * Passing `undefined` removes the entry; otherwise it is set.
  */
-function updateLocalStateRecord<K extends "previewStates" | "queuedMessages" | "queuePaused" | "drafts">(
+function updateLocalStateRecord<K extends "previewStates" | "drafts">(
   field: K,
   key: string,
   value: LocalState[K][string] | undefined,
@@ -161,14 +157,6 @@ export function setPreviewState(chatId: string, previewState: PreviewState | und
   updateLocalStateRecord("previewStates", chatId, previewState)
 }
 
-export function setQueuedMessages(chatId: string, messages: Chat["queuedMessages"]): void {
-  updateLocalStateRecord("queuedMessages", chatId, messages, () => false)
-}
-
-export function setQueuePaused(chatId: string, paused: boolean): void {
-  updateLocalStateRecord("queuePaused", chatId, paused, () => false)
-}
-
 export function setDraft(chatId: string, draft: string | undefined): void {
   updateLocalStateRecord("drafts", chatId, draft, (v) => v === undefined || v === "")
 }
@@ -188,7 +176,7 @@ export function clearDraftChatConfig(): void {
 }
 
 // Per-chat record fields that live inside LocalState
-const CHAT_KEYED_FIELDS = ["previewStates", "queuedMessages", "queuePaused", "drafts"] as const
+const CHAT_KEYED_FIELDS = ["previewStates", "drafts"] as const
 
 /**
  * Move a single keyed entry from one id to another inside a record, if present.

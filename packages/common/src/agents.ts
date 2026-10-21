@@ -265,7 +265,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // Free models (opencode/) - no API key needed
     { value: "opencode/big-pickle", label: "Big Pickle", requiresKey: "none", priceUsdPerM: 0 },
     { value: "opencode/nemotron-3-ultra-free", label: "Nemotron 3 Ultra", requiresKey: "none", priceUsdPerM: 0 },
-    { value: "opencode/mimo-v2.5-free", label: "MiMo v2.5", requiresKey: "none", priceUsdPerM: 0 },
+    { value: "opencode/mimo-v2.6-flash-free", label: "MiMo v2.6 Flash", requiresKey: "none", priceUsdPerM: 0 },
     // Curated OpenCode Go models (opencode-go/ prefix), runnable on the
     // server-shared Go subscription key. Shown first when OPENCODE_API_KEY is
     // available. These route through Go, not Zen — see SHARED_OPENCODE_ALLOWED.
@@ -843,6 +843,12 @@ export function hasCredentialsForModel(
     // ~/.codex/auth.json, which no other agent reads. Every other agent needs a
     // real platform API key. Mirrors the claude-code rule above.
     if (agent !== "codex") return !!flags?.OPENAI_API_KEY
+    // GPT-5.5 retired from ChatGPT sign-in, not the API. Subscription auth
+    // wins when both credentials exist (getEnvForModel / Codex setup), so an
+    // API key must not falsely unlock it on a subscription-backed run.
+    if (model.value === "gpt-5.5") {
+      return !!flags?.OPENAI_API_KEY && !flags?.CODEX_CREDENTIALS
+    }
     return !!(flags?.OPENAI_API_KEY || flags?.CODEX_CREDENTIALS)
   }
 

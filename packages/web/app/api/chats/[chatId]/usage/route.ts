@@ -19,8 +19,8 @@ import { providerLabel } from "@background-agents/common"
  * pool, and counts own-key runs — which cost the platform nothing — so it says
  * what the conversation was worth. `creditsChargedUsd` is what came off the
  * balance: list value times the provider's pricing multiplier (see the admin
- * Pricing panel), and zero for own-key runs, free models, a provider an admin
- * has set to a 0 multiplier, and `unlimited` accounts. Showing only the first
+ * Pricing panel), and zero for own-key runs, free models, and a provider an
+ * admin has set to a 0 multiplier. Showing only the first
  * would overstate what the chat cost the user — at the seeded multipliers, by
  * up to 20× for Claude.
  */

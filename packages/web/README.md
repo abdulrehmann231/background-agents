@@ -10,10 +10,31 @@ https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 - **Sandbox Isolation**: each chat session runs in an isolated Daytona sandbox environment
 - **Git Integration**: conversations are tied to Git branches, with optional GitHub repository integration
 - **Model Selection**: choose different models for each agent based on your API keys
-- **Scheduled & Triggered Jobs**: run agents automatically on a recurring interval or in response to GitHub webhook events (e.g. failed workflows), with optional auto-PR creation. Managed from the `/jobs` page.
+- **Scheduled & Triggered Jobs**: run agents automatically on a recurring interval or via a generic incoming webhook (a token URL any external system — GitHub, Slack, Zapier, etc. — can POST to), with optional auto-PR creation. Managed from the `/jobs` page.
 - **MCP Servers**: attach Model Context Protocol servers to chats and scheduled jobs via the [Smithery](https://smithery.ai) registry and the GitHub MCP server
 - **Skills**: install repo-scoped agent skills from the [skills.sh](https://skills.sh) marketplace
 - **Dark/Light Theme**: system-aware theming with manual override options
+
+### GitHub star reward
+
+Credit options open automatically when the selected paid shared model runs out
+of credits while a chat is open. They also open from **Add credits** on either
+credit-warning banner, when a send is blocked by an empty balance, and when
+selecting a paid shared model with no credits. Dismissing the automatic prompt
+keeps it closed until the balance recovers and is depleted again; explicit
+actions can always reopen it. Blocked sends preserve the draft and attachments.
+Free models and personal API keys remain usable without credits.
+
+The dialog checks whether the signed-in GitHub account has starred
+`jamesmurdza/background-agents`. Its star button stars the repository through the
+GitHub API and immediately grants $1.00 in credits. An account can receive this
+reward only once, including when an admin has already granted its star reward.
+Unstarring later does not remove credits or make the reward available again.
+The star reward button stays disabled until the status check succeeds, while
+the claim is pending, and after the reward has been claimed. A failed status
+check leaves it disabled; reopening the dialog retries the check. The POST
+endpoint checks the ledger before granting and uses the same unique reward
+key as admin grants to prevent repeat or concurrent claims.
 
 ## Architecture
 
@@ -111,6 +132,15 @@ GITHUB_APP_PRIVATE_KEY="..."
 ```
 
 See [`mcp`](../mcp/README.md) for setup.
+
+To enable Stripe credit top-ups (optional — billing is only enabled when `BILLING_ENABLED="true"` and both Stripe secrets are set; otherwise checkout and the webhook return 404, the UI hides top-ups, and the rest of the app runs normally), set:
+
+```bash
+BILLING_ENABLED="true"
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."   # differs per environment; webhook route is /api/stripe/webhook
+STRIPE_PRICE_MAP='{"pack_5":"price_...","pack_10":"price_..."}'   # pack id -> Stripe price id
+```
 
 ### Testing
 

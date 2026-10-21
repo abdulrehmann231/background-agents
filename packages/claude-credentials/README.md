@@ -96,9 +96,9 @@ import {
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 20.9.0
 - `DAYTONA_API_KEY` environment variable (or passed via options)
 
 ## License
 
-MIT
+Apache-2.0

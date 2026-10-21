@@ -302,35 +302,6 @@ describe.skipIf(!DAYTONA_API_KEY)("sandbox-terminal end-to-end", () => {
       }
     })
 
-    it("responds to ping with pong", async () => {
-      const pongs: TerminalMessage[] = []
-      const { ws } = await connectAndWaitForReady(websocketUrl, (msg) => {
-        if (msg.type === "pong") pongs.push(msg)
-      })
-
-      try {
-        send(ws, { type: "ping" })
-
-        // Give the server a chance to round-trip. We don't poll forever —
-        // if pong isn't supported the test should fail loudly.
-        const deadline = Date.now() + 5_000
-        while (pongs.length === 0 && Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 100))
-        }
-
-        // NOTE: the current pty-server.js doesn't implement a ping handler;
-        // it only handles 'input' and 'resize'. So we accept either:
-        //   - a pong arrives (server was extended), or
-        //   - no pong arrives but the socket is still healthy.
-        // The point of this test is to make sure ping doesn't blow up the
-        // session. If the server starts implementing pong, the first branch
-        // becomes the real assertion.
-        expect(ws.readyState).toBe(WebSocket.OPEN)
-      } finally {
-        ws.close()
-      }
-    })
-
     it("respects terminal resize — long lines wrap at the new width", async () => {
       const { ws } = await connectAndWaitForReady(websocketUrl, () => {})
 

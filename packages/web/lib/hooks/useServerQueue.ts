@@ -6,12 +6,12 @@ import type { Chat, QueuedMessage } from "@/lib/types"
 import { getDefaultModelForAgent, type Agent } from "@background-agents/common"
 import { queryKeys } from "@/lib/query"
 import { useChatSyncStore } from "@/lib/stores/chat-sync-store"
-import { setQueuedMessages, setQueuePaused } from "@/lib/storage"
+import { useToastStore } from "@/lib/stores/toast-store"
+import { applyQueueSnapshot, loadQueueMessages, needsQueueMessages } from "@/lib/queue-sync"
 import {
   dispatchQueuedPromptApi,
   enqueuePromptApi,
   fetchPromptQueue,
-  importLegacyPromptQueue,
   removeQueuedPromptApi,
   setPromptQueuePaused,
 } from "@/lib/sync/api"
@@ -20,38 +20,54 @@ interface UseServerQueueOptions {
   isHydrated: boolean
   isAuthenticated: boolean
   currentChat: Chat | null
-  reloadMessages: (chatId: string) => Promise<void>
+}
+
+function updateLocalQueue(chatId: string, update: (items: QueuedMessage[]) => QueuedMessage[]) {
+  useChatSyncStore.getState().setLocalChatState((prev) => {
+    const items = update(prev.queuedMessages[chatId] ?? [])
+    return { ...prev, queuedMessages: { ...prev.queuedMessages, [chatId]: items.length ? items : undefined } }
+  })
+}
+
+function localItem(chatId: string, id: string) {
+  return useChatSyncStore.getState().localChatState.queuedMessages[chatId]?.find((entry) => entry.id === id)
+}
+
+/** Put an unsent prompt back in the composer, ahead of anything typed since. */
+function restoreDraft(chatId: string, content: string) {
+  const store = useChatSyncStore.getState()
+  const newerDraft = store.localChatState.drafts[chatId]
+  store.setDraftText(chatId, newerDraft ? `${content}\n\n${newerDraft}` : content)
 }
 
 /**
- * Queue state belongs to the server. Old localStorage entries are retained only
- * until an idempotent import succeeds, so a network failure cannot silently
- * discard a user's pending prompt during the upgrade.
+ * Queue state belongs to the server. A prompt is kept in this tab only while
+ * it's being saved; if saving fails, it goes back to the composer.
  */
-export function useServerQueue({ isHydrated, isAuthenticated, currentChat, reloadMessages }: UseServerQueueOptions) {
+export function useServerQueue({ isHydrated, isAuthenticated, currentChat }: UseServerQueueOptions) {
   const queryClient = useQueryClient()
-  const migrating = useRef<Set<string>>(new Set())
+  const enqueueTail = useRef<Map<string, Promise<void>>>(new Map())
+  const refreshes = useRef<Map<string, Promise<Awaited<ReturnType<typeof fetchPromptQueue>>>>>(new Map())
+  const resuming = useRef<Set<string>>(new Set())
 
-  const refreshQueue = useCallback(async (chatId: string) => {
-    const remote = await fetchPromptQueue(chatId)
-    const previous = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())?.find((chat) => chat.id === chatId)
-    queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (chats) =>
-      chats?.map((chat) => chat.id === chatId ? {
-        ...chat,
-        queuedMessages: remote.queuedMessages,
-        queuePaused: remote.queuePaused,
-        status: remote.status,
-        sandboxId: remote.sandboxId,
-        backgroundSessionId: remote.backgroundSessionId ?? undefined,
-      } : chat)
-    )
-    // A worker may have started a turn without any browser. Load its persisted
-    // user/assistant rows so the existing streaming resume effect can attach.
-    if (remote.backgroundSessionId && remote.backgroundSessionId !== previous?.backgroundSessionId) {
-      await reloadMessages(chatId)
-    }
-    return remote
-  }, [queryClient, reloadMessages])
+  const refreshQueue = useCallback((chatId: string) => {
+    const existing = refreshes.current.get(chatId)
+    if (existing) return existing
+    const task = (async () => {
+      const remote = await fetchPromptQueue(chatId)
+      const previous = queryClient.getQueryData<Chat[]>(queryKeys.chats.list())?.find((chat) => chat.id === chatId)
+      const next = { ...remote, backgroundSessionId: remote.backgroundSessionId ?? undefined, activeAssistantMessageId: remote.activeAssistantMessageId ?? undefined }
+      const local = useChatSyncStore.getState().localChatState.queuedMessages[chatId] ?? []
+      const detail = needsQueueMessages(previous, next, local) ? await loadQueueMessages(chatId) : undefined
+      queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (chats) =>
+        chats?.map((chat) => chat.id === chatId ? applyQueueSnapshot(chat, remote, detail) : chat)
+      )
+      return detail ? { ...remote, ...detail } : remote
+    })()
+    refreshes.current.set(chatId, task)
+    void task.finally(() => { if (refreshes.current.get(chatId) === task) refreshes.current.delete(chatId) }).catch(() => {})
+    return task
+  }, [queryClient])
 
   const wakeQueuedPrompt = useCallback((chatId: string) => {
     void dispatchQueuedPromptApi(chatId)
@@ -77,125 +93,103 @@ export function useServerQueue({ isHydrated, isAuthenticated, currentChat, reloa
     return () => window.clearInterval(timer)
   }, [currentChat?.id, isHydrated, isAuthenticated, refreshQueue, wakeQueuedPrompt])
 
-  const migrateLegacy = useCallback(async () => {
-    const state = useChatSyncStore.getState().localChatState
-    for (const [chatId, queued] of Object.entries(state.queuedMessages)) {
-      if (!queued?.length || chatId.startsWith("draft-") || migrating.current.has(chatId)) continue
-      migrating.current.add(chatId)
-      const snapshot = queued
-      try {
-        for (let offset = 0; offset < snapshot.length; offset += 50) {
-          await importLegacyPromptQueue(
-            chatId,
-            snapshot.slice(offset, offset + 50).map((item) => ({
-              clientId: item.id,
-              content: item.content,
-              agent: item.agent,
-              model: item.model,
-            })),
-            !!state.queuePaused[chatId]
-          )
-        }
-        const latest = useChatSyncStore.getState().localChatState
-        const migratedIds = new Set(snapshot.map((item) => item.id))
-        const rest = (latest.queuedMessages[chatId] ?? []).filter((item) => !migratedIds.has(item.id))
-        setQueuedMessages(chatId, rest.length ? rest : undefined)
-        useChatSyncStore.getState().setLocalChatState((prev) => ({
-          ...prev,
-          queuedMessages: { ...prev.queuedMessages, [chatId]: rest.length ? rest : undefined },
-        }))
-        if (!rest.length) {
-          setQueuePaused(chatId, false)
-          useChatSyncStore.getState().setLocalChatState((prev) => ({
-            ...prev, queuePaused: { ...prev.queuePaused, [chatId]: false },
-          }))
-        }
-        await refreshQueue(chatId)
-        wakeQueuedPrompt(chatId)
-      } catch (error) {
-        // The local copy remains visible as pendingSync and retries later.
-        console.error(`Failed to import saved prompt queue for ${chatId}:`, error)
-      } finally {
-        migrating.current.delete(chatId)
-      }
-    }
-  }, [refreshQueue, wakeQueuedPrompt])
-
-  useEffect(() => {
-    if (!isHydrated || !isAuthenticated) return
-    void migrateLegacy()
-    const timer = window.setInterval(() => void migrateLegacy(), 15000)
-    return () => window.clearInterval(timer)
-  }, [isHydrated, isAuthenticated, migrateLegacy])
-
-  const enqueueMessage = useCallback((content: string, agent?: string, model?: string) => {
+  const enqueueMessage = useCallback((content: string, agent?: string, model?: string, reasoningEffort?: string) => {
     if (!currentChat || currentChat.id.startsWith("draft-")) return
     const chatId = currentChat.id
     const selectedAgent = agent ?? currentChat.agent ?? "opencode"
     const selectedModel = model ?? currentChat.model ?? getDefaultModelForAgent(selectedAgent as Agent, null)
     const item: QueuedMessage = {
-      id: crypto.randomUUID(), content, agent: selectedAgent, model: selectedModel, pendingSync: true,
+      id: crypto.randomUUID(), content, agent: selectedAgent, model: selectedModel, reasoningEffort, pendingSync: true,
+      sendImmediately: currentChat.status === "ready" && !currentChat.backgroundSessionId && !currentChat.queuedMessages?.length,
     }
-    // Persist locally before awaiting the network: closing the tab mid-request
-    // still leaves a recoverable prompt for the idempotent import.
-    const state = useChatSyncStore.getState().localChatState
-    const localQueue = [...(state.queuedMessages[chatId] ?? []), item]
-    setQueuedMessages(chatId, localQueue)
-    useChatSyncStore.getState().setLocalChatState((prev) => ({
-      ...prev,
-      queuedMessages: { ...prev.queuedMessages, [chatId]: localQueue },
-    }))
-    void enqueuePromptApi(chatId, {
-      clientId: item.id, content, agent: selectedAgent, model: selectedModel,
-    }).then(() => {
+    updateLocalQueue(chatId, (items) => [...items, item])
+    // Keep sends from this tab in the order the user submitted them, even if
+    // the first HTTP request is slow. The database serializes the requests it
+    // receives, but cannot know which of two concurrent requests was typed first.
+    const previous = enqueueTail.current.get(chatId) ?? Promise.resolve()
+    const task = previous.then(async () => {
+      if (!localItem(chatId, item.id)) return // Removed before it was sent.
+      let saved: QueuedMessage
+      try {
+        saved = await enqueuePromptApi(chatId, {
+          clientId: item.id, content, agent: selectedAgent, model: selectedModel, reasoningEffort,
+        })
+      } catch (error) {
+        console.error("[queue] Failed to save queued prompt:", error)
+        // A lost response can still have saved it. Check the queue once before
+        // handing the text back; if we can't check, say so.
+        const queue = await refreshQueue(chatId).catch(() => undefined)
+        const removed = !localItem(chatId, item.id)
+        updateLocalQueue(chatId, (items) => items.filter((entry) => entry.id !== item.id))
+        if (removed || queue?.queuedMessages.some((queued) => queued.clientId === item.id)) return
+        restoreDraft(chatId, content)
+        useToastStore.getState().addToast({
+          title: "Could not queue your prompt",
+          body: queue ? "It's back in the message box so you can send it again." : "It's back in the message box. Check the queue before sending it again.",
+          chatId,
+        })
+        return
+      }
+      updateLocalQueue(chatId, (items) => items.map((entry) => entry.id === item.id ? { ...entry, userMessageId: saved.userMessageId } : entry))
       wakeQueuedPrompt(chatId)
-      return migrateLegacy()
+      // Load the server copy before dropping ours so the prompt never blinks out.
+      // If that read fails, the next poll's server copy hides ours instead.
+      try {
+        await refreshQueue(chatId)
+        updateLocalQueue(chatId, (items) => items.filter((entry) => entry.id !== item.id))
+      } catch (error) {
+        console.error("[queue] Failed to refresh after saving a prompt:", error)
+      }
     }).catch((error) => {
-      console.error("Failed to save queued prompt; keeping it on this device for retry:", error)
+      // Keep the chain alive so later prompts from this tab still go out.
+      console.error("[queue] Unexpected error while queueing a prompt:", error)
     })
-  }, [currentChat, migrateLegacy, wakeQueuedPrompt])
+    enqueueTail.current.set(chatId, task)
+    void task.finally(() => {
+      if (enqueueTail.current.get(chatId) === task) enqueueTail.current.delete(chatId)
+    })
+  }, [currentChat, refreshQueue, wakeQueuedPrompt])
 
   const removeQueuedMessage = useCallback((id: string) => {
     if (!currentChat) return
     const chatId = currentChat.id
-    const local = useChatSyncStore.getState().localChatState.queuedMessages[chatId] ?? []
-    if (local.some((item) => item.id === id)) {
-      const item = local.find((entry) => entry.id === id)!
-      const rest = local.filter((item) => item.id !== id)
-      setQueuedMessages(chatId, rest.length ? rest : undefined)
-      useChatSyncStore.getState().setLocalChatState((prev) => ({
-        ...prev, queuedMessages: { ...prev.queuedMessages, [chatId]: rest.length ? rest : undefined },
-      }))
-      // The POST may already be in flight. Resolve its stable client ID, then
-      // cancel the server row too so it cannot reappear on the next refresh.
-      const selectedAgent = item.agent ?? currentChat.agent ?? "opencode"
-      const selectedModel = item.model ?? currentChat.model ?? getDefaultModelForAgent(selectedAgent as Agent, null)
-      void enqueuePromptApi(chatId, {
-        clientId: item.id, content: item.content, agent: selectedAgent, model: selectedModel,
-      }).then((queuedMessage) => removeQueuedPromptApi(chatId, queuedMessage.id))
-        .then(() => refreshQueue(chatId))
-        .catch((error) => console.error("Failed to remove pending queued prompt:", error))
-      return
-    }
-    void removeQueuedPromptApi(chatId, id)
+    const local = localItem(chatId, id)
+    const item = local ?? currentChat.queuedMessages?.find((entry) => entry.id === id)
+    if (!item) return
+    // A prompt still being saved is removed by its client ID. The server keeps
+    // that as a tombstone, so a POST still in flight can't add it back.
+    if (local) updateLocalQueue(chatId, (items) => items.filter((entry) => entry.id !== id))
+    void removeQueuedPromptApi(chatId, item.id, item.clientId ?? (local ? item.id : undefined))
       .then(() => refreshQueue(chatId))
-      .catch((error) => console.error("Failed to remove queued prompt:", error))
+      .catch((error) => {
+        console.error("[queue] Failed to remove queued prompt:", error)
+        useToastStore.getState().addToast({ title: "Could not remove prompt", body: error instanceof Error ? error.message : "Try again.", chatId })
+        void refreshQueue(chatId).catch(() => {})
+      })
   }, [currentChat, refreshQueue])
 
-  const resumeQueue = useCallback(() => {
+  const resumeQueue = useCallback(async () => {
     if (!currentChat) return
     const chatId = currentChat.id
-    setQueuePaused(chatId, false)
-    useChatSyncStore.getState().setLocalChatState((prev) => ({
-      ...prev, queuePaused: { ...prev.queuePaused, [chatId]: false },
-    }))
-    void setPromptQueuePaused(chatId, false)
-      .then(() => {
-        wakeQueuedPrompt(chatId)
-        return refreshQueue(chatId)
-      })
-      .catch((error) => console.error("Failed to resume prompt queue:", error))
-  }, [currentChat, refreshQueue, wakeQueuedPrompt])
+    if (resuming.current.has(chatId) || currentChat.status === "disconnected") return
+    const recovery = currentChat.status === "error" && currentChat.recoverableAssistantMessageId
+      ? { updatedAt: currentChat.updatedAt, assistantMessageId: currentChat.recoverableAssistantMessageId } : undefined
+    if (currentChat.status === "error" && !recovery) return
+    resuming.current.add(chatId)
+    try {
+      await setPromptQueuePaused(chatId, false, recovery)
+      // User intent releases only a confirmed terminal failure. Starting the
+      // next stored prompt still uses the shared atomic FIFO claim.
+      await dispatchQueuedPromptApi(chatId)
+      await refreshQueue(chatId)
+    } catch (error) {
+      console.error("Failed to resume prompt queue:", error)
+      useToastStore.getState().addToast({ title: "Could not continue queued prompts", body: error instanceof Error ? error.message : "Reload the chat and try again.", chatId })
+      await refreshQueue(chatId).catch(() => {})
+    } finally {
+      resuming.current.delete(chatId)
+    }
+  }, [currentChat, refreshQueue])
 
   const pauseQueue = useCallback((chatId: string) => {
     void setPromptQueuePaused(chatId, true)

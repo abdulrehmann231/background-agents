@@ -104,6 +104,8 @@ class BackgroundSessionImpl implements BackgroundSession {
   private startedAt = 0
   private cancelled = false
   private crashEmitted = false
+  private startInFlight = false
+  private acknowledgedJobId: string | null = null
 
   constructor(
     readonly agent: AgentDefinition,
@@ -125,8 +127,17 @@ class BackgroundSessionImpl implements BackgroundSession {
     prompt: string,
     options: Omit<StartOptions, "prompt"> = {}
   ): Promise<TurnHandle> {
-    const opts: RunOptions = { ...this.defaults, ...options, prompt }
+    if (this.startInFlight) throw new Error("A background turn is already starting")
+    this.startInFlight = true
+    try {
+      return await this.startTurn(prompt, options)
+    } finally {
+      this.startInFlight = false
+    }
+  }
 
+  private async startTurn(prompt: string, options: Omit<StartOptions, "prompt">): Promise<TurnHandle> {
+    const opts: RunOptions = { ...this.defaults, ...options, prompt }
     // Prepend conversation history when injecting context.
     if (options.history?.length) {
       opts.prompt = this.formatHistory(options.history) + "\n\n" + (opts.prompt ?? "")
@@ -139,7 +150,8 @@ class BackgroundSessionImpl implements BackgroundSession {
     const prior = await this.readMeta()
     // Each turn is an independent job; the counter is cosmetic. Keep the first
     // turn at the initial counter, increment once a prior turn has run.
-    const currentTurn = prior?.jobId ? (prior.currentTurn ?? 0) + 1 : prior?.currentTurn ?? 0
+    const reusingPrepared = prior?.launchProtocol === 1 && !!prior.jobId && !this.acknowledgedJobId
+    const currentTurn = reusingPrepared ? prior.currentTurn : prior?.jobId ? (prior.currentTurn ?? 0) + 1 : prior?.currentTurn ?? 0
     const sessionId = this.parseContext.sessionId ?? opts.sessionId ?? prior?.sessionId ?? null
 
     debugLog(
@@ -147,10 +159,32 @@ class BackgroundSessionImpl implements BackgroundSession {
       sessionId
     )
 
-    const spec = this.agent.buildCommand(opts)
+    // The native session can come from persisted metadata after reconnect, not
+    // only from this call's options. Pass the same identity we track to the CLI.
+    const spec = this.agent.buildCommand({ ...opts, sessionId: sessionId ?? undefined })
     if (opts.cwd && !spec.cwd) spec.cwd = opts.cwd
 
+    if (prior?.cancelled || (prior?.launchProtocol === 1 && prior.jobId &&
+        await this.jobs.isAborted(prior.jobId, this.sessionDir))) {
+      throw new Error("This background attempt was cancelled; create a new session to retry")
+    }
+    if (!reusingPrepared) {
+      const previousHandle = await this.reattach()
+      if (previousHandle && (await this.jobs.status(previousHandle)).alive) {
+        throw new Error("The previous background turn is still running")
+      }
+    }
+    const preparedAt = reusingPrepared ? prior.launchPreparedAt! : new Date().toISOString()
+    const jobId = reusingPrepared ? prior.jobId! : randomUUID()
+    // Persist the discoverable attempt BEFORE launch. No mapping write after
+    // launching is needed; a cold caller always knows which job to inspect or
+    // fence, even when start's response disappears.
+    if (!reusingPrepared) await this.writeMeta({
+      currentTurn, provider: this.agent.name, sessionId, jobId,
+      startedAt: preparedAt, launchPreparedAt: preparedAt, launchProtocol: 1, cancelled: false,
+    })
     const handle = await this.jobs.start({
+      jobId,
       command: this.renderCommand(spec),
       cwd: spec.cwd,
       env: spec.env,
@@ -159,26 +193,19 @@ class BackgroundSessionImpl implements BackgroundSession {
       root: this.sessionDir,
     })
 
-    // Reset the accumulator for the new turn.
-    this.handle = handle
+    if (handle.jobId !== jobId) throw new Error("Sandbox returned a different execution identity")
     this.cursor = 0
     this.cum = []
     this.parseContext = { state: {}, sessionId }
-    this.startedAt = Date.now()
+    this.startedAt = Date.parse(preparedAt)
     this.cancelled = false
-
-    await this.writeMeta({
-      currentTurn,
-      provider: this.agent.name,
-      sessionId,
-      jobId: handle.jobId,
-      startedAt: new Date(this.startedAt).toISOString(),
-      cancelled: false,
-    })
+    this.crashEmitted = false
+    this.handle = handle
+    this.acknowledgedJobId = jobId
 
     debugLog(`background turn started agent=${this.agent.name} pgid=${handle.pgid}`, sessionId)
 
-    return { executionId: randomUUID(), pid: handle.pgid, outputFile: handle.outputFile }
+    return { executionId: jobId, pid: handle.pgid, outputFile: handle.outputFile }
   }
 
   poll(): Promise<PollResult> {
@@ -198,20 +225,14 @@ class BackgroundSessionImpl implements BackgroundSession {
   async getSnapshot(): Promise<PollResult> {
     const handle = await this.reattach()
     if (!handle) {
-      return {
-        sessionId: this.parseContext.sessionId,
-        events: [],
-        cursor: "0",
-        running: false,
-        runPhase: "idle",
-      }
+      return this.unstartedSnapshot()
     }
 
     const ctx: ParseContext = { state: {}, sessionId: null }
     const events: Event[] = []
     const r = await this.jobs.read(handle, 0)
     const captured = this.parseLines(r.raw, ctx, events)
-    if (captured) await this.patchMeta({ sessionId: captured })
+    if (captured) await this.patchMeta({ sessionId: captured }, handle.jobId)
 
     const status = r.status
     const sawEnd = events.some((e) => e.type === "end")
@@ -237,7 +258,7 @@ class BackgroundSessionImpl implements BackgroundSession {
       this.logCrash(r.raw)
     }
 
-    const running = status.state === "running" && !sawEnd
+    const running = status.state === "running"
     const runPhase: BackgroundRunPhase = running
       ? this.withinGrace() && events.length === 0
         ? "starting"
@@ -259,11 +280,20 @@ class BackgroundSessionImpl implements BackgroundSession {
   }
 
   async cancel(): Promise<void> {
+    const meta = await this.readMeta()
+    if (meta?.launchProtocol === 1 && meta.jobId) {
+      await this.jobs.abort(meta.jobId, this.sessionDir)
+      this.cancelled = true
+      // The sandbox tombstone is authoritative even if this convenience
+      // metadata update fails. A cold reader checks the tombstone as well.
+      await this.patchMeta({ cancelled: true }, meta.jobId)
+      return
+    }
     const handle = await this.reattach()
-    if (!handle) return
-    this.cancelled = true
+    if (!handle) throw new Error("Cannot safely cancel a legacy session without execution metadata")
     await this.jobs.cancel(handle)
-    await this.patchMeta({ cancelled: true })
+    this.cancelled = true
+    await this.patchMeta({ cancelled: true }, handle.jobId)
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -273,13 +303,7 @@ class BackgroundSessionImpl implements BackgroundSession {
   private async core(mode: "delta" | "cumulative"): Promise<PollResult> {
     const handle = await this.reattach()
     if (!handle) {
-      return {
-        sessionId: this.parseContext.sessionId,
-        events: [],
-        cursor: "0",
-        running: false,
-        runPhase: "idle",
-      }
+      return this.unstartedSnapshot()
     }
 
     const r = await this.jobs.read(handle, this.cursor)
@@ -294,7 +318,7 @@ class BackgroundSessionImpl implements BackgroundSession {
     // Persist a newly-captured session id so the next turn / a cold caller can
     // resume the agent's own conversation.
     if (capturedSession) {
-      await this.patchMeta({ sessionId: capturedSession })
+      await this.patchMeta({ sessionId: capturedSession }, handle.jobId)
     }
 
     const status = r.status
@@ -333,7 +357,7 @@ class BackgroundSessionImpl implements BackgroundSession {
       this.logCrash(full.raw)
     }
 
-    const running = status.state === "running" && !sawEnd
+    const running = status.state === "running"
     const runPhase: BackgroundRunPhase = running
       ? this.withinGrace() && this.cum.length === 0
         ? "starting"
@@ -351,7 +375,6 @@ class BackgroundSessionImpl implements BackgroundSession {
 
   /** Resolve the current turn's job handle, rehydrating from meta if cold. */
   private async reattach(): Promise<JobHandle | null> {
-    if (this.handle) return this.handle
     const meta = await this.readMeta()
     if (!meta?.jobId) return null
     this.startedAt = meta.startedAt ? Date.parse(meta.startedAt) : 0
@@ -359,12 +382,24 @@ class BackgroundSessionImpl implements BackgroundSession {
     if (this.parseContext.sessionId == null) {
       this.parseContext.sessionId = meta.sessionId ?? null
     }
-    this.handle = await this.jobs.attach(meta.jobId, this.sessionDir)
+    if (this.handle?.jobId !== meta.jobId) this.handle = await this.jobs.attach(meta.jobId, this.sessionDir)
     return this.handle
   }
 
   private withinGrace(): boolean {
     return this.startedAt > 0 && Date.now() - this.startedAt < STARTUP_GRACE_MS
+  }
+
+  private async unstartedSnapshot(): Promise<PollResult> {
+    const meta = await this.readMeta()
+    const fenced = meta?.launchProtocol === 1 && !!meta.jobId &&
+      await this.jobs.isAborted(meta.jobId, this.sessionDir)
+    return {
+      sessionId: this.parseContext.sessionId, events: [], cursor: "0", running: false,
+      runPhase: fenced ? "stopped" : "idle",
+      ...(!fenced && meta?.launchProtocol === 1 && meta.launchPreparedAt &&
+        Number.isFinite(Date.parse(meta.launchPreparedAt)) ? { launchPreparedAt: meta.launchPreparedAt } : {}),
+    }
   }
 
   /**
@@ -397,18 +432,17 @@ class BackgroundSessionImpl implements BackgroundSession {
 
   private async readMeta(): Promise<SessionMeta | null> {
     if (!this.sandbox.executeCommand) return null
-    const result = await this.sandbox.executeCommand(
-      `cat "${this.sessionDir}/meta.json" 2>/dev/null || true`,
-      10
-    )
+    const result = await this.sandbox.executeCommand(metadataReadCommand(this.sessionDir), 10)
+    if (result.exitCode === 44) return null
+    if (result.exitCode !== 0) throw new Error("Background session metadata could not be read")
     const raw = (result.output ?? "").trim()
-    if (!raw) return null
+    if (!raw) throw new Error("Background session metadata is empty")
     try {
       const o = JSON.parse(raw) as SessionMeta
-      if (typeof o.currentTurn !== "number") return null
+      if (typeof o.currentTurn !== "number") throw new Error("Invalid background session metadata")
       return o
     } catch {
-      return null
+      throw new Error("Background session metadata is unreadable")
     }
   }
 
@@ -416,10 +450,16 @@ class BackgroundSessionImpl implements BackgroundSession {
     await writeSessionMetaRaw(this.sandbox, this.sessionDir, meta)
   }
 
-  private async patchMeta(patch: Partial<SessionMeta>): Promise<void> {
-    const cur = await this.readMeta()
-    if (!cur) return
-    await this.writeMeta({ ...cur, ...patch })
+  private async patchMeta(patch: Partial<SessionMeta>, expectedJobId?: string): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const cur = await this.readMeta()
+      if (!cur) throw new Error("Background session metadata is missing")
+      // An old poll/cancel may finish after the next turn was prepared. It
+      // must not rewrite the newer turn's identity or cancellation state.
+      if (expectedJobId && cur.jobId !== expectedJobId) return
+      if (await writeSessionMetaRaw(this.sandbox, this.sessionDir, { ...cur, ...patch }, cur)) return
+    }
+    throw new Error("Background session metadata changed while updating")
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -498,17 +538,31 @@ class BackgroundSessionImpl implements BackgroundSession {
 async function writeSessionMetaRaw(
   sandbox: CodeAgentSandbox,
   sessionDir: string,
-  meta: SessionMeta
-): Promise<void> {
+  meta: SessionMeta,
+  expected?: SessionMeta
+): Promise<boolean> {
   if (!sandbox.executeCommand) {
     throw new Error("Background sessions require a sandbox with executeCommand support")
   }
   // base64 + pipe so arbitrary JSON crosses the shell without quoting hazards.
   const b64 = Buffer.from(JSON.stringify(meta), "utf8").toString("base64")
-  await sandbox.executeCommand(
-    `mkdir -p "${sessionDir}" && printf %s '${b64}' | base64 -d > "${sessionDir}/meta.json"`,
+  const path = `${sessionDir}/meta.json`
+  const temporary = `${path}.${randomUUID()}.tmp`
+  const expectedB64 = expected ? Buffer.from(JSON.stringify(expected), "utf8").toString("base64") : null
+  const result = await sandbox.executeCommand(
+    `mkdir -p ${quote(sessionDir)} || exit 1; exec 9> ${quote(`${sessionDir}/meta.lock`)}; flock -x -w 5 9 || exit 1; ` +
+    (expectedB64 ? `CURRENT=$(cat ${quote(path)}) || exit 1; EXPECTED=$(printf %s '${expectedB64}' | base64 -d) || exit 1; [ "$CURRENT" = "$EXPECTED" ] || exit 73; ` : "") +
+    `printf %s '${b64}' | base64 -d > ${quote(temporary)} && mv ${quote(temporary)} ${quote(path)}`,
     10
   )
+  if (result.exitCode === 73 && expected) return false
+  if (result.exitCode !== 0) throw new Error("Background session metadata could not be saved")
+  return true
+}
+
+function metadataReadCommand(sessionDir: string): string {
+  const path = quote(`${sessionDir}/meta.json`)
+  return `cat ${path} 2>/dev/null; RC=$?; if [ "$RC" -ne 0 ] && [ ! -e ${path} ]; then exit 44; fi; exit "$RC"`
 }
 
 /**
@@ -521,11 +575,14 @@ export async function writeInitialSessionMeta(
   agentName: string,
   sessionId: string | null
 ): Promise<void> {
-  if (!sandbox.executeCommand) return
+  if (!sandbox.executeCommand) throw new Error("Background sessions require durable metadata support")
   await writeSessionMetaRaw(sandbox, sessionDir, {
     currentTurn: 0,
     provider: agentName,
     sessionId,
+    jobId: randomUUID(),
+    launchProtocol: 1,
+    launchPreparedAt: new Date().toISOString(),
   })
 }
 
@@ -537,12 +594,11 @@ export async function readProviderFromMeta(
   sessionDir: string
 ): Promise<{ provider: string | null; sessionId: string | null } | null> {
   if (!sandbox.executeCommand) return null
-  const result = await sandbox.executeCommand(
-    `cat "${sessionDir}/meta.json" 2>/dev/null || true`,
-    10
-  )
+  const result = await sandbox.executeCommand(metadataReadCommand(sessionDir), 10)
+  if (result.exitCode === 44) return null
+  if (result.exitCode !== 0) throw new Error("Background session metadata could not be read")
   const raw = (result.output ?? "").trim()
-  if (!raw) return null
+  if (!raw) throw new Error("Background session metadata is empty")
   try {
     const o = JSON.parse(raw) as { provider?: string; sessionId?: string | null }
     return {
@@ -550,6 +606,6 @@ export async function readProviderFromMeta(
       sessionId: o.sessionId ?? null,
     }
   } catch {
-    return { provider: null, sessionId: null }
+    throw new Error("Background session metadata is unreadable")
   }
 }

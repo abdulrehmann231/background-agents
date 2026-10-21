@@ -8,8 +8,8 @@ This package builds a Daytona `Image` spec with the supported agent CLIs baked i
 
 Pre-installed agents:
 
-- **Claude Code** (`@anthropic-ai/claude-code`)
-- **Codex** (`@openai/codex`)
+- **Claude Code** (`@anthropic-ai/claude-code@2.1.283`)
+- **Codex** (`@openai/codex@0.159.3`)
 - **Command Code** (`command-code`)
 - **Copilot** (`@github/copilot`)
 - **Kilo** (`@kilocode/cli`)
@@ -24,7 +24,19 @@ The image also pre-installs [`tokscale`](https://www.npmjs.com/package/tokscale)
 
 The image is based on `node:22-bookworm` and runs as a non-root `daytona` user (Claude Code refuses to run as root).
 
+Claude Code is pinned to the version verified by the SDK's shared OAuth recovery test because that feature uses an internal CLI callback. Keep `AGENT_PACKAGES.claude` in sync with `CLAUDE_CODE_VERSION` in `packages/sdk/src/utils/install.ts`, and run `packages/sdk/tests/integration/claude-oauth-retry.integration.test.ts` against the proposed version before updating either pin. Rebuild the snapshot with `npm run build:snapshot` to bake in an updated version. Existing sandboxes are not changed by a snapshot rebuild; the SDK checks and updates their CLI to the pin when starting a shared OAuth run.
+
 ## Installation
+
+Codex is pinned to `CODEX_CLI_VERSION` in `src/image.ts` and the SDK's
+`src/utils/install.ts`. Update or revert both pins in a reviewed PR. The image
+preinstalls the versioned runtime used by the SDK and links the terminal's
+`codex` command to it. Rebuilding the image affects new sandboxes only; the SDK
+selects the exact reviewed version (installing it if absent) before a new
+execution in existing sandboxes, without replacing active jobs — so reverting
+the pins and redeploying rolls back new executions without touching jobs
+already in progress. This package does not schedule automatic upgrades; other
+agents' existing installation policies are unchanged.
 
 This is an internal workspace package. It's automatically available to other packages in the monorepo:
 
@@ -85,5 +97,5 @@ import type {
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 20.9.0
 - `@daytonaio/sdk` >= 0.170.0

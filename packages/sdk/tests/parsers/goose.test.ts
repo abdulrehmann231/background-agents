@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { parseGooseLine, GOOSE_TOOL_MAPPINGS } from "../../src/agents/index.js"
-import { createContext } from "./helpers.js"
+import { createContext, parseFixtureEvents } from "./helpers.js"
 
 describe("parseGooseLine", () => {
   const mappings = GOOSE_TOOL_MAPPINGS
@@ -16,8 +16,9 @@ describe("parseGooseLine", () => {
     expect(parseGooseLine("{not valid json}", mappings, ctx)).toBeNull()
   })
 
-  it("parses message event with assistant text content and emits session", () => {
+  it("tracks the native session banner, not the provider's message ID", () => {
     const ctx = createContext()
+    expect(parseGooseLine("   \\____)    20261016_1 · /tmp/work", mappings, ctx)).toEqual({ type: "session", id: "20261016_1" })
     const events = parseGooseLine(
       JSON.stringify({
         type: "message",
@@ -32,12 +33,25 @@ describe("parseGooseLine", () => {
       mappings,
       ctx
     )
-    // First message emits both session and token events
-    expect(events).toEqual([
-      { type: "session", id: "chatcmpl-123" },
-      { type: "token", text: "Hello from Goose!" },
-    ])
-    expect(ctx.sessionId).toBe("chatcmpl-123")
+    expect(events).toEqual({ type: "token", text: "Hello from Goose!" })
+    expect(ctx.sessionId).toBe("20261016_1")
+  })
+
+  it("does not invent a resumable ID when the native banner is missing", () => {
+    const ctx = createContext()
+    expect(parseGooseLine('{"type":"message","message":{"id":"msg-not-a-session","role":"assistant","created":1,"content":[{"type":"text","text":"hello"}]}}', mappings, ctx)).toEqual({ type: "token", text: "hello" })
+    expect(ctx.sessionId).toBeNull()
+  })
+
+  it("handles colored banners once and keeps separate parsers isolated", () => {
+    const a = createContext()
+    const b = createContext()
+    const banner = "\u001b[36m   \\____)    20261016_1 · /tmp/work\u001b[0m"
+    expect(parseGooseLine(banner, mappings, a)).toEqual({ type: "session", id: "20261016_1" })
+    expect(parseGooseLine(banner, mappings, a)).toBeNull()
+    expect(parseGooseLine("   \\____)    20261016_2 · /tmp/other", mappings, b)).toEqual({ type: "session", id: "20261016_2" })
+    expect(a.sessionId).toBe("20261016_1")
+    expect(b.sessionId).toBe("20261016_2")
   })
 
   it("does not emit session event on subsequent messages", () => {
@@ -364,19 +378,10 @@ describe("parseGooseLine", () => {
   })
 
   it("no-credit fixture: surfaces the billing failure (not a silent end)", () => {
-    const fs = require("fs")
-    const path = require("path")
-    const fixture = fs.readFileSync(
-      path.join(__dirname, "../fixtures/jsonl-reference/goose-error.jsonl"),
-      "utf-8"
-    )
     const ctx = createContext()
-    const events = fixture
-      .split("\n")
-      .filter(Boolean)
-      .map((l: string) => parseGooseLine(l, mappings, ctx))
-      .filter(Boolean)
-      .flat() as { type: string; error?: string }[]
+    const events = parseFixtureEvents("goose-error.jsonl", (line) =>
+      parseGooseLine(line, mappings, ctx)
+    ) as { type: string; error?: string }[]
     const ends = events.filter((e) => e.type === "end")
     expect(ends).toHaveLength(1)
     expect(ends[0].error).toContain("credit balance is too low")

@@ -54,6 +54,7 @@ export async function persistTurn(params: {
         timestamp: BigInt(now),
         agent: payload.agent,
         model: payload.model,
+        metadata: { reasoningEffort: payload.reasoningEffort ?? "default" },
         uploadedFiles:
           uploadedFilePaths.length > 0
             ? (uploadedFilePaths as unknown as Prisma.InputJsonValue)
@@ -63,6 +64,7 @@ export async function persistTurn(params: {
         content: agentPrompt,
         agent: payload.agent,
         model: payload.model,
+        metadata: { reasoningEffort: payload.reasoningEffort ?? "default" },
         uploadedFiles:
           uploadedFilePaths.length > 0
             ? (uploadedFilePaths as unknown as Prisma.InputJsonValue)
@@ -82,10 +84,10 @@ export async function persistTurn(params: {
         model: payload.model,
         toolCalls: [],
         contentBlocks: [],
-        metadata: { usage: usageMeta } as unknown as Prisma.InputJsonValue,
+        metadata: { usage: usageMeta, reasoningEffort: payload.reasoningEffort ?? "default" } as unknown as Prisma.InputJsonValue,
       },
       update: {
-        metadata: { usage: usageMeta } as unknown as Prisma.InputJsonValue,
+        metadata: { usage: usageMeta, reasoningEffort: payload.reasoningEffort ?? "default" } as unknown as Prisma.InputJsonValue,
       },
     })
 
@@ -94,6 +96,9 @@ export async function persistTurn(params: {
       data: {
         status: "running",
         backgroundSessionId,
+        activeAssistantMessageId: payload.assistantMessageId,
+        finalizationClaimId: null,
+        finalizationClaimedAt: null,
         queueDispatchId: null,
         lastActiveAt: new Date(),
         // Persist agent/model so subsequent messages on this chat keep them

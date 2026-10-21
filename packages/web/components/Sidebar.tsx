@@ -4,13 +4,15 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
-import { Plus, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen } from "lucide-react"
+import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen, MessageCircle } from "lucide-react"
+import Image from "next/image"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useGitHubUserQuery } from "@/lib/query"
 import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH, COLLAPSE_THRESHOLD } from "@/lib/contexts"
+import { DOCS_URL } from "@/lib/constants"
 import { clearAllStorage } from "@/lib/storage"
 import { isChatVisibleForFilter } from "@/lib/chat-tree"
 import type { Chat } from "@/lib/types"
@@ -25,9 +27,6 @@ import {
 
 // Re-export from context for backward compatibility
 export { ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS } from "@/lib/contexts"
-
-// The docs site is deployed separately (packages/docs) at its own domain.
-const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || "https://docs.backgrounder.dev"
 
 interface SidebarProps {
   chats: Chat[]
@@ -123,6 +122,11 @@ export function Sidebar({
   // Mobile user menu state
   const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false)
   const mobileUserMenuRef = useRef<HTMLDivElement>(null)
+
+  // Collapsed sidebar: popup listing chat titles so a chat can be switched to
+  // without expanding the sidebar.
+  const [chatSwitcherOpen, setChatSwitcherOpen] = useState(false)
+  const chatSwitcherRef = useRef<HTMLDivElement>(null)
 
   // Repository filter state - supports controlled mode from parent
   const [internalRepoFilter, setInternalRepoFilter] = useState<string>(ALL_REPOSITORIES)
@@ -252,6 +256,15 @@ export function Sidebar({
   // Close mobile user menu when clicking outside
   useClickOutside(mobileUserMenuRef, () => setMobileUserMenuOpen(false), mobileUserMenuOpen)
 
+  // Close the collapsed chat switcher popup when clicking outside
+  useClickOutside(chatSwitcherRef, () => setChatSwitcherOpen(false), chatSwitcherOpen)
+
+  // Close the chat switcher popup if the sidebar expands (its trigger unmounts,
+  // but reset the flag so it doesn't reopen pre-opened if collapsed again later).
+  useEffect(() => {
+    if (!collapsed) setChatSwitcherOpen(false)
+  }, [collapsed])
+
   // Animate collapse/expand when toggled via button
   const handleToggleCollapse = useCallback(() => {
     setIsAnimating(true)
@@ -357,9 +370,11 @@ export function Sidebar({
         >
           {/* Header with close button */}
           <div className="flex items-center justify-between px-4 pt-safe">
-            <h1 className="text-base font-semibold text-foreground">
-              Background Agents
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold text-foreground">
+                Background Agents
+              </h1>
+            </div>
             <button
               onClick={onMobileClose}
               className="p-2 -mr-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors touch-target"
@@ -376,7 +391,7 @@ export function Sidebar({
               onClick={handleNewChat}
               className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
             >
-              <Plus className="h-5 w-5 text-muted-foreground" />
+              <SquarePen className="h-5 w-5 text-muted-foreground" />
               <span className="text-base text-foreground">New Chat</span>
             </button>
 
@@ -411,20 +426,6 @@ export function Sidebar({
               <Clock className={cn("h-5 w-5", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
               <span className="text-base text-foreground">Scheduled Agents</span>
             </button>
-
-            {/* Docs Link */}
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => {
-                if (onMobileClose) onMobileClose()
-              }}
-              className="flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target hover:bg-accent/50 active:bg-accent"
-            >
-              <BookOpen className="h-5 w-5 text-muted-foreground" />
-              <span className="text-base text-foreground">Docs</span>
-            </a>
           </div>
 
           {/* Repository Filter */}
@@ -543,6 +544,16 @@ export function Sidebar({
                       <HelpCircle className="h-5 w-5" />
                       Help
                     </button>
+                    <a
+                      href={DOCS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setMobileUserMenuOpen(false)}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
+                    >
+                      <BookOpen className="h-5 w-5" />
+                      Docs
+                    </a>
                     <button
                       onClick={() => {
                         clearAllStorage()
@@ -591,25 +602,59 @@ export function Sidebar({
         )}
         style={isDesktopApp ? { WebkitAppRegion: "drag" } as React.CSSProperties : undefined}
       >
-        {!collapsed && (
-          <h1 className={cn(
-            "text-sm font-semibold text-foreground truncate",
-            isDesktopApp && "invisible" // Hide text but keep space for window controls
-          )}>
-            Background Agents
-          </h1>
+        {collapsed ? (
+          // Collapsed: the logo doubles as the expand control. It shows the
+          // mask icon by default and swaps to the panel-toggle icon on hover,
+          // instead of showing both side by side (too cramped at this width).
+          <button
+            onClick={handleToggleCollapse}
+            className="group relative flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+            style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <Image
+              src="/mask-icon-light.svg"
+              alt="Background Agents"
+              width={18}
+              height={18}
+              className="h-[18px] w-[18px] transition-opacity group-hover:opacity-0 dark:hidden"
+              priority
+            />
+            <Image
+              src="/mask-icon-dark.svg"
+              alt="Background Agents"
+              width={18}
+              height={18}
+              className="hidden h-[18px] w-[18px] transition-opacity group-hover:opacity-0 dark:block"
+              priority
+            />
+            <PanelLeft className="absolute h-[18px] w-[18px] opacity-0 transition-opacity group-hover:opacity-100" />
+          </button>
+        ) : (
+          <>
+            <div className={cn(
+              "flex items-center gap-2",
+              isDesktopApp && "invisible" // Hide text but keep space for window controls
+            )}>
+              <h1 className="text-sm font-semibold text-foreground truncate">
+                Background Agents
+              </h1>
+            </div>
+            <button
+              onClick={handleToggleCollapse}
+              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+              style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeft className="h-[18px] w-[18px]" />
+            </button>
+          </>
         )}
-        <button
-          onClick={handleToggleCollapse}
-          className="p-1.5 rounded-md hover:bg-accent text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
-          style={isDesktopApp ? { WebkitAppRegion: "no-drag" } as React.CSSProperties : undefined}
-        >
-          <PanelLeft className="h-4 w-4" />
-        </button>
       </div>
 
       {/* Action Buttons - grouped together */}
-      <div className={cn(collapsed ? "px-0 flex flex-col items-center gap-1.5" : "px-2")}>
+      <div className={cn("flex flex-col", collapsed ? "px-0 items-center gap-2" : "px-2 gap-1")}>
         {/* New Chat Button */}
         <button
           onClick={onNewChat}
@@ -618,7 +663,7 @@ export function Sidebar({
             collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
           )}
         >
-          <Plus className="h-4 w-4 text-muted-foreground" />
+          <SquarePen className="h-[18px] w-[18px] text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">New Chat</span>}
         </button>
 
@@ -630,9 +675,56 @@ export function Sidebar({
             collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
           )}
         >
-          <Search className="h-4 w-4 text-muted-foreground" />
+          <Search className="h-[18px] w-[18px] text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">Search Chats</span>}
         </button>
+
+        {/* Chat Switcher - collapsed only, since the chat list itself is hidden */}
+        {collapsed && (
+          <div className="relative" ref={chatSwitcherRef}>
+            <button
+              onClick={() => setChatSwitcherOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-2 rounded-md p-1.5 transition-colors cursor-pointer",
+                chatSwitcherOpen ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+              )}
+              aria-label="Switch chat"
+              aria-haspopup="menu"
+              aria-expanded={chatSwitcherOpen}
+              title="Chats"
+            >
+              <MessageCircle className="h-[18px] w-[18px] text-muted-foreground" />
+            </button>
+
+            {chatSwitcherOpen && (
+              <div
+                className="absolute left-full top-0 ml-2 w-64 max-h-96 overflow-y-auto rounded-md border border-border bg-popover shadow-md py-1 z-50"
+                role="menu"
+              >
+                {filteredChats.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No chats</div>
+                ) : (
+                  filteredChats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      onClick={() => {
+                        onSelectChat(chat.id)
+                        setChatSwitcherOpen(false)
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 px-3 py-2 text-sm text-left truncate cursor-pointer",
+                        chat.id === currentChatId ? "bg-accent text-accent-foreground" : "hover:bg-accent"
+                      )}
+                      role="menuitem"
+                    >
+                      <span className="truncate">{chat.displayName || "Untitled"}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Scheduled Jobs Button */}
         <button
@@ -651,24 +743,9 @@ export function Sidebar({
               : "hover:bg-accent/50"
           )}
         >
-          <Clock className={cn("h-4 w-4", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
+          <Clock className={cn("h-[18px] w-[18px]", scheduledJobsActive && !selectedScheduledJob ? "text-foreground" : "text-muted-foreground")} />
           {!collapsed && <span className="text-sm text-foreground">Scheduled Agents</span>}
         </button>
-
-        {/* Docs Link */}
-        <a
-          href={DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Docs"
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors hover:bg-accent/50 cursor-pointer",
-            collapsed ? "p-1.5" : "w-full px-2 py-[7px]"
-          )}
-        >
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          {!collapsed && <span className="text-sm text-foreground">Docs</span>}
-        </a>
       </div>
 
       <div className="pb-2" />

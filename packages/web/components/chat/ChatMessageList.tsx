@@ -5,6 +5,8 @@ import type { Chat, Agent } from "@/lib/types"
 import type { GitContextValue } from "@/lib/contexts/GitContext"
 import { ErrorBanner } from "./ErrorBanner"
 import { MessageBubble } from "../MessageBubble"
+import { getPendingSubmission } from "@/lib/chat-state"
+import { latestFailedAssistant, persistedProviderFailure, unsupportedModelFailure } from "@/lib/turn-error-presentation"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,10 +23,13 @@ interface ChatMessageListProps {
   git: GitContextValue
   onOpenFile?: (filePath: string) => void
   onReload?: (chatId: string) => Promise<void> | void
-  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
+  onResumeQueue?: () => Promise<void> | void
+  onChooseModel?: () => void
   currentAgent: Agent
   currentModel: string
+  currentReasoningEffort?: string
   planModeEnabled: boolean
   messagesContainerRef: React.RefObject<HTMLDivElement | null>
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -49,8 +54,11 @@ export function ChatMessageList({
   onReload,
   onSendMessage,
   onRemoveQueuedMessage,
+  onResumeQueue,
+  onChooseModel,
   currentAgent,
   currentModel,
+  currentReasoningEffort,
   planModeEnabled,
   messagesContainerRef,
   messagesEndRef,
@@ -58,6 +66,14 @@ export function ChatMessageList({
   userHasScrolledUp,
   onScrollToBottom,
 }: ChatMessageListProps) {
+  const visibleQueue = (chat.queuedMessages ?? []).filter((item) =>
+    !item.userMessageId || !chat.messages.some((message) => message.id === item.userMessageId))
+  const pending = getPendingSubmission({ ...chat, queuedMessages: visibleQueue })
+  const waiting = visibleQueue.filter((item) => item !== pending)
+  const activeMessage = chat.messages.find((message) => message.id === chat.activeAssistantMessageId && message.role === "assistant")
+  const streamingId = (chat.status === "running" || chat.status === "creating") ? activeMessage?.id : undefined
+  const showStarting = !streamingId && (isCreating || chat.status === "running" || !!pending)
+
   // Hide the uncommitted-files banner the moment the user asks the agent to
   // commit, rather than leaving it up until the triggered turn finishes and
   // the server recomputes the count. Resets — so the banner can reappear if
@@ -90,10 +106,7 @@ export function ChatMessageList({
           isMobile ? "max-w-full" : "max-w-3xl space-y-6"
         )}>
           {chat.messages.map((message, index) => {
-            const isLastAssistant =
-              isRunning &&
-              message.role === "assistant" &&
-              index === chat.messages.length - 1
+            const isLastAssistant = message.id === streamingId
             // A divider marks the point where the inherited parent history ends
             // and this branch's own conversation begins.
             const isBranchStart =
@@ -120,9 +133,17 @@ export function ChatMessageList({
             chat.messages[chat.messages.length - 1]?.inherited && (
               <BranchDivider isMobile={isMobile} />
             )}
-          {/* Show loading indicator when sandbox is being created */}
-          {isCreating && (
-            <div className="text-2xl text-muted-foreground animate-pulse">
+          {pending && (
+            <div data-testid="pending-submission">
+              <MessageBubble
+                message={{ id: pending.userMessageId ?? pending.id, role: "user", content: pending.content, timestamp: 0 }}
+                isMobile={isMobile}
+              />
+            </div>
+          )}
+          {/* A single placeholder until the active assistant row is available. */}
+          {showStarting && (
+            <div data-testid="starting-indicator" className="text-2xl text-muted-foreground animate-pulse">
               ...
             </div>
           )}
@@ -141,7 +162,7 @@ export function ChatMessageList({
                   data-testid="uncommitted-files-commit"
                   onClick={() => {
                     setCommitRequested(true)
-                    onSendMessage("Commit changes", currentAgent, currentModel, undefined, planModeEnabled)
+                    onSendMessage("Commit changes", currentAgent, currentModel, undefined, planModeEnabled, currentReasoningEffort)
                   }}
                   className="underline underline-offset-2 hover:no-underline cursor-pointer"
                 >
@@ -173,15 +194,19 @@ export function ChatMessageList({
               actionPendingLabel="Reloading…"
             />
           )}
-          {chat.status === "error" && chat.errorMessage && (() => {
+          {chat.status === "error" && (() => {
+            const providerFailure = persistedProviderFailure(chat)
+            const failureMessage = providerFailure || unsupportedModelFailure(chat.errorMessage) || chat.errorMessage
+            const unsupportedModel = !!unsupportedModelFailure(failureMessage)
             const lastUserMessage = [...chat.messages].reverse().find((m) => m.role === "user")
             const resend = lastUserMessage
               ? () => onSendMessage(
                   lastUserMessage.content,
-                  (lastUserMessage.agent ?? currentAgent) as string,
-                  lastUserMessage.model ?? currentModel,
+                  currentAgent,
+                  currentModel,
                   undefined,
                   planModeEnabled,
+                  currentReasoningEffort,
                 )
               : undefined
 
@@ -194,33 +219,39 @@ export function ChatMessageList({
             // "incomplete" means the turn ended with no terminal event: the agent
             // may still be running in the background, so always Reload (refresh
             // history) rather than resending and risking a duplicate run.
-            const lastAssistant = [...chat.messages].reverse().find((m) => m.role === "assistant")
+            const lastAssistant = providerFailure ? latestFailedAssistant(chat)
+              : [...chat.messages].reverse().find((m) => m.role === "assistant" && !m.isError)
             const recoveredOutput =
               !!lastAssistant?.content?.trim() || (lastAssistant?.toolCalls?.length ?? 0) > 0
             const useReload =
               !!onReload &&
-              (chat.errorKind === "incomplete" ||
+              ((!failureMessage && recoveredOutput) || waiting.length > 0 || chat.errorKind === "incomplete" ||
+                (!!providerFailure && recoveredOutput) ||
                 (chat.errorKind === "crash" && recoveredOutput))
+            const canContinue = waiting.length > 0 && !!chat.recoverableAssistantMessageId && !!onResumeQueue
 
             return (
               <ErrorBanner
                 key={chat.id}
-                message={chat.errorMessage}
+                message={failureMessage || (canContinue
+                  ? "The last run stopped before it finished. Queued prompts have not been sent."
+                  : useReload ? "The last run stopped before it finished. Reload to check its saved output."
+                  : "The last run stopped before it finished.")}
                 isMobile={isMobile}
-                onRetry={useReload ? () => onReload!(chat.id) : resend}
-                actionLabel={useReload ? "Reload" : "Retry"}
-                actionPendingLabel={useReload ? "Reloading…" : "Retrying…"}
+                onRetry={unsupportedModel ? onChooseModel : canContinue ? onResumeQueue : useReload ? () => onReload!(chat.id) : resend}
+                actionLabel={unsupportedModel ? "Choose model" : canContinue ? "Continue queued prompts" : useReload ? "Reload" : "Retry"}
+                actionPendingLabel={unsupportedModel ? "Choose model" : canContinue ? "Continuing…" : useReload ? "Reloading…" : "Retrying…"}
               />
             )
           })()}
           {/* Queue shelf — lives at the bottom of the scroll area so it
               scrolls out of view with the conversation. */}
-          {chat.queuedMessages && chat.queuedMessages.length > 0 && (
-            <div className={cn(
+          {waiting.length > 0 && (
+            <div data-testid="prompt-queue" className={cn(
               "border border-b-0 border-border bg-card rounded-t-md -mb-4",
               isMobile ? "mx-4" : "mx-6"
             )}>
-              {chat.queuedMessages.map((m) => (
+              {waiting.map((m) => (
                 <div
                   key={m.id}
                   className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 last:border-b-0"
@@ -242,7 +273,7 @@ export function ChatMessageList({
                     <DropdownMenuContent align="end" className="min-w-[180px]">
                       {git.canBranch && (
                         <DropdownMenuItem
-                          onClick={() => git.handleBranchQueuedMessage(m.id, m.content, m.agent, m.model)}
+                          onClick={() => git.handleBranchQueuedMessage(m.id, m.content, m.agent, m.model, m.reasoningEffort)}
                         >
                           <GitBranchPlus className="h-3.5 w-3.5 mr-2" />
                           Branch to new chat

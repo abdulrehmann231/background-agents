@@ -8,6 +8,7 @@ import type { CodeAgentSandbox, AdaptSandboxOptions, ProviderName } from "../typ
 import { getPackageName, getShellInstaller } from "../utils/install"
 import { escapeShell } from "../utils/shell"
 import { ELIZA_BUNDLE_B64 } from "../agents/eliza/bundle-content"
+import { CODEX_RUNTIME_PREFIX, codexRuntimeInstallCommand, isSupportedCodexVersion } from "../utils/codex-runtime"
 
 // Path to ELIZA bundle (uploaded to sandbox when needed)
 const ELIZA_SANDBOX_PATH = "/tmp/eliza-cli.bundle.js"
@@ -19,7 +20,12 @@ export function adaptDaytonaSandbox(
   // Two-level environment: session (persistent) + run (cleared between runs)
   const sessionEnv: Record<string, string> = { ...options.env }
   const runEnv: Record<string, string> = {}
-  const getEnv = (): Record<string, string> => ({ ...sessionEnv, ...runEnv })
+  let codexPath: string | undefined
+  const getEnv = (jobEnv: Record<string, string> = {}): Record<string, string> => {
+    const env = { ...sessionEnv, ...runEnv, ...jobEnv }
+    if (codexPath) env.PATH = `${CODEX_RUNTIME_PREFIX}/bin:${env.PATH ?? codexPath}`
+    return env
+  }
 
   /** Execute a command synchronously */
   async function executeCommand(command: string, timeout: number = 60): Promise<{ exitCode: number; output: string }> {
@@ -29,7 +35,7 @@ export function adaptDaytonaSandbox(
       .join("; ")
     const fullCommand = envExports ? `${envExports}; ${command}` : command
     const result = await sandbox.process.executeCommand(fullCommand, undefined, undefined, timeout)
-    return { exitCode: result.exitCode ?? 0, output: result.result ?? "" }
+    return { exitCode: result.exitCode ?? -1, output: result.result ?? "" }
   }
 
   // Long-running-process runner, wired to @background-agents/sandbox-jobs.
@@ -40,7 +46,7 @@ export function adaptDaytonaSandbox(
   const jobs: SandboxJobs = {
     ...baseJobs,
     start(opts: StartJobOptions) {
-      return baseJobs.start({ ...opts, env: { ...getEnv(), ...opts.env } })
+      return baseJobs.start({ ...opts, env: getEnv(opts.env) })
     },
   }
 
@@ -63,6 +69,28 @@ export function adaptDaytonaSandbox(
     jobs,
 
     async ensureProvider(name: ProviderName): Promise<void> {
+      if (name === "codex") {
+        // Always select the immutable, versioned runtime. A global CLI or a
+        // custom PATH may point to a different (including newer) release.
+        // Images preinstall this same directory, so preparing one is offline.
+        const preparationError = "Codex CLI update failed. No agent was started. Retry, or ask the administrator to check the sandbox runtime installation."
+        const prepared = await sandbox.process.executeCommand(codexRuntimeInstallCommand(), undefined, undefined, 240)
+          .catch(() => { throw new Error(preparationError) })
+        if (prepared.exitCode !== 0) {
+          // Installer output may contain registry credentials. Keep it out of UI/logs.
+          throw new Error(preparationError)
+        }
+        const verified = await sandbox.process.executeCommand(`${CODEX_RUNTIME_PREFIX}/bin/codex --version`, undefined, undefined, 15)
+        if (verified.exitCode !== 0 || !isSupportedCodexVersion(verified.result ?? "")) {
+          throw new Error("Codex CLI update could not be verified. No agent was started. Ask the administrator to check the sandbox runtime installation.")
+        }
+        const path = await sandbox.process.executeCommand("printf '%s' \"$PATH\"", undefined, undefined, 10)
+        if (path.exitCode !== 0 || !path.result?.trim() || /[\r\n]/.test(path.result)) {
+          throw new Error("Codex CLI runtime path could not be prepared. No agent was started.")
+        }
+        codexPath = path.result
+        return
+      }
       // ELIZA is built-in - upload the bundle to the sandbox
       if (name === "eliza") {
         // Check if already uploaded

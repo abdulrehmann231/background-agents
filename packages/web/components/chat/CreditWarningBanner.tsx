@@ -1,17 +1,18 @@
 "use client"
 
-import { TriangleAlert, Wallet, X } from "lucide-react"
+import { TriangleAlert, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fmtCreditAmount } from "@/lib/format"
 import type { CreditTier } from "@/lib/server/credits"
+import { DismissButton } from "./DismissButton"
 
 interface CreditWarningBannerProps {
   /** Which warning to show. The caller decides; see lib/credit-warning. */
   tier: Exclude<CreditTier, "ok">
   /** Balance in USD. Negative when the turn that emptied it overshot. */
   balanceUsd: number
-  /** Opens the Credits settings tab. */
-  onBuyCredits: () => void
+  /** Opens the modal with purchases, rewards, and free usage options. */
+  onAddCredits: () => void
   /** Records the dismissal and hides the banner. */
   onDismiss: () => void
   isMobile?: boolean
@@ -20,11 +21,9 @@ interface CreditWarningBannerProps {
 /**
  * The low/empty credit warning that sits above the composer.
  *
- * A banner rather than a popover on purpose: a floating layer over the chat
- * would cover the messages the user is reading and fight the textarea for
- * focus, and this warning is never urgent enough to earn that. It is also not a
- * modal — `LimitReachedDialog` already interrupts the *blocked send*, and this
- * one's whole job is to arrive before that happens.
+ * The low-credit banner offers credit options before a send is blocked.
+ * Once the balance is depleted, the credit options modal opens automatically;
+ * this banner remains available after the user dismisses that modal.
  *
  * Shape follows ErrorBanner (same border/tint idiom), with the icon and the
  * wording carrying the state as well as the colour, so it reads the same to
@@ -33,12 +32,11 @@ interface CreditWarningBannerProps {
 export function CreditWarningBanner({
   tier,
   balanceUsd,
-  onBuyCredits,
+  onAddCredits,
   onDismiss,
   isMobile,
 }: CreditWarningBannerProps) {
   const isEmpty = tier === "empty"
-  const overspent = balanceUsd < 0
 
   return (
     <div
@@ -62,36 +60,32 @@ export function CreditWarningBanner({
         {isEmpty ? (
           <>
             <span className="font-medium">Out of credits.</span>{" "}
-            {overspent
-              ? `Your last turn ran ${fmtCreditAmount(balanceUsd)} past your balance — top up to clear it, or wait for tomorrow's daily credits.`
-              : "Top up to keep going, switch to a free model, or wait for tomorrow's daily credits."}
+            Add credits to keep using paid models, switch to a free model, or wait for tomorrow&apos;s daily credits.
           </>
         ) : (
           <>
             <span className="font-medium">
               Credits running low — {fmtCreditAmount(balanceUsd)} left.
             </span>{" "}
-            Your next turn on a shared model may not finish.
+            Add credits to keep using paid models. You can buy credits or claim a GitHub star reward.
           </>
         )}{" "}
         <button
           type="button"
-          onClick={onBuyCredits}
+          onClick={onAddCredits}
           className="font-medium underline underline-offset-2 hover:no-underline cursor-pointer"
         >
-          Buy credits
+          Add credits
         </button>
       </div>
 
-      <button
-        type="button"
+      <DismissButton
+        label="Dismiss"
+        ariaLabel="Dismiss credit warning"
         onClick={onDismiss}
-        aria-label="Dismiss credit warning"
-        title="Dismiss"
-        className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100 hover:bg-foreground/10 transition-opacity cursor-pointer"
-      >
-        <X className={isMobile ? "h-4 w-4" : "h-3.5 w-3.5"} />
-      </button>
+        isMobile={isMobile}
+        variant="tinted"
+      />
     </div>
   )
 }

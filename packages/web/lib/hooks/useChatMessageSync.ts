@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef } from "react"
 import type { Chat, Message } from "@/lib/types"
 import { fetchChat, toMessageType } from "@/lib/sync/api"
 import { mergeMessages } from "./useStreaming"
+import { applyRecoveredChat } from "@/lib/chat-recovery"
 
 interface UseChatMessageSyncArgs {
   chats: Chat[]
@@ -38,6 +39,8 @@ export function useChatMessageSync({
   updateChatsCache,
 }: UseChatMessageSyncArgs): ChatMessageSync {
   const messagesLoadFailed = useRef<Set<string>>(new Set())
+  const chatsRef = useRef(chats)
+  chatsRef.current = chats
   
   const fullyLoaded = useRef<Set<string>>(new Set())
 
@@ -145,21 +148,11 @@ export function useChatMessageSync({
   // disconnected banner so the user can continue.
   const reloadChat = useCallback(async (chatId: string) => {
     try {
+      const observed = chatsRef.current.find((chat) => chat.id === chatId)
+      if (!observed) return
       const chatData = await fetchChat(chatId)
-      const incomingMessages = chatData.messages.map(toMessageType)
       updateChatsCache((old) =>
-        old.map((c) => {
-          if (c.id !== chatId) return c
-          return {
-            ...c,
-            messages: incomingMessages.length > 0
-              ? mergeMessages(c.messages, incomingMessages)
-              : c.messages,
-            status: "ready",
-            uncommittedFilesCount: chatData.uncommittedFilesCount,
-            errorMessage: undefined,
-          }
-        })
+        old.map((c) => c.id === chatId ? applyRecoveredChat(c, chatData, observed) : c)
       )
     } catch (err) {
       console.error("Failed to reload chat:", err)

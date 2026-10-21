@@ -16,9 +16,13 @@ One job = one process = one directory:
 
 ```
 <root>/<jobId>/
-  meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version }
+  meta.json     { jobId, pgid, processName, outputFile, exitFile, dir, createdAt, version, commandFingerprint }
   output.log    combined stdout+stderr, byte-exact, append-only
-  exit          integer $?, present ONLY once the process finishes
+  exit          integer $?, also written after confirmed cancellation
+  command-exit  wrapper-only foreground exit code (atomic publication)
+  cancelling    retain full descendant liveness during explicit cancellation
+  launch.lock   shared by launch and abort
+  aborted       permanent no-future-launch marker for this attempt
 ```
 
 - **Detached + fully reapable.** Launched with `setsid` and placed in its own
@@ -35,6 +39,35 @@ One job = one process = one directory:
   splits a multi-byte character and you never re-read the whole log.
 - **Cold reconnect.** Everything needed to reattach is the serializable
   `JobHandle` + an integer cursor, or just the job id via `attach()`.
+- **Recoverable startup.** Pass a stable `jobId` before calling `start()`.
+  The detached wrapper saves its identity before running the command. A retry
+  with that id reattaches instead of running the command again, including when
+  the original response was lost. Reusing an id with a different command,
+  working directory, or timeout is rejected rather than pretending new work
+  ran. `abort(jobId, root)` prevents a delayed
+  launcher from starting and confirms any existing process stopped. This also
+  works for an attempt that never launched. Keep the attempt's files until no
+  delayed caller can retry it; deleting its abort marker removes that fence.
+
+These operations require `flock` in addition to `setsid` and the cgroup-v2
+permissions described above. Missing or unreadable status is an error, not a
+successful cancellation. An `exit` file alone does not make a job terminal while
+an owned process remains alive.
+
+A normally completed foreground command can leave background services (such as a
+website preview) running. Once its wrapper is gone and `command-exit` agrees with
+`exit`, `status()` and `read()` report the command as exited without killing those
+services. The populated cgroup remains owned by that job: explicit `cancel()`
+still reaps every descendant, while cancelling a later job cannot kill it.
+A provider's end event, a lone exit file, or an unknown/crashed wrapper is not
+completion proof. Cancellation records `cancelling` before signalling processes,
+so it continues to require full process-group/cgroup termination even when the
+foreground command exits during Stop.
+
+Jobs launched by older versions lack `command-exit`; they retain the conservative
+all-descendant check. An already-stuck legacy turn still needs Stop and a preview
+restart once. No database migration or provider-specific process-name matching
+is needed.
 
 ## Why not Daytona's session API (`executeSessionCommand`)?
 
@@ -99,10 +132,24 @@ for (;;) {
 const reattached = await jobs.attach(handle.jobId)
 ```
 
+For recoverable launch, save an attempt id with your application state first:
+
+```ts
+await jobs.start({ jobId: savedAttemptId, command: "your-command" })
+// If launch throws, its outcome may be unknown. Retain ownership and inspect
+// that same id, or fence/cancel it before allowing a replacement attempt:
+await jobs.abort(savedAttemptId)
+```
+
+Without an explicit `jobId`, `start()` still generates a fresh id. `attach()`
+returns `null` only for an absent record; corrupt records and failed reads
+throw. Custom `SandboxJobs` implementations must provide `abort()` and
+`isAborted()` with the same launch-fencing guarantees.
+
 ## Tests
 
 ```bash
 npm run typecheck
-npx vitest run tests/parse.test.ts        # pure unit tests, instant
-DAYTONA_API_KEY=... npx vitest run        # + integration (creates a sandbox)
+npm run test -w @background-agents/sandbox-jobs   # pure unit tests, instant
+DAYTONA_API_KEY=... npx vitest run                # + integration (creates a sandbox)
 ```

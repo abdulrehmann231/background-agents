@@ -22,6 +22,18 @@ export interface NotifyOptions {
 }
 
 /**
+ * Fired on `window` when a notification (an in-app toast click, or a native OS
+ * notification click relayed from Electron) should bring a chat into view.
+ * The chat page listens for this to select the chat and scroll to the
+ * relevant message, even if the chat is already open but scrolled up.
+ */
+export const NAVIGATE_TO_CHAT_EVENT = "notify:navigate-to-chat"
+
+export interface NavigateToChatEventDetail {
+  chatId: string
+}
+
+/**
  * Play a short notification chime using the Web Audio API, so we don't need
  * to ship an audio asset. Best-effort: silently no-ops if audio is
  * unavailable or blocked (e.g. before the user has interacted with the page).

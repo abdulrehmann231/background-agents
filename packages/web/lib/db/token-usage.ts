@@ -8,8 +8,7 @@
  * driven by the runner in lib/server/token-metering.ts.
  *
  * `sumSharedSpend` is the read path the limiter uses: what a user has spent
- * across every shared pool since the start of the period. `sumSharedUsage`
- * answers the same question for one provider, for the usage views.
+ * across every shared pool since the start of the period.
  */
 
 import { Prisma } from "@prisma/client"
@@ -203,33 +202,6 @@ export async function insertTokenUsageRows(
   })
 }
 
-export interface UsageTotals {
-  /** All components incl. cache (input+output+cache+reasoning). */
-  totalTokens: number
-  /**
-   * Cache-excluded measure used for rate limiting: input (uncached) + output +
-   * reasoning. Cache reads can be 100×+ the rest of a turn yet are nearly free,
-   * so including them would make a token budget meaningless; we exclude them.
-   */
-  limitedTokens: number
-  costUsd: number
-}
-
-function toTotals(sum: {
-  inputTokens: number | null
-  outputTokens: number | null
-  reasoningTokens: number | null
-  totalTokens: number | null
-  costUsd: number | null
-}): UsageTotals {
-  return {
-    totalTokens: sum.totalTokens ?? 0,
-    limitedTokens:
-      (sum.inputTokens ?? 0) + (sum.outputTokens ?? 0) + (sum.reasoningTokens ?? 0),
-    costUsd: sum.costUsd ?? 0,
-  }
-}
-
 /** Per-provider token total for a single chat. */
 export interface ChatProviderUsage {
   provider: string
@@ -258,38 +230,6 @@ export async function sumChatUsageByProvider(
     }))
     .filter((p) => p.totalTokens > 0)
     .sort((a, b) => b.totalTokens - a.totalTokens)
-}
-
-/**
- * Sum a user's usage from one pool for a given provider since `since`.
- * This is the limiter's aggregation query (indexed by
- * userId+provider+pool+createdAt).
- */
-export async function sumSharedUsage(params: {
-  userId: string
-  provider: string
-  since: Date
-  pool?: UsagePool
-}): Promise<UsageTotals> {
-  const { userId, provider, since, pool = "shared" } = params
-  const agg = await prisma.tokenUsage.aggregate({
-    where: {
-      userId,
-      provider,
-      pool,
-      createdAt: { gte: since },
-      // Free models are excluded from shared-pool budgets.
-      ...(pool === "shared" ? { freeModel: false } : {}),
-    },
-    _sum: {
-      inputTokens: true,
-      outputTokens: true,
-      reasoningTokens: true,
-      totalTokens: true,
-      costUsd: true,
-    },
-  })
-  return toTotals(agg._sum)
 }
 
 /**

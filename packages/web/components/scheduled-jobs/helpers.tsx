@@ -60,23 +60,6 @@ export function formatRunLabel(run: ScheduledJobRun): string {
   return format(run.startedAt, "MMM d, h:mm a")
 }
 
-export function formatDuration(startedAt: number, completedAt: number): string {
-  const durationMs = completedAt - startedAt
-  const seconds = Math.floor(durationMs / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-
-  if (hours > 0) {
-    const remainingMinutes = minutes % 60
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
-  }
-  if (minutes > 0) {
-    const remainingSeconds = seconds % 60
-    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
-  }
-  return `${seconds}s`
-}
-
 export function getTriggerDescription(job: ScheduledJob): string {
   if (job.triggerType === "incoming") {
     return "Webhook"

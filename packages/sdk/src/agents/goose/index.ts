@@ -65,11 +65,10 @@ export const gooseAgent: AgentDefinition = {
       gooseArgs.push("--system", options.systemPrompt)
     }
 
-    // Session handling: goose resumes the most recent session when --resume is used
-    // First message (no sessionId): creates new session
-    // Subsequent messages (has sessionId): resumes most recent session
+    // Bare --resume selects the most recent conversation in the sandbox,
+    // which may belong to another chat. Always name the native session.
     if (options.sessionId) {
-      gooseArgs.push("--resume")
+      gooseArgs.push("--resume", "--session-id", options.sessionId)
     }
 
     // Build the goose command string (will be passed to bash -c)

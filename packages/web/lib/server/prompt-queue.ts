@@ -4,16 +4,19 @@ import { prisma } from "@/lib/db/prisma"
 import type { QueuedMessage } from "@/lib/types"
 
 export type QueueItem = Pick<QueuedPrompt,
-  "id" | "clientId" | "content" | "agent" | "model" | "lastError" | "position"
+  "id" | "clientId" | "content" | "agent" | "model" | "reasoningEffort" | "lastError" | "position" | "userMessageId" | "status"
 >
 
 export function toQueuedMessage(item: QueueItem): QueuedMessage {
   return {
     id: item.id,
     clientId: item.clientId ?? undefined,
+    userMessageId: item.userMessageId,
+    status: item.status,
     content: item.content,
     agent: item.agent,
     model: item.model,
+    reasoningEffort: item.reasoningEffort ?? undefined,
     lastError: item.lastError ?? undefined,
   }
 }
@@ -23,6 +26,7 @@ export interface QueueInput {
   content: string
   agent: string
   model: string
+  reasoningEffort?: string
 }
 
 export class QueueIdConflict extends Error {
@@ -34,7 +38,7 @@ export class QueueIdConflict extends Error {
 /** One idempotent insert, with the FIFO position allocated by the chat row. */
 export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<QueuedPrompt> {
   return prisma.$transaction(async (tx) => {
-    // Serialize inserts and imports for this chat before checking clientId.
+    // Serialize inserts for this chat before checking clientId.
     // Otherwise two tabs can both observe no row and one gets a unique-key
     // failure instead of the same idempotent result.
     await tx.chat.update({ where: { id: chatId }, data: { queueSequence: { increment: 0 } } })
@@ -42,7 +46,8 @@ export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<
       where: { chatId_clientId: { chatId, clientId: input.clientId } },
     })
     if (existing) {
-      if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model) {
+      if (existing.status === "cancelled") return existing
+      if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model || (existing.reasoningEffort ?? "default") !== (input.reasoningEffort ?? "default")) {
         throw new QueueIdConflict()
       }
       return existing
@@ -61,6 +66,7 @@ export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<
         content: input.content,
         agent: input.agent,
         model: input.model,
+        reasoningEffort: input.reasoningEffort === "default" ? null : input.reasoningEffort,
         userMessageId: randomUUID(),
         assistantMessageId: randomUUID(),
       },
@@ -68,48 +74,32 @@ export async function enqueuePrompt(chatId: string, input: QueueInput): Promise<
   })
 }
 
-/**
- * Idempotently import the old browser queue before clearing localStorage.
- * A retry or a second tab importing the same IDs cannot create duplicates.
- */
-export async function importLegacyPrompts(
+/** Remember removal even when a delayed POST has not reached the server yet. */
+export async function cancelQueuedPrompt(
   chatId: string,
-  items: QueueInput[],
-  paused: boolean
-): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  identity: { clientId: string } | { id: string },
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    // Match the insert/claim lock order; a racing send sees the tombstone.
     await tx.chat.update({ where: { id: chatId }, data: { queueSequence: { increment: 0 } } })
-    for (const input of items) {
-      const existing = await tx.queuedPrompt.findUnique({
-        where: { chatId_clientId: { chatId, clientId: input.clientId } },
+    const existing = await tx.queuedPrompt.findFirst({ where: { chatId, ...identity } })
+    if (existing) {
+      if (existing.status === "cancelled") return true
+      if (existing.status !== "queued") return false
+      const removed = await tx.queuedPrompt.updateMany({
+        where: { id: existing.id, chatId, status: "queued" }, data: { status: "cancelled" },
       })
-      if (existing) {
-        if (existing.content !== input.content || existing.agent !== input.agent || existing.model !== input.model) {
-          throw new QueueIdConflict()
-        }
-        continue
-      }
-      const chat = await tx.chat.update({
-        where: { id: chatId },
-        data: { queueSequence: { increment: 1 } },
-        select: { queueSequence: true },
-      })
-      await tx.queuedPrompt.create({
-        data: {
-          chatId,
-          clientId: input.clientId,
-          position: chat.queueSequence,
-          content: input.content,
-          agent: input.agent,
-          model: input.model,
-          userMessageId: randomUUID(),
-          assistantMessageId: randomUUID(),
-        },
-      })
+      return removed.count === 1
     }
-    if (paused && items.length > 0) {
-      await tx.chat.update({ where: { id: chatId }, data: { queuePaused: true } })
-    }
+    if (!("clientId" in identity)) return false
+    const chat = await tx.chat.update({
+      where: { id: chatId }, data: { queueSequence: { increment: 1 } }, select: { queueSequence: true },
+    })
+    await tx.queuedPrompt.create({ data: {
+      chatId, clientId: identity.clientId, position: chat.queueSequence, status: "cancelled",
+      content: "", agent: "", model: "", userMessageId: randomUUID(), assistantMessageId: randomUUID(),
+    } })
+    return true
   })
 }
 

@@ -30,6 +30,12 @@ import { filterSlashCommandsWithConflict, filterSingleCommand, CREATE_REPO_COMMA
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { useFileUpload } from "@/lib/hooks/useFileUpload"
 import { isModKeyPressed } from "@/lib/keyboard"
+import { useToastStore } from "@/lib/stores/toast-store"
+import { NAVIGATE_TO_CHAT_EVENT, type NavigateToChatEventDetail } from "@/lib/notify"
+import { hasActiveQueue } from "@/lib/chat-state"
+import { queuedSendNotice } from "@/lib/composer-queue"
+import { exhaustedCreditProvider } from "@/lib/credit-limit"
+import { useReasoningEffortPreference } from "./useReasoningEffortPreference"
 
 interface UseChatComposerArgs {
   chat: Chat | null
@@ -40,8 +46,9 @@ interface UseChatComposerArgs {
   isMobile: boolean
   isSending: boolean
   isAuthenticated: boolean
-  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean) => void
-  onEnqueueMessage?: (message: string, agent?: string, model?: string) => void
+  showCreditDialog: (provider?: string, creditBalance?: number | null) => void
+  onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
+  onEnqueueMessage?: (message: string, agent?: string, model?: string, reasoningEffort?: string) => void
   onResumeQueue?: () => void
   onUpdateChat?: (updates: Partial<Chat>) => void
   onSlashCommand?: (command: SlashCommandType) => void
@@ -56,6 +63,7 @@ export function useChatComposer({
   isMobile,
   isSending,
   isAuthenticated,
+  showCreditDialog,
   onSendMessage,
   onEnqueueMessage,
   onResumeQueue,
@@ -137,6 +145,23 @@ export function useChatComposer({
   const { data: settingsData } = useSettingsQuery()
   const customEndpoints = settingsData?.customEndpoints
   const currentModel = resolveChatModel(currentAgent, chat?.model, credentialFlags, settings.defaultModel, customEndpoints)
+  const { reasoningEffort, setReasoningEffort, capability: reasoningEffortCapability } = useReasoningEffortPreference(currentAgent, currentModel)
+  const balanceUsd = settingsData?.creditBalanceUsd ?? null
+  const creditGate = { agent: currentAgent, credentialFlags, balanceUsd, providerMultipliers: settingsData?.providerMultipliers }
+  const blockedProvider = exhaustedCreditProvider({ ...creditGate, model: currentModel })
+  // Inspect the stored selection too: model resolution can fall back to a free
+  // model as soon as the settings query reports an exhausted shared balance.
+  const depletedProvider = exhaustedCreditProvider({ ...creditGate, model: chat?.model ?? currentModel })
+  const notifiedOfDepletion = useRef(false)
+  useEffect(() => {
+    if (balanceUsd !== null && balanceUsd > 0 && !credentialFlags.SHARED_BALANCE_EXHAUSTED) {
+      notifiedOfDepletion.current = false
+    }
+    if (depletedProvider && !notifiedOfDepletion.current) {
+      notifiedOfDepletion.current = true
+      showCreditDialog(depletedProvider, balanceUsd)
+    }
+  }, [depletedProvider, balanceUsd, credentialFlags.SHARED_BALANCE_EXHAUSTED, showCreditDialog])
 
   // Check if the selected model has required credentials
   const availableModels = agentModels[currentAgent] ?? []
@@ -153,19 +178,24 @@ export function useChatComposer({
   // Treat the chat as running while it has (non-paused) queued messages too,
   // so the UI doesn't flicker between ready and running as the queue drains.
   const hasQueued = (chat?.queuedMessages?.length ?? 0) > 0
+  const needsRecovery = chat?.status === "error" || chat?.status === "disconnected"
   const isPaused = !!(chat?.queuePaused && hasQueued)
-  const isRunning = chat?.status === "running" || (hasQueued && !chat?.queuePaused)
+  const isRunning = chat?.status === "running" || hasActiveQueue(chat)
   // Include isSending for instant feedback before server responds
   const isCreating = chat?.status === "creating" || isSending
   const hasContent = input.trim() || pendingFiles.length > 0
+  const queueNotice = queuedSendNotice({ isRunning, isPaused, hasFiles: pendingFiles.length > 0,
+    planMode: planModeEnabled, hasText: !!input.trim() })
   // When the agent is running, text-only messages are queued for later dispatch.
-  const canQueue = !!onEnqueueMessage && !!input.trim() && pendingFiles.length === 0
+  const canQueue = !chat?.stopPending && !needsRecovery && !queueNotice && !!onEnqueueMessage && !!input.trim() && pendingFiles.length === 0
   // Paused queue: always show the send button (either to enqueue a new prompt
   // at the end or to resume draining with nothing typed).
-  const canSend =
+  // A new direct send must not skip prompts waiting behind a failed turn.
+  // Reload first to reconcile that turn; it never implicitly resumes the queue.
+  const canSend = !chat?.stopPending && !queueNotice && !(needsRecovery && hasQueued) && (
     (hasContent && !isRunning && !isCreating && !isPaused) ||
     (isRunning && canQueue) ||
-    isPaused
+    isPaused)
 
   // Track if user has scrolled up from bottom
   const handleScroll = () => {
@@ -176,6 +206,8 @@ export function useChatComposer({
   }
 
   // Auto-scroll to bottom when chat changes or content grows during streaming.
+  // Includes queuedMessages so the pending-submission bubble (rendered before the
+  // user's message lands in chat.messages) doesn't leave the view un-scrolled.
   useLayoutEffect(() => {
     const chatChanged = chat?.id !== prevChatIdRef.current
     prevChatIdRef.current = chat?.id ?? null
@@ -183,7 +215,24 @@ export function useChatComposer({
     if (chatChanged || !userHasScrolledUp) {
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" })
     }
-  }, [chat?.id, chat?.messages, userHasScrolledUp])
+  }, [chat?.id, chat?.messages, chat?.queuedMessages, userHasScrolledUp])
+
+  // Clicking a "finished"/"push" notification for the chat that's already open
+  // should scroll down to reveal it, even if the user had scrolled up reading
+  // history before it arrived (the effect above won't touch scroll position in
+  // that case since chat.id hasn't changed). Navigating to a *different* chat
+  // is handled by the chat-changed branch above once the chat prop updates.
+  useEffect(() => {
+    const handleWindowEvent = (event: Event) => {
+      const chatId = (event as CustomEvent<NavigateToChatEventDetail>).detail?.chatId
+      if (chatId && chatId === chat?.id) {
+        setUserHasScrolledUp(false)
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      }
+    }
+    window.addEventListener(NAVIGATE_TO_CHAT_EVENT, handleWindowEvent)
+    return () => window.removeEventListener(NAVIGATE_TO_CHAT_EVENT, handleWindowEvent)
+  }, [chat?.id])
 
   // Focus prompt when switching chats or when the welcome view transitions to
   // the messages view (which remounts the textarea in a different DOM location).
@@ -251,7 +300,15 @@ export function useChatComposer({
 
   const handleSend = () => {
     if (!canSend) return
-    // Don't send if credentials are missing - the UI shows a warning instead
+    if (input.trim().length > 100_000) {
+      useToastStore.getState().addToast({ title: "Message is too long", body: "Shorten your message to 100,000 characters or fewer. Your draft has been kept." })
+      return
+    }
+    if (blockedProvider) {
+      showCreditDialog(blockedProvider, balanceUsd)
+      return
+    }
+    // A missing personal key still requires setup rather than a credit top-up.
     if (!hasRequiredCredentials) return
 
     // Reset scroll state so we snap to bottom when sending
@@ -259,7 +316,7 @@ export function useChatComposer({
 
     // If the agent is running, queue the message instead of sending.
     if (isRunning && onEnqueueMessage) {
-      onEnqueueMessage(input.trim(), currentAgent, currentModel)
+      onEnqueueMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
       setInput("")
       textareaRef.current?.focus()
       return
@@ -269,7 +326,7 @@ export function useChatComposer({
     // with nothing typed, just resume draining.
     if (isPaused) {
       if (input.trim() && onEnqueueMessage) {
-        onEnqueueMessage(input.trim(), currentAgent, currentModel)
+        onEnqueueMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
         setInput("")
       } else {
         onResumeQueue?.()
@@ -278,9 +335,23 @@ export function useChatComposer({
       return
     }
 
+    // Existing text-only chats use the same serialized server queue whether
+    // they look ready or running in this browser. A direct send can otherwise
+    // race the next prompt's wake-up before its own server claim is visible.
+    // Keep first sends, attachments and plan mode on the direct path: queued
+    // prompts do not carry those options yet.
+    if (chat?.status === "ready" && !chat.id.startsWith("draft-") &&
+        chat.messages.some((message) => !message.inherited) &&
+        input.trim() && pendingFiles.length === 0 && !planModeEnabled && onEnqueueMessage) {
+      onEnqueueMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
+      setInput("")
+      textareaRef.current?.focus()
+      return
+    }
+
     // Pass files to sendMessage - upload will happen after sandbox is ready
     const files = pendingFiles.length > 0 ? pendingFiles.map(pf => pf.file) : undefined
-    onSendMessage(input.trim(), currentAgent, currentModel, files, planModeEnabled || undefined)
+    onSendMessage(input.trim(), currentAgent, currentModel, files, planModeEnabled || undefined, reasoningEffort)
     setInput("")
     clearFiles()
     textareaRef.current?.focus()
@@ -291,7 +362,11 @@ export function useChatComposer({
   // holding one of those modifiers while clicking the send button.
   const handleBranchSend = () => {
     if (git.canBranch && input.trim()) {
-      git.handleBranchWithMessage(input.trim(), currentAgent, currentModel)
+      if (blockedProvider) {
+        showCreditDialog(blockedProvider, balanceUsd)
+        return
+      }
+      git.handleBranchWithMessage(input.trim(), currentAgent, currentModel, reasoningEffort)
       setInput("")
       clearFiles()
       textareaRef.current?.focus()
@@ -383,6 +458,9 @@ export function useChatComposer({
     // plan mode
     planModeEnabled,
     setPlanModeEnabled,
+    reasoningEffort,
+    setReasoningEffort,
+    reasoningEffortCapability,
     // agent/model
     currentAgent,
     currentModel,

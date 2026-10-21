@@ -24,38 +24,59 @@ export function isDraftChatId(chatId: string | null | undefined): boolean {
 }
 
 /**
- * Client-only chat fields. Queue entries remain here only during migration from
- * the old browser-owned queue; new prompts are server-owned.
+ * Client-only chat fields. Queue entries are this tab's prompts that are still
+ * being saved to the server; once saved, the server queue is the only copy.
  * Keyed by chat id.
  */
 export interface LocalChatState {
   previewStates: Record<string, PreviewState>
   queuedMessages: Record<string, Chat["queuedMessages"]>
-  queuePaused: Record<string, boolean>
   drafts: Record<string, string>
 }
 
 /**
- * Layer device-only preview state and any not-yet-imported legacy queue entries
- * on top of server chats. Never hide a server queue behind stale local state.
+ * Layer device-only preview state and prompts still being saved on top of
+ * server chats. Never hide a server queue behind stale local state.
  */
 export function mergeLocalState(serverChats: Chat[], local: LocalChatState): Chat[] {
   return serverChats.map((chat) => {
     const previewState = local.previewStates[chat.id]
-    const serverQueue = chat.queuedMessages ?? []
+    const messages = new Set(chat.messages.map((message) => message.id))
+    const localQueue = local.queuedMessages[chat.id] ?? []
+    const serverQueue = (chat.queuedMessages ?? [])
+      .filter((item) => !item.userMessageId || !messages.has(item.userMessageId))
+      .map((item) => {
+        const pending = localQueue.find((entry) => entry.id === item.clientId || entry.id === item.id)
+        return { ...item, sendImmediately: item.sendImmediately || pending?.sendImmediately }
+      })
     const importedIds = new Set(serverQueue.map((item) => item.clientId))
-    const legacyQueue = (local.queuedMessages[chat.id] ?? [])
-      .filter((item) => !importedIds.has(item.id))
+    const savingQueue = localQueue
+      .filter((item) => !importedIds.has(item.id) && !serverQueue.some((row) => row.id === item.id) && (!item.userMessageId || !messages.has(item.userMessageId)))
       .map((item) => ({ ...item, pendingSync: true }))
     return {
       ...chat,
       previewItems: previewState?.items,
       activePreviewIndex: previewState?.activeIndex,
       previewPaneHidden: previewState?.hidden,
-      queuedMessages: [...serverQueue, ...legacyQueue],
-      queuePaused: chat.queuePaused || (legacyQueue.length > 0 && local.queuePaused[chat.id]),
+      queuedMessages: [...serverQueue, ...savingQueue],
     }
   })
+}
+
+/** Waiting work is not active while a failure or pause blocks it. */
+export function hasActiveQueue(chat: Pick<Chat, "status" | "queuePaused" | "queuedMessages"> | null | undefined): boolean {
+  return !!chat && ["ready", "creating", "running"].includes(chat.status) && !chat.queuePaused &&
+    !!chat.queuedMessages?.some((item) => !item.lastError)
+}
+
+/** Presentation only: the server still claims every queued prompt. */
+export function getPendingSubmission(chat: Chat): QueuedMessage | undefined {
+  if (chat.queuePaused || chat.status === "error" || chat.status === "disconnected") return undefined
+  const first = chat.queuedMessages?.[0]
+  if (!first || first.lastError) return undefined
+  if (first.status === "dispatching" || first.sendImmediately ||
+      (chat.status === "ready" && !chat.backgroundSessionId)) return first
+  return undefined
 }
 
 /**
@@ -70,7 +91,6 @@ export function migrateLocalChatState(
 ): LocalChatState {
   const previewStates = { ...prev.previewStates }
   const queuedMessages = { ...prev.queuedMessages }
-  const queuePaused = { ...prev.queuePaused }
   const drafts = { ...prev.drafts }
 
   if (previewStates[fromId]) {
@@ -81,16 +101,12 @@ export function migrateLocalChatState(
     queuedMessages[toId] = queuedMessages[fromId]
     delete queuedMessages[fromId]
   }
-  if (queuePaused[fromId] !== undefined) {
-    queuePaused[toId] = queuePaused[fromId]
-    delete queuePaused[fromId]
-  }
   if (drafts[fromId]) {
     drafts[toId] = drafts[fromId]
     delete drafts[fromId]
   }
 
-  return { previewStates, queuedMessages, queuePaused, drafts }
+  return { previewStates, queuedMessages, drafts }
 }
 
 /**
@@ -119,48 +135,6 @@ export function computeUnseenTransitions(
   }
 
   return { newlyUnseen, nextStatuses }
-}
-
-// =============================================================================
-// Message queue operations
-// =============================================================================
-
-/** Append a message to a chat's queue. */
-export function enqueue(
-  queue: QueuedMessage[] | undefined,
-  item: QueuedMessage
-): QueuedMessage[] {
-  return [...(queue ?? []), item]
-}
-
-/** Remove a queued message by id. */
-export function removeFromQueue(
-  queue: QueuedMessage[] | undefined,
-  id: string
-): QueuedMessage[] {
-  return (queue ?? []).filter((m) => m.id !== id)
-}
-
-/** Split the head of a (non-empty) queue from the rest. */
-export function dequeue(queue: QueuedMessage[]): { next: QueuedMessage; rest: QueuedMessage[] } {
-  const [next, ...rest] = queue
-  return { next, rest }
-}
-
-/**
- * Whether a chat is in a state where the next queued message may be dispatched.
- * Covers the data-only conditions; in-flight/stream locks are checked by the
- * caller (they're not pure state).
- */
-export function isChatReadyForQueueDispatch(
-  chat: Pick<Chat, "status" | "backgroundSessionId">,
-  queue: QueuedMessage[] | undefined,
-  paused: boolean | undefined
-): boolean {
-  if (!queue || queue.length === 0) return false
-  if (paused) return false
-  if (chat.status !== "ready" || !!chat.backgroundSessionId) return false
-  return true
 }
 
 // =============================================================================
@@ -197,13 +171,11 @@ export function removeLocalChatStateFor(prev: LocalChatState, ids: string[]): Lo
   const next: LocalChatState = {
     previewStates: { ...prev.previewStates },
     queuedMessages: { ...prev.queuedMessages },
-    queuePaused: { ...prev.queuePaused },
     drafts: { ...prev.drafts },
   }
   for (const id of ids) {
     delete next.previewStates[id]
     delete next.queuedMessages[id]
-    delete next.queuePaused[id]
     delete next.drafts[id]
   }
   return next

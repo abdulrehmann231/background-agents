@@ -189,7 +189,10 @@ export function CreditsSection({ isMobile }: CreditsSectionProps) {
                   return (
                     <div key={t.id} className="flex items-baseline gap-3 py-2">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs text-foreground">
+                        <div
+                          className="truncate text-xs text-foreground"
+                          title={t.description ?? undefined}
+                        >
                           {TRANSACTION_LABEL[t.type] ?? t.type}
                           {t.description && (
                             <span className="text-muted-foreground"> · {t.description}</span>

@@ -65,6 +65,15 @@ export type MessageAction = "force-push" | "view-pr" | "view-branch"
 
 /** Metadata for git-operation messages */
 export interface MessageMetadata {
+  reasoningEffort?: string
+  /** Confirmed execution outcome, persisted by the server finalizer. */
+  turnFinalization?: {
+    state: string
+    executionStopped: boolean
+    assistantMessageId: string
+    backgroundSessionId: string
+    reason: string
+  }
   /** Action hint for rendering clickable links */
   action?: MessageAction
   /** PR URL for view-pr action */
@@ -154,6 +163,8 @@ export interface Chat {
 
   // Active execution (for recovery after page refresh)
   backgroundSessionId?: string  // Set when agent starts, cleared on completion
+  activeAssistantMessageId?: string  // Message owned by the active execution
+  stopPending?: boolean // Local Stop confirmation is still in progress
 
   // Agent config (per-chat, can be changed)
   agent?: string        // "claude-code" | "opencode" | "codex" | etc.
@@ -164,6 +175,7 @@ export interface Chat {
   messages: Message[]
   /** Server-side message count (used when messages aren't loaded yet) */
   messageCount?: number
+  lastMessageId?: string | null
   createdAt: number
   updatedAt: number
   /** Timestamp of last activity: user message sent, agent content received, or agent completion. Used for sort order. */
@@ -209,6 +221,13 @@ export interface Chat {
 
   // Status
   status: ChatStatus
+  /** Client-only: direct send is awaiting acknowledgement from the server. */
+  pendingSend?: boolean
+  /** Assistant identity owning this browser's outstanding direct-send POST. */
+  pendingSendAssistantMessageId?: string
+
+  /** Server-confirmed terminal failure eligible for explicit queue continuation. */
+  recoverableAssistantMessageId?: string
 
   /** Last agent/streaming error message, surfaced when status is "error"
    *  (real agent error → Retry) or "disconnected" (SSE stream died → Reload).
@@ -249,13 +268,20 @@ export type ChatStatus =
 
 /** A message that the user submitted while the agent was busy. Files are not persisted. */
 export interface QueuedMessage {
+  reasoningEffort?: string
   id: string
   content: string
   agent?: string
   model?: string
   clientId?: string
   lastError?: string
+  /** Still being saved to the server queue from this tab. */
   pendingSync?: boolean
+  /** Stable identity for reconciling the queue with its persisted user bubble. */
+  userMessageId?: string
+  status?: string
+  /** Client presentation only; does not bypass server ordering. */
+  sendImmediately?: boolean
 }
 
 export type Theme = "light" | "dark" | "system"

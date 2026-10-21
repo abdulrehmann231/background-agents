@@ -13,7 +13,6 @@ import {
   AlertCircle,
   BadgeCheck,
   Check,
-  ChevronDown,
   ExternalLink,
   Github,
   Loader2,
@@ -29,6 +28,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { ComboboxTriggerButton } from "./ComboboxTriggerButton"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,6 +87,12 @@ interface McpServersComboboxProps {
   /** Optional controlled open state (e.g. from the command palette). */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * Forces the trigger label on/off regardless of available space (e.g. a
+   * parent coordinating several triggers' labels as one group). Omit to let
+   * the trigger decide for itself based on its own available room.
+   */
+  showLabel?: boolean
 }
 
 export function McpServersCombobox({
@@ -98,6 +104,7 @@ export function McpServersCombobox({
   isMobile = false,
   open: openProp,
   onOpenChange,
+  showLabel,
 }: McpServersComboboxProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = openProp ?? internalOpen
@@ -435,6 +442,7 @@ export function McpServersCombobox({
   // ---------- render ----------
 
   const connectedCount = connected.length
+  const triggerLabel = `MCP servers${connectedCount > 0 ? `, ${connectedCount} connected` : ""}`
 
   // Create a virtual "GitHub" server entry to unify with registry servers
   const githubServer: RegistryServer = {
@@ -484,40 +492,22 @@ export function McpServersCombobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <ComboboxTriggerButton
           disabled={disabled}
-          className={cn(
-            "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-sm",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
-          aria-label={`MCP servers${connectedCount > 0 ? `, ${connectedCount} connected` : ""}`}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-        >
-          <Plug className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-          <span
-            className={cn(
-              isMobile
-                ? "hidden @[16rem]/row1:inline"
-                : "hidden @[32rem]:inline"
-            )}
-          >
-            MCP
-            {connectedCount > 0 && (
-              <span className="ml-1 text-foreground/80">
-                ({connectedCount})
-              </span>
-            )}
-          </span>
-          <ChevronDown
-            className={cn(
-              isMobile
-                ? "h-4 w-4 hidden @[16rem]/row1:block"
-                : "h-3.5 w-3.5"
-            )}
-          />
-        </button>
+          isMobile={isMobile}
+          showLabel={showLabel}
+          title={triggerLabel}
+          aria-label={triggerLabel}
+          icon={<Plug className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />}
+          label={
+            <>
+              MCP
+              {connectedCount > 0 && (
+                <span className="ml-1 text-foreground/80">({connectedCount})</span>
+              )}
+            </>
+          }
+        />
       </PopoverTrigger>
       <PopoverContent
         className="w-80 p-0 max-h-[var(--radix-popover-content-available-height)] overflow-hidden"

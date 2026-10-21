@@ -7,7 +7,15 @@ const { activityLog } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: { activityLog } }))
 
-import { logLlmProviderError, logGitPushError } from "./activity-log"
+// Mock next/headers so logActivity's IP capture is deterministic in tests —
+// the real headers() throws outside an active Next.js request scope, which
+// every test here is.
+const { mockHeaders } = vi.hoisted(() => ({
+  mockHeaders: vi.fn(async () => new Headers()),
+}))
+vi.mock("next/headers", () => ({ headers: mockHeaders }))
+
+import { logActivity, logLlmProviderError, logGitPushError } from "./activity-log"
 
 // logActivityAsync is fire-and-forget; flush the microtask queue so the
 // create() call has run before we assert.
@@ -16,6 +24,45 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 beforeEach(() => {
   activityLog.create.mockReset()
   activityLog.create.mockResolvedValue({})
+  mockHeaders.mockReset()
+  mockHeaders.mockResolvedValue(new Headers())
+})
+
+describe("logActivity", () => {
+  it("attaches the client IP from x-forwarded-for when available", async () => {
+    mockHeaders.mockResolvedValue(new Headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" }))
+
+    await logActivity("u1", "login")
+
+    expect(activityLog.create).toHaveBeenCalledTimes(1)
+    const { data } = activityLog.create.mock.calls[0][0]
+    expect(data.metadata).toEqual({ ip: "1.2.3.4" })
+  })
+
+  it("omits metadata entirely when no ip and no other metadata is available", async () => {
+    await logActivity("u1", "login")
+
+    const { data } = activityLog.create.mock.calls[0][0]
+    expect(data.metadata).toBeUndefined()
+  })
+
+  it("does not overwrite an explicitly provided ip", async () => {
+    mockHeaders.mockResolvedValue(new Headers({ "x-forwarded-for": "9.9.9.9" }))
+
+    await logActivity("u1", "login", { ip: "explicit" })
+
+    const { data } = activityLog.create.mock.calls[0][0]
+    expect(data.metadata.ip).toBe("explicit")
+  })
+
+  it("merges the captured ip alongside other metadata", async () => {
+    mockHeaders.mockResolvedValue(new Headers({ "x-forwarded-for": "1.2.3.4" }))
+
+    await logActivity("u1", "chat_created", { chatId: "c1" })
+
+    const { data } = activityLog.create.mock.calls[0][0]
+    expect(data.metadata).toEqual({ chatId: "c1", ip: "1.2.3.4" })
+  })
 })
 
 describe("logLlmProviderError", () => {

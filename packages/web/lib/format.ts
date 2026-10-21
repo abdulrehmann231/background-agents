@@ -51,3 +51,31 @@ export function fmtBalance(n: number): string {
 export function fmtCreditAmount(n: number): string {
   return `$${Math.abs(n).toFixed(4)}`
 }
+
+/** Human-friendly duration from a millisecond count: "820 ms", "4.2 s", or "2 m 5 s". */
+export function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms} ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)} s`
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return `${m} m ${s} s`
+}
+
+/** Human-friendly duration between two timestamps, coarse to the minute/hour: "45s", "3m 2s", "2h 5m". */
+export function formatDurationRange(startedAt: number, completedAt: number): string {
+  const durationMs = completedAt - startedAt
+  const seconds = Math.floor(durationMs / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+  }
+  if (minutes > 0) {
+    const remainingSeconds = seconds % 60
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+  }
+  return `${seconds}s`
+}

@@ -1,4 +1,5 @@
 import { Daytona } from "@daytonaio/sdk"
+import { randomUUID } from "node:crypto"
 import { PATHS } from "@/lib/constants"
 import { NEW_REPOSITORY } from "@/lib/types"
 import { prisma } from "@/lib/db/prisma"
@@ -15,6 +16,7 @@ import { createBackgroundAgentSession, type Agent } from "@/lib/agent-session"
 import { loadMcpConnections } from "@/lib/mcp/agent-servers"
 import { resolveCliModel } from "@background-agents/common"
 import { getUserEndpoints } from "@/lib/server/custom-endpoints"
+import { buildSharedClaudeEnv } from "@/lib/server/claude-token-auth"
 import {
   deleteSandboxQuietly,
   discoverSkillsForRepo,
@@ -119,7 +121,9 @@ export async function sendChatTurn({
     }
 
     const { history, isAgentSwitch } = await buildAgentHistory(chatId, chat, payload)
-    const env = await buildAgentEnv({ chat, userId, payload, credentials, customEndpoints })
+    const backgroundSessionId = useSharedClaude ? randomUUID() : undefined
+    let env = await buildAgentEnv({ chat, userId, payload, credentials, customEndpoints })
+    if (backgroundSessionId) env = buildSharedClaudeEnv(env, { userId, chatId, backgroundSessionId })
     let mcpServers: Awaited<ReturnType<typeof loadMcpConnections>> = []
     try {
       mcpServers = await loadMcpConnections({ kind: "chat", id: chatId })
@@ -132,6 +136,7 @@ export async function sendChatTurn({
       discoveredSkills = await discoverSkillsForRepo(sandbox, repoPath)
     }
     const bgSession = await createBackgroundAgentSession(sandbox, {
+      backgroundSessionId,
       repoPath,
       previewUrlPattern: previewUrlPattern ?? undefined,
       sessionId: isAgentSwitch ? undefined : (chat.sessionId ?? undefined),
@@ -139,6 +144,7 @@ export async function sendChatTurn({
       model: resolveCliModel(payload.model, customEndpoints),
       env: Object.keys(env).length > 0 ? env : undefined,
       planMode: payload.planMode,
+      reasoningEffort: payload.reasoningEffort,
       mcpServers,
       skills: discoveredSkills.length > 0 ? discoveredSkills : undefined,
     })
@@ -177,25 +183,23 @@ export async function sendChatTurn({
     return Response.json(response)
   } catch (error) {
     console.error("[chats/messages] Error:", error)
-    if (state.createdSandbox && state.sandboxId) {
-      await deleteSandboxQuietly(daytona, state.sandboxId)
-      try {
-        await prisma.chat.update({
-          where: { id: chatId },
-          data: {
-            sandboxId: null, branch: null, previewUrlPattern: null,
-            status: "error", queueDispatchId: !turnPersisted ? claimedPromptId ?? null : null,
-          },
-        })
-      } catch { /* best effort */ }
-    } else {
-      try {
-        await prisma.chat.update({
-          where: { id: chatId },
-          data: { status: "error", queueDispatchId: !turnPersisted ? claimedPromptId ?? null : null },
-        })
-      } catch { /* best effort */ }
-    }
+    // Once persisted, a failed start response does not prove the process
+    // failed to launch. Keep its durable identity and sandbox so Stop/cron
+    // can recover or fence the same attempt before another one is admitted.
+    if (turnPersisted) return internalError(error)
+    try {
+      const changed = await prisma.chat.updateMany({
+        where: { id: chatId, status: "creating", queueDispatchId: claimedPromptId ?? null },
+        data: {
+          status: "error",
+          queueDispatchId: claimedPromptId ?? null,
+          ...(state.createdSandbox && { sandboxId: null, branch: null, previewUrlPattern: null }),
+        },
+      })
+      if (changed.count === 1 && state.createdSandbox && state.sandboxId) {
+        await deleteSandboxQuietly(daytona, state.sandboxId)
+      }
+    } catch { /* best effort; cron can recover a persisted turn */ }
     return internalError(error)
   } finally {
     // A pre-run rejection must not strand a direct send in "creating".

@@ -13,6 +13,7 @@ export interface PendingMessage {
   message: string
   agent: string
   model: string
+  reasoningEffort?: string
 }
 
 // Save pending message to sessionStorage

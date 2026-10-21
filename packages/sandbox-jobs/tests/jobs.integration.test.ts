@@ -18,6 +18,16 @@ import { createSandboxJobs, type JobHandle } from "../src/index.js"
 const API_KEY = process.env.DAYTONA_API_KEY
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+async function pollUntil<T>(read: () => Promise<T>, expected: T, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  let actual: T
+  do {
+    actual = await read()
+    if (actual === expected) return
+    await sleep(200)
+  } while (Date.now() < deadline)
+  expect(actual).toBe(expected)
+}
 const rehydrate = (h: JobHandle): JobHandle => JSON.parse(JSON.stringify(h))
 
 describe.skipIf(!API_KEY)("sandbox-jobs (integration)", () => {
@@ -112,6 +122,56 @@ describe.skipIf(!API_KEY)("sandbox-jobs (integration)", () => {
     const replay = await createSandboxJobs(sandbox).read(attached!, 0)
     expect(replay.raw.split("\n").filter(Boolean)).toEqual(expected)
     expect(replay.status.exitCode).toBe(0)
+  })
+
+  it.each([false, true])("completes a command while its HTTP service stays available (detached=%s)", async (detached) => {
+    const jobs = createSandboxJobs(sandbox)
+    const port = detached ? 18768 : 18767
+    const handle = await jobs.start({
+      command: `${detached ? "setsid " : ""}python3 -m http.server ${port} >/tmp/preview-${port}.log 2>&1 & echo service-started`,
+    })
+    try {
+      await pollUntil(async () => (await sandbox.process.executeCommand(
+        `curl -fsS http://127.0.0.1:${port}/ >/dev/null && echo reachable`
+      )).result?.trim(), "reachable", 15_000)
+      // Rehydrate through the real filesystem, as a different web worker does.
+      const cold = createSandboxJobs(await daytona.get(sandbox.id))
+      const attached = await cold.attach(handle.jobId)
+      expect(attached).not.toBeNull()
+      await pollUntil(async () => (await cold.status(attached!)).state, "exited", 5_000)
+      const read = await cold.read(attached!, 0)
+      expect(read.status).toEqual({ state: "exited", alive: false, exitCode: 0 })
+      expect(read.raw).toContain("service-started")
+      // A later job and its cancellation must not stop the completed job's server.
+      const next = await jobs.start({ command: "echo next-started; sleep 30" })
+      try {
+        expect((await jobs.status(next)).alive).toBe(true)
+        await jobs.cancel(next)
+        expect((await jobs.status(next)).alive).toBe(false)
+        const http = await sandbox.process.executeCommand(`curl -fsS http://127.0.0.1:${port}/ >/dev/null && echo reachable`)
+        expect(http.result?.trim()).toBe("reachable")
+      } finally {
+        await jobs.cancel(next)
+      }
+    } finally {
+      // Explicit cleanup still owns every service, including setsid escapees.
+      await jobs.cancel(handle)
+    }
+  })
+
+  it("keeps an uncertain execution owned after an early exit signal and wrapper crash", async () => {
+    const jobs = createSandboxJobs(sandbox)
+    const handle = await jobs.start({ command: "setsid sleep 60 >/dev/null 2>&1 & echo started; sleep 60" })
+    try {
+      await sandbox.process.executeCommand(`echo 0 > '${handle.exitFile}'`)
+      expect((await jobs.status(handle)).alive).toBe(true)
+      await sandbox.process.executeCommand(`kill -KILL ${handle.pgid}`)
+      expect((await jobs.status(handle)).alive).toBe(true)
+      // An untrusted exit file does not prove the foreground command completed.
+      expect((await jobs.read(handle)).status.state).toBe("running")
+    } finally {
+      await jobs.cancel(handle)
+    }
   })
 
   it("reports a non-zero exit code", async () => {
