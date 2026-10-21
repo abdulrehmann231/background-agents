@@ -17,20 +17,11 @@ import {
   type CcAuthRun,
 } from "@/lib/query/hooks"
 import { cn } from "@/lib/utils"
+import { formatDurationMs } from "@/lib/format"
 
 type Outcome =
   | { ok: true; label: string; expiresAt?: number }
   | { ok: false; message: string }
-
-/** Human-friendly duration: "820 ms", "4.2 s", or "2 m 5 s". */
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms} ms`
-  const seconds = ms / 1000
-  if (seconds < 60) return `${seconds.toFixed(1)} s`
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  return `${m} m ${s} s`
-}
 
 const STATUS_STYLES: Record<string, string> = {
   refreshed: "border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400",
@@ -345,7 +336,7 @@ function RunHistory({
                 )}
               </td>
               <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
-                {formatDuration(r.durationMs)}
+                {formatDurationMs(r.durationMs)}
               </td>
               <td className="px-4 py-2.5 text-muted-foreground">
                 {r.status === "error" ? (
