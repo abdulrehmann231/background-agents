@@ -25,14 +25,11 @@ export function latestFailedAssistant(chat: Chat) {
 }
 
 /** Read only the latest confirmed failed turn, never an older failure or a
- * still-running execution. Do not expose arbitrary persisted process logs. */
+ * still-running execution. Never show the process output a crash attaches. */
 export function persistedProviderFailure(chat: Chat): string | undefined {
   const message = latestFailedAssistant(chat)
   const marker = message?.metadata?.turnFinalization
   if (!marker) return
-  if (marker.reason === "Agent startup timed out. Please send your prompt again.") {
-    return marker.reason
-  }
   if (/ProviderHeaderTimeoutError|provider response headers timed out/i.test(marker.reason)) {
     return "The model provider did not respond in time. Try again, or choose another model before retrying."
   }
@@ -41,4 +38,7 @@ export function persistedProviderFailure(chat: Chat): string | undefined {
   if (/ProviderModelNotFoundError|model[^\n]*(?:not found|not available|unavailable)/i.test(marker.reason)) {
     return "This model is no longer available. Choose another model before retrying."
   }
+  // The SDK already wrote a user-facing message; a crash appends its process
+  // output after a blank line.
+  return marker.reason.split("\n\n")[0]
 }

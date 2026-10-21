@@ -34,7 +34,6 @@ describe("persisted provider failure presentation", () => {
     expect(persistedProviderFailure(chat)).toBe(reason)
     chat.messages[1].metadata!.turnFinalization!.executionStopped = false
     expect(persistedProviderFailure(chat)).toBeUndefined()
-    expect(persistedProviderFailure(failed(`${reason} private process logs`))).toBeUndefined()
   })
   it.each(["running", "creating", "ready", "disconnected"])("does not leak the previous error into %s", status => {
     expect(persistedProviderFailure({ ...failed(), status: status as Chat["status"] })).toBeUndefined()
@@ -53,8 +52,11 @@ describe("persisted provider failure presentation", () => {
     Object.assign(marker, { [key]: key === "assistantMessageId" ? "different-reply" : undefined })
     expect(persistedProviderFailure(chat)).toBeUndefined()
   })
-  it("does not turn arbitrary logs into a UI error", () => {
-    expect(persistedProviderFailure(failed("secret execution details"))).toBeUndefined()
+  it("shows other saved errors without the output a crash attaches", () => {
+    const rateLimit = "429 Too Many Requests — wait a moment and retry"
+    expect(persistedProviderFailure(failed(rateLimit))).toBe(rateLimit)
+    expect(persistedProviderFailure(failed("Agent process exited without completing (crashed or killed)\n\nsecret execution details")))
+      .toBe("Agent process exited without completing (crashed or killed)")
   })
   it.each([undefined, "error" as const])("reads the matching failure before the finalizer's error notice (%s)", messageType => {
     const chat = failed()
