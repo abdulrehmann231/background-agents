@@ -4,6 +4,7 @@ import { useCallback, useState } from "react"
 import { PATHS } from "@background-agents/common"
 import type { Chat } from "@/lib/types"
 import { isRealRepo } from "@/lib/types"
+import { useCopyToClipboard } from "@/lib/hooks/useCopyToClipboard"
 
 // =============================================================================
 // useSandboxActions — actions that operate on the current chat's sandbox/repo:
@@ -32,6 +33,8 @@ export function useSandboxActions({
   const [envVarsChatEnvVars, setEnvVarsChatEnvVars] = useState<Record<string, string>>({})
   const [envVarsRepoEnvVars, setEnvVarsRepoEnvVars] = useState<Record<string, string>>({})
   const [isDownloading, setIsDownloading] = useState(false)
+  // Logs on failure (e.g. clipboard permission denied) instead of swallowing it silently.
+  const { copy } = useCopyToClipboard()
 
   // Handler for opening environment variables modal
   const handleOpenEnvVars = useCallback(async () => {
@@ -109,7 +112,6 @@ export function useSandboxActions({
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error("[download] Error:", error)
-      // Could add a toast/notification here in the future
     } finally {
       setIsDownloading(false)
     }
@@ -128,17 +130,17 @@ export function useSandboxActions({
   const handleCopyCloneCommand = useCallback(() => {
     if (isRealRepo(currentChat?.repo)) {
       const command = `git clone git@github.com:${currentChat.repo}.git`
-      navigator.clipboard.writeText(command)
+      void copy(command)
     }
-  }, [currentChat?.repo])
+  }, [currentChat?.repo, copy])
 
   // Copy git checkout command to clipboard
   const handleCopyCheckoutCommand = useCallback(() => {
     if (currentChat?.branch) {
       const command = `git fetch origin ${currentChat.branch} && git checkout ${currentChat.branch}`
-      navigator.clipboard.writeText(command)
+      void copy(command)
     }
-  }, [currentChat?.branch])
+  }, [currentChat?.branch, copy])
 
   // Open the current chat's sandbox in VS Code via an SSH remote link.
   const handleOpenInVSCode = useCallback(async () => {
