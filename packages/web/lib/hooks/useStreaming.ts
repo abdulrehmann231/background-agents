@@ -224,9 +224,10 @@ export function useStreaming(options: UseStreamingOptions = {}) {
             })
           }
 
-          // Fetch any new messages created by the backend (delta sync)
+          // Fetch any new messages created by the backend (delta sync). A
+          // failed reply carries its saved error, so reload it too.
           try {
-            const chatData = await fetchChat(chatId, { afterMessageId: assistantMessageId })
+            const chatData = await fetchChat(chatId, data.status === "error" ? undefined : { afterMessageId: assistantMessageId })
             if (streamGenerations.current.get(chatId) !== generation) return
             const incomingMessages = chatData.messages.map(toMessageType)
             updateChatsCache((old) =>
