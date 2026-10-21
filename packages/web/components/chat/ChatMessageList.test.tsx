@@ -120,6 +120,15 @@ describe("chat execution presentation", () => {
     expect(html).toContain(content ? ">Reload</button>" : ">Retry</button>")
     expect(html).not.toContain("The last run stopped before it finished.")
   })
+  it.each(["", "partial answer"])("offers Reload for a stopped run only when it saved output (%j)", content => {
+    const html = renderWarning(0, false, { status: "error", messages: [
+      { id: "user", role: "user", content: "Please reply", timestamp: 1 },
+      { id: "reply", role: "assistant", content, timestamp: 2 },
+      { id: "reply:error", role: "assistant", content: "Agent stopped: process exited", timestamp: 3, isError: true },
+    ] })
+    expect(html).toContain("The last run stopped before it finished.")
+    expect(html).toContain(content ? ">Reload</button>" : ">Retry</button>")
+  })
   it("offers explicit continuation only for a server-confirmed terminal error", () => {
     const failed = { status: "error", recoverableAssistantMessageId: "failed-reply",
       queuedMessages: [{ id: "later", content: "Later prompt" }],

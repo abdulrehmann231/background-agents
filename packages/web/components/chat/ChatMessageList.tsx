@@ -220,12 +220,12 @@ export function ChatMessageList({
             // may still be running in the background, so always Reload (refresh
             // history) rather than resending and risking a duplicate run.
             const lastAssistant = providerFailure ? latestFailedAssistant(chat)
-              : [...chat.messages].reverse().find((m) => m.role === "assistant")
+              : [...chat.messages].reverse().find((m) => m.role === "assistant" && !m.isError)
             const recoveredOutput =
               !!lastAssistant?.content?.trim() || (lastAssistant?.toolCalls?.length ?? 0) > 0
             const useReload =
               !!onReload &&
-              (!failureMessage || waiting.length > 0 || chat.errorKind === "incomplete" ||
+              ((!failureMessage && recoveredOutput) || waiting.length > 0 || chat.errorKind === "incomplete" ||
                 (!!providerFailure && recoveredOutput) ||
                 (chat.errorKind === "crash" && recoveredOutput))
             const canContinue = waiting.length > 0 && !!chat.recoverableAssistantMessageId && !!onResumeQueue
@@ -235,9 +235,10 @@ export function ChatMessageList({
                 key={chat.id}
                 message={failureMessage || (canContinue
                   ? "The last run stopped before it finished. Queued prompts have not been sent."
-                  : "The last run stopped before it finished. Reload to check its saved output.")}
+                  : useReload ? "The last run stopped before it finished. Reload to check its saved output."
+                  : "The last run stopped before it finished.")}
                 isMobile={isMobile}
-                onRetry={unsupportedModel ? onChooseModel : canContinue ? onResumeQueue : useReload ? () => onReload!(chat.id) : failureMessage ? resend : undefined}
+                onRetry={unsupportedModel ? onChooseModel : canContinue ? onResumeQueue : useReload ? () => onReload!(chat.id) : resend}
                 actionLabel={unsupportedModel ? "Choose model" : canContinue ? "Continue queued prompts" : useReload ? "Reload" : "Retry"}
                 actionPendingLabel={unsupportedModel ? "Choose model" : canContinue ? "Continuing…" : useReload ? "Reloading…" : "Retrying…"}
               />
