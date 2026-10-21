@@ -97,5 +97,5 @@ import type {
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 20.9.0
 - `@daytonaio/sdk` >= 0.170.0

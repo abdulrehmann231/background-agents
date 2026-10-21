@@ -104,7 +104,7 @@ import { stripAnsi, parseSkillList, extractCleanError } from "@background-agents
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 20.9.0
 - `@daytonaio/sdk` >= 0.170.0 (peer dependency for sandbox operations)
 
 ## License

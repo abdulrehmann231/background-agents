@@ -342,7 +342,7 @@ Pass the output as `CLAUDE_CODE_CREDENTIALS`. The SDK automatically writes it to
 
 ### Shared hosts: token recovery instead of a static credential
 
-Instead of `CLAUDE_CODE_CREDENTIALS`, a host running sessions for many users can set `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK fetches an access token at startup and refreshes it automatically if a request is rejected, so there's no refresh token or `CLAUDE_CODE_CREDENTIALS` blob to manage per session. This requires Node 22. Access tokens stay in memory; the endpoint capability is kept out of the child CLI's environment.
+Instead of `CLAUDE_CODE_CREDENTIALS`, a host running sessions for many users can set `CLAUDE_CODE_TOKEN_URL` (an HTTPS endpoint returning `{ "accessToken": "..." }`) and `CLAUDE_CODE_TOKEN_AUTH` (the endpoint's bearer capability) in the session environment. The SDK fetches an access token at startup and refreshes it automatically if a request is rejected, so there's no refresh token or `CLAUDE_CODE_CREDENTIALS` blob to manage per session. This requires Node 20.3+ (for `AbortSignal.any`/`AbortSignal.timeout`). Access tokens stay in memory; the endpoint capability is kept out of the child CLI's environment.
 
 The credential endpoint should authenticate and authorize every read, disable caching, return only a valid access token, and keep refresh tokens on the host.
 
