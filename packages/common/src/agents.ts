@@ -394,11 +394,13 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "google/gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", requiresKey: "commandcode" },
   ],
   "codex": [
+    // GPT-5.5 retired from Codex/ChatGPT sign-in (Oct 14, 2026) — see
+    // https://developers.openai.com/codex/models. GPT-6 Sol/Luna/Astra and
+    // GPT-6.1 Sol are the current generation.
     { value: "gpt-6.1-sol", label: "GPT-6.1 Sol", requiresKey: "openai" },
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "openai" },
     { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "openai" },
     { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "openai" },
-    { value: "gpt-5.5", label: "GPT-5.5 (API key only)", requiresKey: "openai" },
   ],
   "copilot": [
     { value: "claude-fable-5.1", label: "Claude Fable 5.1", requiresKey: "github" },
@@ -411,13 +413,12 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", requiresKey: "github" },
     { value: "gpt-6.1-sol", label: "GPT-6.1 Sol", requiresKey: "github" },
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "github" },
+    { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "github" },
+    { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "github" },
     { value: "gpt-5.6-sol", label: "GPT-5.6 Sol", requiresKey: "github" },
     { value: "gpt-5.6-terra", label: "GPT-5.6 Terra", requiresKey: "github" },
     { value: "gpt-5.6-luna", label: "GPT-5.6 Luna", requiresKey: "github" },
-    { value: "gpt-5.5", label: "GPT-5.5", requiresKey: "github" },
-    { value: "gpt-5.4", label: "GPT-5.4", requiresKey: "github" },
     { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "github" },
-    { value: "gpt-5-mini", label: "GPT-5 Mini", requiresKey: "github" },
     { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "github" },
   ],
   "gemini": [
@@ -564,9 +565,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
 export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "sonnet",
   "opencode": "opencode-go/mimo-v2.5-pro",
-  "codex": "gpt-6.1-sol",
+  "codex": "gpt-6.1-sol", // GPT-5.5 retired Oct 14, 2026; near-Astra quality at lower cost
   "command-code": "xiaomi/mimo-v2.6-pro", // widest plan availability of the catalog tiers
-  "copilot": "gpt-5-mini",
+  "copilot": "gpt-5.6-terra", // GPT-5 Mini no longer offered; Terra is GitHub's recommended everyday model
   "droid": "claude-sonnet-4-5-20250929", // BYOK default (user's ANTHROPIC_API_KEY)
   "eliza": "eliza-classic-1.0", // Fake agent, no API key needed
   "gemini": "gemini-3.5-flash-lite", // fast/cheap Flash Lite; free-tier available & reliable
