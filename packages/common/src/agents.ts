@@ -403,6 +403,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "openai" },
   ],
   "copilot": [
+    { value: "auto", label: "Auto", requiresKey: "github" },
     { value: "claude-fable-5.1", label: "Claude Fable 5.1", requiresKey: "github" },
     { value: "claude-fable-5", label: "Claude Fable 5", requiresKey: "github" },
     { value: "claude-sonnet-5.5", label: "Claude Sonnet 5.5", requiresKey: "github" },
