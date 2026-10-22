@@ -131,6 +131,15 @@ GITHUB_APP_SLUG="..."
 GITHUB_APP_PRIVATE_KEY="..."
 ```
 
+To enable the Gmail MCP server (our own, with per-connection tool scoping), set:
+
+```bash
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+GMAIL_MCP_JWT_SECRET="..."
+GMAIL_MCP_BASE_URL=""   # optional, defaults to NEXTAUTH_URL
+```
+
 See [`mcp`](../mcp/README.md) for setup.
 
 To enable Stripe credit top-ups (optional — billing is only enabled when `BILLING_ENABLED="true"` and both Stripe secrets are set; otherwise checkout and the webhook return 404, the UI hides top-ups, and the rest of the app runs normally), set:
