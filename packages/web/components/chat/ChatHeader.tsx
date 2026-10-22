@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown } from "lucide-react"
+import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown, HardDrive } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
@@ -22,6 +22,10 @@ interface ChatHeaderProps {
   onUpdateChat?: (updates: Partial<Chat>) => void
   onOpenEnvVars?: () => void
   onOpenCommandPalette?: () => void
+  /** Whether the current user is an admin — gates the "Increase resources" item. */
+  isAdmin?: boolean
+  /** Open the sandbox resize modal. Omitted when there's no sandbox to resize. */
+  onOpenSandboxResize?: () => void
 }
 
 export function ChatHeader({
@@ -29,6 +33,8 @@ export function ChatHeader({
   onUpdateChat,
   onOpenEnvVars,
   onOpenCommandPalette,
+  isAdmin,
+  onOpenSandboxResize,
 }: ChatHeaderProps) {
   const modals = useModals()
   const git = useGit()
@@ -173,6 +179,18 @@ export function ChatHeader({
                   <span className="h-3.5 w-3.5 flex items-center justify-center text-xs italic font-serif">𝑥</span>
                   Environment Variables
                 </button>
+                {isAdmin && onOpenSandboxResize && (
+                  <button
+                    onClick={() => {
+                      setTitleMenuOpen(false)
+                      onOpenSandboxResize()
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left cursor-pointer"
+                  >
+                    <HardDrive className="h-3.5 w-3.5" />
+                    Increase resources
+                  </button>
+                )}
                 <div className="my-1 border-t border-border" />
                 <button
                   onClick={() => {

@@ -206,6 +206,9 @@ export function usePaletteProps({
     onCopyCheckoutCommand: currentChat?.branch ? handleCopyCheckoutCommand : undefined,
     onOpenEnvVars: currentChat ? handleOpenEnvVars : undefined,
     onOpenSkills: sandboxId && hasRepo ? onToggleSkillsModal : undefined,
+    isAdmin: !!session?.user?.isAdmin,
+    onOpenSandboxResize:
+      sandboxId && session?.user?.isAdmin ? () => modals.setSandboxResizeModalOpen(true) : undefined,
     chatIds: displayChats.map((c) => c.id),
     onNavigateChat: handleNavigateChat,
     currentChatId: displayCurrentChatId,

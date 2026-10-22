@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect } from "react"
-import { Menu, MoreVertical, ChevronDown, Pencil, Github, Trash2, Clock, Command } from "lucide-react"
+import { Menu, MoreVertical, ChevronDown, Pencil, Github, Trash2, Clock, Command, HardDrive } from "lucide-react"
 import { useModals, useSidebar } from "@/lib/contexts"
 import { CreditBalancePill } from "@/components/chat/CreditBalancePill"
 import type { Chat } from "@/lib/types"
@@ -14,6 +14,10 @@ interface MobileHeaderProps {
   onOpenInGitHub: () => void
   onOpenEnvVars: () => void
   onOpenCommandPalette?: () => void
+  /** Whether the current user is an admin — gates the "Increase resources" item. */
+  isAdmin?: boolean
+  /** Open the sandbox resize modal. Omitted when there's no sandbox to resize. */
+  onOpenSandboxResize?: () => void
 }
 
 export function MobileHeader({
@@ -24,6 +28,8 @@ export function MobileHeader({
   onOpenInGitHub,
   onOpenEnvVars,
   onOpenCommandPalette,
+  isAdmin,
+  onOpenSandboxResize,
 }: MobileHeaderProps) {
   const modals = useModals()
   const mobileTitleMenuRef = useRef<HTMLDivElement>(null)
@@ -104,6 +110,19 @@ export function MobileHeader({
                 <span className="h-4 w-4 flex items-center justify-center text-sm italic font-serif">𝑥</span>
                 Environment variables
               </button>
+
+              {isAdmin && onOpenSandboxResize && (
+                <button
+                  onClick={() => {
+                    modals.setMobileTitleMenuOpen(false)
+                    onOpenSandboxResize()
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent text-left cursor-pointer"
+                >
+                  <HardDrive className="h-4 w-4" />
+                  Increase resources
+                </button>
+              )}
 
               <div className="my-1 border-t border-border" />
 

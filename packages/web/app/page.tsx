@@ -683,6 +683,10 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
             onOpenMenu={() => sidebar.setMobileSidebarOpen(true)}
             onOpenInGitHub={handleOpenInGitHub}
             onOpenEnvVars={handleOpenEnvVars}
+            isAdmin={!!session?.user?.isAdmin}
+            onOpenSandboxResize={
+              currentChat?.sandboxId ? () => modals.setSandboxResizeModalOpen(true) : undefined
+            }
           />
         )}
 
@@ -726,6 +730,10 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   onDraftChange={handleDraftChange}
                   isSending={isSendingMessage}
                   isAuthenticated={!!session}
+                  isAdmin={!!session?.user?.isAdmin}
+                  onOpenSandboxResize={
+                    currentChat?.sandboxId ? () => modals.setSandboxResizeModalOpen(true) : undefined
+                  }
                 />
               )}
             </div>

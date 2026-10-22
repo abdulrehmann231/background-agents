@@ -44,6 +44,10 @@ export interface ModalContextValue {
   envVarsModalOpen: boolean
   setEnvVarsModalOpen: (open: boolean) => void
 
+  // Sandbox resize modal (admin-only: bump RAM/disk on the current chat's sandbox)
+  sandboxResizeModalOpen: boolean
+  setSandboxResizeModalOpen: (open: boolean) => void
+
   // MCP servers picker (popover, attached to chat input)
   mcpServersModalOpen: boolean
   setMcpServersModalOpen: (open: boolean) => void
@@ -101,6 +105,9 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
 
   // Environment variables modal
   const [envVarsModalOpen, setEnvVarsModalOpen] = useState(false)
+
+  // Sandbox resize modal
+  const [sandboxResizeModalOpen, setSandboxResizeModalOpen] = useState(false)
 
   // MCP servers picker (popover, attached to chat input)
   const [mcpServersModalOpen, setMcpServersModalOpen] = useState(false)
@@ -183,6 +190,10 @@ export function ModalProvider({ children, isMobile, onMobileSidebarClose }: Moda
     // Environment variables modal
     envVarsModalOpen,
     setEnvVarsModalOpen,
+
+    // Sandbox resize modal
+    sandboxResizeModalOpen,
+    setSandboxResizeModalOpen,
 
     // MCP servers picker (popover, attached to chat input)
     mcpServersModalOpen,
