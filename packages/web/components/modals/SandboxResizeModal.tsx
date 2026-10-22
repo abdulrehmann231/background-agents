@@ -19,6 +19,10 @@ const MAX_GB = 10
 const DEFAULT_MEMORY_GB = 2
 const DEFAULT_DISK_GB = 5
 
+function clamp(value: number): number {
+  return Math.min(Math.max(value, MIN_GB), MAX_GB)
+}
+
 function sliderClasses() {
   return cn(
     "w-full h-1.5 appearance-none rounded-full bg-muted cursor-pointer accent-primary",
@@ -42,21 +46,48 @@ function sliderClasses() {
 export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false }: SandboxResizeModalProps) {
   const [memory, setMemory] = useState(DEFAULT_MEMORY_GB)
   const [disk, setDisk] = useState(DEFAULT_DISK_GB)
+  const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // Reset to defaults each time the modal opens so stale state from a
-  // previous sandbox never leaks into the next one.
+  // On open, load what's actually provisioned right now rather than
+  // snapping the sliders back to a hardcoded default — otherwise a resize
+  // that already landed would look reverted the next time this opens.
   useEffect(() => {
-    if (open) {
+    if (!open) return
+    setError(null)
+    setSuccess(false)
+    setSubmitting(false)
+
+    if (!sandboxId) {
       setMemory(DEFAULT_MEMORY_GB)
       setDisk(DEFAULT_DISK_GB)
-      setError(null)
-      setSuccess(false)
-      setSubmitting(false)
+      return
     }
-  }, [open])
+
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/sandbox/resize?sandboxId=${encodeURIComponent(sandboxId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        if (typeof data.memory === "number") setMemory(clamp(Math.round(data.memory)))
+        if (typeof data.disk === "number") setDisk(clamp(Math.round(data.disk)))
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.error("[SandboxResizeModal] Failed to load current resources:", e)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, sandboxId])
 
   const submit = async () => {
     if (!sandboxId || submitting) return
@@ -72,6 +103,10 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
       if (!res.ok) {
         throw new Error(data.error || "Could not resize sandbox")
       }
+      // Reflect exactly what the server applied, in case it differs from the
+      // request (e.g. it clamps/rounds), so the sliders stay truthful.
+      if (typeof data.memory === "number") setMemory(clamp(Math.round(data.memory)))
+      if (typeof data.disk === "number") setDisk(clamp(Math.round(data.disk)))
       setSuccess(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not resize sandbox")
@@ -123,7 +158,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
                 step={1}
                 value={memory}
                 onChange={(e) => setMemory(Number(e.target.value))}
-                disabled={submitting}
+                disabled={submitting || loading}
                 aria-label="RAM in GB"
                 className={sliderClasses()}
               />
@@ -149,7 +184,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
                 step={1}
                 value={disk}
                 onChange={(e) => setDisk(Number(e.target.value))}
-                disabled={submitting}
+                disabled={submitting || loading}
                 aria-label="Disk space in GB"
                 className={sliderClasses()}
               />
@@ -169,7 +204,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
             <button
               type="button"
               onClick={submit}
-              disabled={!sandboxId || submitting}
+              disabled={!sandboxId || submitting || loading}
               className={cn(
                 "flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground",
                 "transition-colors hover:bg-primary/90 cursor-pointer",
