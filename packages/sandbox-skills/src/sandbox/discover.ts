@@ -25,7 +25,7 @@ import type { DiscoveredSkill } from "../types"
 export function parseFrontmatter(
   content: string
 ): { name: string; description: string } | null {
-  const lines = content.split("\n")
+  const lines = content.replace(/\r\n?/g, "\n").split("\n")
 
   // Must start with ---
   if (lines[0]?.trim() !== "---") return null
