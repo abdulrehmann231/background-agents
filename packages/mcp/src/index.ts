@@ -1,7 +1,7 @@
 /**
  * @background-agents/mcp
  *
- * MCP provider abstractions for GitHub and Smithery.
+ * MCP provider abstractions for GitHub, Smithery, and Gmail.
  *
  * This package provides framework-agnostic implementations for connecting to
  * MCP servers through different providers:
@@ -11,6 +11,9 @@
  *
  * - **Smithery**: Uses Smithery Connect to manage connections with per-server
  *   OAuth flows.
+ *
+ * - **Gmail**: Our own MCP server (served by the web app) that enforces a
+ *   per-connection tool policy in front of the Gmail API.
  *
  * @example
  * ```typescript
@@ -64,3 +67,20 @@ export {
   SMITHERY_API_BASE,
   isSmitheryServer,
 } from "./smithery"
+
+// Gmail provider
+export {
+  GMAIL_MCP_QUALIFIED_NAME,
+  GMAIL_TOOL_NAMES,
+  type GmailToolName,
+  gmailToolPolicySchema,
+  type GmailToolPolicy,
+  GMAIL_POLICY_PRESETS,
+  DEFAULT_GMAIL_POLICY,
+  parseGmailToolPolicy,
+  createGmailMcpProvider,
+  GmailMcpProvider,
+  type GmailMcpConfig,
+  serveGmailMcp,
+  type ServeGmailMcpOptions,
+} from "./gmail"

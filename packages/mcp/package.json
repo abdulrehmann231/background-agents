@@ -1,7 +1,7 @@
 {
   "name": "@background-agents/mcp",
   "version": "0.1.0",
-  "description": "MCP provider abstractions for GitHub and Smithery",
+  "description": "MCP provider abstractions for GitHub, Smithery, and Gmail",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -27,6 +27,16 @@
         "default": "./dist/github/index.cjs"
       }
     },
+    "./gmail": {
+      "import": {
+        "types": "./dist/gmail/index.d.ts",
+        "default": "./dist/gmail/index.js"
+      },
+      "require": {
+        "types": "./dist/gmail/index.d.cts",
+        "default": "./dist/gmail/index.cjs"
+      }
+    },
     "./smithery": {
       "import": {
         "types": "./dist/smithery/index.d.ts",
@@ -43,7 +53,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/github/index.ts src/smithery/index.ts --format esm,cjs --dts --clean --sourcemap",
+    "build": "tsup src/index.ts src/github/index.ts src/smithery/index.ts src/gmail/index.ts --format esm,cjs --dts --clean --sourcemap",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build"
