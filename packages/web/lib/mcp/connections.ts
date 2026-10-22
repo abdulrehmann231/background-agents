@@ -1,8 +1,9 @@
 /**
- * Owner-parameterized handlers for MCP connection CRUD + GitHub sentinel +
- * Smithery finalize. The per-owner Next.js route files are thin wrappers that
+ * Owner-parameterized handlers for MCP connection CRUD + GitHub/Gmail
+ * sentinels + Gmail tool policy + Smithery finalize. The per-owner Next.js route files are thin wrappers that
  * do auth, build the McpOwner, then delegate here.
  */
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db/prisma"
 import { encrypt } from "@/lib/db/encryption"
 import {
@@ -17,7 +18,11 @@ import {
   isSmitheryServer,
   GITHUB_MCP_QUALIFIED_NAME,
   GITHUB_MCP_URL,
+  GMAIL_MCP_QUALIFIED_NAME,
+  GMAIL_POLICY_PRESETS,
+  gmailToolPolicySchema,
 } from "@background-agents/mcp"
+import { getGmailMcpUrl } from "./gmail"
 import {
   type McpOwner,
   ownerCreateData,
@@ -49,6 +54,7 @@ export async function listConnectionsResponse(owner: McpOwner): Promise<Response
       iconUrl: true,
       status: true,
       lastError: true,
+      toolPolicy: true,
       createdAt: true,
     },
   })
@@ -175,8 +181,37 @@ export async function disconnectResponse(
 }
 
 // =============================================================================
-// GitHub sentinel attach
+// Sentinel attach (GitHub, Gmail). These rows point at a first-party server;
+// the runtime loader mints credentials per turn, so nothing secret is stored.
 // =============================================================================
+
+async function attachSentinelResponse(
+  owner: McpOwner,
+  create: Pick<
+    Prisma.McpServerConnectionUncheckedCreateInput,
+    "qualifiedName" | "displayName" | "mcpUrl" | "toolPolicy"
+  >
+): Promise<Response> {
+  try {
+    const { id: serverId } = await prisma.mcpServerConnection.upsert({
+      where: ownerUniqueWhere(owner, create.qualifiedName),
+      create: {
+        ...ownerCreateData(owner),
+        ...create,
+        iconUrl: null,
+        status: "connected",
+      },
+      update: {
+        status: "connected",
+        lastError: null,
+      },
+      select: { id: true },
+    })
+    return Response.json({ connected: true, serverId })
+  } catch (err) {
+    return internalError(err)
+  }
+}
 
 export async function attachGithubResponse(
   owner: McpOwner,
@@ -192,25 +227,73 @@ export async function attachGithubResponse(
       { status: 409 }
     )
   }
+  return attachSentinelResponse(owner, {
+    qualifiedName: GITHUB_MCP_QUALIFIED_NAME,
+    displayName: "GitHub",
+    mcpUrl: GITHUB_MCP_URL,
+  })
+}
+
+export async function attachGmailResponse(
+  owner: McpOwner,
+  userId: string
+): Promise<Response> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { googleRefreshTokenEncrypted: true },
+  })
+  if (!user?.googleRefreshTokenEncrypted) {
+    return Response.json(
+      { error: "Google account not connected for this user" },
+      { status: 409 }
+    )
+  }
+  return attachSentinelResponse(owner, {
+    qualifiedName: GMAIL_MCP_QUALIFIED_NAME,
+    displayName: "Gmail",
+    mcpUrl: getGmailMcpUrl(),
+    // Chats start at read + draft (a person sends); scheduled jobs run
+    // unattended, so they start read-only.
+    toolPolicy:
+      owner.kind === "chat"
+        ? GMAIL_POLICY_PRESETS.readDraft
+        : GMAIL_POLICY_PRESETS.readOnly,
+  })
+}
+
+// =============================================================================
+// Gmail tool policy update
+// =============================================================================
+
+export async function updateToolPolicyResponse(
+  owner: McpOwner,
+  serverId: string,
+  body: unknown
+): Promise<Response> {
+  const parsed = gmailToolPolicySchema.safeParse(
+    (body as { toolPolicy?: unknown } | null)?.toolPolicy
+  )
+  if (!parsed.success) {
+    return badRequest(`Invalid toolPolicy: ${parsed.error.message}`)
+  }
+
+  const server = await prisma.mcpServerConnection.findUnique({
+    where: { id: serverId },
+    select: { chatId: true, scheduledJobId: true, qualifiedName: true },
+  })
+  if (!server || !rowMatchesOwner(server, owner)) {
+    return notFound("Server not found")
+  }
+  if (server.qualifiedName !== GMAIL_MCP_QUALIFIED_NAME) {
+    return badRequest("Only Gmail connections have a tool policy")
+  }
 
   try {
-    const { id: serverId } = await prisma.mcpServerConnection.upsert({
-      where: ownerUniqueWhere(owner, GITHUB_MCP_QUALIFIED_NAME),
-      create: {
-        ...ownerCreateData(owner),
-        qualifiedName: GITHUB_MCP_QUALIFIED_NAME,
-        displayName: "GitHub",
-        iconUrl: null,
-        mcpUrl: GITHUB_MCP_URL,
-        status: "connected",
-      },
-      update: {
-        status: "connected",
-        lastError: null,
-      },
-      select: { id: true },
+    await prisma.mcpServerConnection.update({
+      where: { id: serverId },
+      data: { toolPolicy: parsed.data },
     })
-    return Response.json({ connected: true, serverId })
+    return Response.json({ toolPolicy: parsed.data })
   } catch (err) {
     return internalError(err)
   }
