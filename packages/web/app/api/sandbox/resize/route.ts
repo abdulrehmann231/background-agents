@@ -85,6 +85,17 @@ export async function POST(req: Request) {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
     const sandbox = await daytona.get(sandboxId)
 
+    // Daytona only supports growing memory/disk, never shrinking (hot resize
+    // can only increase CPU/memory, and disk resize throws on any decrease).
+    // The UI already floors the sliders at the current allocation, but check
+    // again here in case the request didn't come from that UI.
+    if (memoryGb != null && memoryGb < sandbox.memory) {
+      return badRequest(`memory can only be increased (currently ${sandbox.memory} GiB)`)
+    }
+    if (diskGb != null && diskGb < sandbox.disk) {
+      return badRequest(`disk can only be increased (currently ${sandbox.disk} GiB)`)
+    }
+
     const wasRunning = sandbox.state === "started"
     // Disk resize requires a stopped sandbox; CPU/memory hot-resize on a
     // running one. Stop unconditionally when disk is changing so one request

@@ -19,8 +19,8 @@ const MAX_GB = 10
 const DEFAULT_MEMORY_GB = 2
 const DEFAULT_DISK_GB = 5
 
-function clamp(value: number): number {
-  return Math.min(Math.max(value, MIN_GB), MAX_GB)
+function clamp(value: number, floor: number = MIN_GB): number {
+  return Math.min(Math.max(value, floor), MAX_GB)
 }
 
 function sliderClasses() {
@@ -46,14 +46,25 @@ function sliderClasses() {
 export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false }: SandboxResizeModalProps) {
   const [memory, setMemory] = useState(DEFAULT_MEMORY_GB)
   const [disk, setDisk] = useState(DEFAULT_DISK_GB)
+  // Floors below which the sliders won't go — Daytona only supports growing
+  // memory/disk, never shrinking (hot resize can only increase CPU/memory,
+  // and disk resize throws on any decrease). Null until we've loaded the
+  // sandbox's actual current allocation.
+  const [memoryFloor, setMemoryFloor] = useState<number | null>(null)
+  const [diskFloor, setDiskFloor] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  const memoryMin = memoryFloor ?? MIN_GB
+  const diskMin = diskFloor ?? MIN_GB
+
   // On open, load what's actually provisioned right now rather than
   // snapping the sliders back to a hardcoded default — otherwise a resize
-  // that already landed would look reverted the next time this opens.
+  // that already landed would look reverted the next time this opens. This
+  // also sets the floor the sliders can't be dragged below, since the
+  // Daytona API rejects any decrease.
   useEffect(() => {
     if (!open) return
     setError(null)
@@ -63,6 +74,8 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
     if (!sandboxId) {
       setMemory(DEFAULT_MEMORY_GB)
       setDisk(DEFAULT_DISK_GB)
+      setMemoryFloor(null)
+      setDiskFloor(null)
       return
     }
 
@@ -72,8 +85,18 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
-        if (typeof data.memory === "number") setMemory(clamp(Math.round(data.memory)))
-        if (typeof data.disk === "number") setDisk(clamp(Math.round(data.disk)))
+        if (typeof data.memory === "number") {
+          // Ceil the floor so a fractional current value (e.g. 2.3 GiB)
+          // never leaves the slider sitting below what's actually allocated.
+          const floor = clamp(Math.ceil(data.memory))
+          setMemoryFloor(floor)
+          setMemory(clamp(Math.round(data.memory), floor))
+        }
+        if (typeof data.disk === "number") {
+          const floor = clamp(Math.ceil(data.disk))
+          setDiskFloor(floor)
+          setDisk(clamp(Math.round(data.disk), floor))
+        }
       })
       .catch((e) => {
         if (!cancelled) {
@@ -104,9 +127,18 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
         throw new Error(data.error || "Could not resize sandbox")
       }
       // Reflect exactly what the server applied, in case it differs from the
-      // request (e.g. it clamps/rounds), so the sliders stay truthful.
-      if (typeof data.memory === "number") setMemory(clamp(Math.round(data.memory)))
-      if (typeof data.disk === "number") setDisk(clamp(Math.round(data.disk)))
+      // request (e.g. it clamps/rounds), so the sliders stay truthful. The
+      // new value also becomes the new floor, since it can't be shrunk back.
+      if (typeof data.memory === "number") {
+        const floor = clamp(Math.ceil(data.memory))
+        setMemoryFloor(floor)
+        setMemory(clamp(Math.round(data.memory), floor))
+      }
+      if (typeof data.disk === "number") {
+        const floor = clamp(Math.ceil(data.disk))
+        setDiskFloor(floor)
+        setDisk(clamp(Math.round(data.disk), floor))
+      }
       setSuccess(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not resize sandbox")
@@ -139,7 +171,8 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
 
           <div className="px-4 pt-2 pb-4 space-y-5">
             <p className="text-xs text-muted-foreground">
-              Admin only. Increasing disk requires briefly stopping the sandbox.
+              Admin only. Resources can only be increased, not decreased.
+              Increasing disk requires briefly stopping the sandbox.
             </p>
 
             {/* RAM slider */}
@@ -153,17 +186,17 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               <input
                 id="resize-memory"
                 type="range"
-                min={MIN_GB}
+                min={memoryMin}
                 max={MAX_GB}
                 step={1}
                 value={memory}
-                onChange={(e) => setMemory(Number(e.target.value))}
+                onChange={(e) => setMemory(clamp(Number(e.target.value), memoryMin))}
                 disabled={submitting || loading}
                 aria-label="RAM in GB"
                 className={sliderClasses()}
               />
               <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>{MIN_GB} GB</span>
+                <span>{memoryMin} GB{memoryFloor != null ? " (current)" : ""}</span>
                 <span>{MAX_GB} GB</span>
               </div>
             </div>
@@ -179,17 +212,17 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               <input
                 id="resize-disk"
                 type="range"
-                min={MIN_GB}
+                min={diskMin}
                 max={MAX_GB}
                 step={1}
                 value={disk}
-                onChange={(e) => setDisk(Number(e.target.value))}
+                onChange={(e) => setDisk(clamp(Number(e.target.value), diskMin))}
                 disabled={submitting || loading}
                 aria-label="Disk space in GB"
                 className={sliderClasses()}
               />
               <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>{MIN_GB} GB</span>
+                <span>{diskMin} GB{diskFloor != null ? " (current)" : ""}</span>
                 <span>{MAX_GB} GB</span>
               </div>
             </div>
