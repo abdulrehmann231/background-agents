@@ -25,7 +25,7 @@ function clamp(value: number, floor: number = MIN_GB): number {
 
 function sliderClasses() {
   return cn(
-    "w-full h-1.5 appearance-none rounded-full bg-muted cursor-pointer accent-primary",
+    "relative w-full h-1.5 appearance-none rounded-full bg-muted cursor-pointer accent-primary",
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
     "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4",
     "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
@@ -34,6 +34,71 @@ function sliderClasses() {
     "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
     "[&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background",
     "disabled:opacity-50 disabled:cursor-not-allowed"
+  )
+}
+
+/**
+ * A 1-10 GB slider with the segment below `floor` visually greyed out and
+ * unreachable, rather than shrinking the slider's own min — the full 1-10
+ * range stays visible so "GB you can't go below" and "GB that don't exist"
+ * read differently.
+ */
+function ResourceSlider({
+  id,
+  label,
+  value,
+  floor,
+  disabled,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: number
+  /** Lowest value the thumb may land on; null while still loading. */
+  floor: number | null
+  disabled: boolean
+  onChange: (value: number) => void
+}) {
+  const effectiveFloor = floor ?? MIN_GB
+  const disabledPct = ((effectiveFloor - MIN_GB) / (MAX_GB - MIN_GB)) * 100
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label htmlFor={id} className="text-xs text-muted-foreground">
+          {label}
+        </label>
+        <span className="text-sm font-medium tabular-nums">{value} GB</span>
+      </div>
+      <div className="relative flex items-center">
+        <input
+          id={id}
+          type="range"
+          min={MIN_GB}
+          max={MAX_GB}
+          step={1}
+          value={value}
+          onChange={(e) => onChange(clamp(Number(e.target.value), effectiveFloor))}
+          disabled={disabled}
+          aria-label={`${label} in GB`}
+          aria-valuemin={effectiveFloor}
+          className={sliderClasses()}
+        />
+        {/* Greys out the unreachable segment below the current allocation —
+            purely visual, pointer-events-none so dragging still goes through
+            to the input underneath; onChange clamps anything landing here. */}
+        {disabledPct > 0 && (
+          <div
+            className="absolute left-0 h-1.5 rounded-l-full bg-foreground/15 pointer-events-none"
+            style={{ width: `${disabledPct}%` }}
+          />
+        )}
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
+        <span>{MIN_GB} GB{floor != null && floor > MIN_GB ? ` (current: ${floor})` : ""}</span>
+        <span>{MAX_GB} GB</span>
+      </div>
+    </div>
   )
 }
 
@@ -56,9 +121,6 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-
-  const memoryMin = memoryFloor ?? MIN_GB
-  const diskMin = diskFloor ?? MIN_GB
 
   // On open, load what's actually provisioned right now rather than
   // snapping the sliders back to a hardcoded default — otherwise a resize
@@ -175,57 +237,23 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               Increasing disk requires briefly stopping the sandbox.
             </p>
 
-            {/* RAM slider */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="resize-memory" className="text-xs text-muted-foreground">
-                  RAM
-                </label>
-                <span className="text-sm font-medium tabular-nums">{memory} GB</span>
-              </div>
-              <input
-                id="resize-memory"
-                type="range"
-                min={memoryMin}
-                max={MAX_GB}
-                step={1}
-                value={memory}
-                onChange={(e) => setMemory(clamp(Number(e.target.value), memoryMin))}
-                disabled={submitting || loading}
-                aria-label="RAM in GB"
-                className={sliderClasses()}
-              />
-              <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>{memoryMin} GB{memoryFloor != null ? " (current)" : ""}</span>
-                <span>{MAX_GB} GB</span>
-              </div>
-            </div>
+            <ResourceSlider
+              id="resize-memory"
+              label="RAM"
+              value={memory}
+              floor={memoryFloor}
+              disabled={submitting || loading}
+              onChange={setMemory}
+            />
 
-            {/* Disk slider */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="resize-disk" className="text-xs text-muted-foreground">
-                  Disk space
-                </label>
-                <span className="text-sm font-medium tabular-nums">{disk} GB</span>
-              </div>
-              <input
-                id="resize-disk"
-                type="range"
-                min={diskMin}
-                max={MAX_GB}
-                step={1}
-                value={disk}
-                onChange={(e) => setDisk(clamp(Number(e.target.value), diskMin))}
-                disabled={submitting || loading}
-                aria-label="Disk space in GB"
-                className={sliderClasses()}
-              />
-              <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>{diskMin} GB{diskFloor != null ? " (current)" : ""}</span>
-                <span>{MAX_GB} GB</span>
-              </div>
-            </div>
+            <ResourceSlider
+              id="resize-disk"
+              label="Disk space"
+              value={disk}
+              floor={diskFloor}
+              disabled={submitting || loading}
+              onChange={setDisk}
+            />
 
             {error && <p className="text-xs text-destructive">{error}</p>}
             {success && !error && (
