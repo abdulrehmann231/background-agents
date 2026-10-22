@@ -23,20 +23,6 @@ export function cgroupPath(jobId: string): string {
 }
 
 /**
- * Parse the PID printed by `... & echo $!`. The launcher prints exactly one
- * number on the last line; we take the last whitespace-delimited token.
- */
-export function parsePid(output: string | undefined): number {
-  const pid = Number((output ?? "").trim().split(/\s+/).pop())
-  if (!Number.isInteger(pid) || pid < 1) {
-    throw new Error(
-      `sandbox-jobs: could not parse pid from ${JSON.stringify((output ?? "").slice(0, 200))}`
-    )
-  }
-  return pid
-}
-
-/**
  * Time-sortable, collision-resistant id: `<unix-ms>-<base36 random>`. The
  * timestamp prefix makes `ls` chronological and age-based cleanup trivial; the
  * random suffix avoids collisions when two jobs start in the same millisecond.
