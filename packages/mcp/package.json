@@ -49,7 +49,9 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "jose": "^6.0.11"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "jose": "^6.0.11",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
