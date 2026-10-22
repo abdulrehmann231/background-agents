@@ -10,7 +10,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { decrypt } from "@/lib/db/encryption"
 import { serverConfigError, unauthorized } from "@/lib/db/api-helpers"
-import { getGmailProvider } from "@/lib/mcp/gmail"
+import { GMAIL_CONFIG_VARS, getGmailProvider } from "@/lib/mcp/gmail"
 import {
   GMAIL_MCP_QUALIFIED_NAME,
   parseGmailToolPolicy,
@@ -23,7 +23,7 @@ const ownerUserSelect = {
 
 async function handle(req: Request): Promise<Response> {
   const provider = getGmailProvider()
-  if (!provider) return serverConfigError("GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GMAIL_MCP_JWT_SECRET")
+  if (!provider) return serverConfigError(GMAIL_CONFIG_VARS)
 
   const bearer = req.headers.get("authorization")?.match(/^Bearer (.+)$/i)?.[1]
   const connectionId = bearer ? await provider.verifyConnectionToken(bearer) : null
