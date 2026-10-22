@@ -18,14 +18,27 @@ const MIN_GB = 1
 const MAX_GB = 10
 const DEFAULT_MEMORY_GB = 2
 const DEFAULT_DISK_GB = 5
+const GIB = 1024 ** 3
+
+interface UsageStat {
+  usedGb: number
+  totalGb: number
+}
 
 function clamp(value: number, floor: number = MIN_GB): number {
   return Math.min(Math.max(value, floor), MAX_GB)
 }
 
+function bytesToUsage(usedBytes: number, totalBytes: number): UsageStat {
+  return {
+    usedGb: Math.round((usedBytes / GIB) * 10) / 10,
+    totalGb: Math.round((totalBytes / GIB) * 10) / 10,
+  }
+}
+
 function sliderClasses() {
   return cn(
-    "w-full h-1.5 appearance-none rounded-full bg-muted cursor-pointer accent-primary",
+    "relative w-full h-1.5 appearance-none rounded-full bg-muted cursor-pointer accent-primary",
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
     "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4",
     "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
@@ -34,6 +47,102 @@ function sliderClasses() {
     "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
     "[&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background",
     "disabled:opacity-50 disabled:cursor-not-allowed"
+  )
+}
+
+/**
+ * A 1-10 GB slider with the segment below `floor` visually greyed out and
+ * unreachable, rather than shrinking the slider's own min — the full 1-10
+ * range stays visible so "GB you can't go below" and "GB that don't exist"
+ * read differently.
+ */
+function ResourceSlider({
+  id,
+  label,
+  value,
+  floor,
+  usage,
+  loading,
+  disabled,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: number
+  /** Lowest value the thumb may land on; null while still loading. */
+  floor: number | null
+  /** Live used/total from inside the sandbox; null while loading or stopped. */
+  usage: UsageStat | null
+  /** Still fetching the initial allocation/usage. */
+  loading: boolean
+  disabled: boolean
+  onChange: (value: number) => void
+}) {
+  const effectiveFloor = floor ?? MIN_GB
+  const disabledPct = ((effectiveFloor - MIN_GB) / (MAX_GB - MIN_GB)) * 100
+  const usagePct = usage && usage.totalGb > 0 ? Math.min(100, (usage.usedGb / usage.totalGb) * 100) : null
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label htmlFor={id} className="text-xs text-muted-foreground">
+          {label}
+        </label>
+        <span className="text-sm font-medium tabular-nums">{value} GB</span>
+      </div>
+      <div className="relative flex items-center">
+        <input
+          id={id}
+          type="range"
+          min={MIN_GB}
+          max={MAX_GB}
+          step={1}
+          value={value}
+          onChange={(e) => onChange(clamp(Number(e.target.value), effectiveFloor))}
+          disabled={disabled}
+          aria-label={`${label} in GB`}
+          aria-valuemin={effectiveFloor}
+          className={sliderClasses()}
+        />
+        {/* Greys out the unreachable segment below the current allocation —
+            purely visual, pointer-events-none so dragging still goes through
+            to the input underneath; onChange clamps anything landing here. */}
+        {disabledPct > 0 && (
+          <div
+            className="absolute left-0 h-1.5 rounded-l-full bg-foreground/15 pointer-events-none"
+            style={{ width: `${disabledPct}%` }}
+          />
+        )}
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
+        <span>{MIN_GB} GB{floor != null && floor > MIN_GB ? ` (current: ${floor})` : ""}</span>
+        <span>{MAX_GB} GB</span>
+      </div>
+
+      {/* Live used/available, read from inside the sandbox — separate scale
+          from the slider above (that one spans the fixed 1-10 GB allocation
+          range; this one is used-vs-currently-allocated). */}
+      {usage ? (
+        <div className="mt-2">
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                usagePct != null && usagePct >= 90 ? "bg-destructive" : "bg-foreground/40"
+              )}
+              style={{ width: `${usagePct ?? 0}%` }}
+            />
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+            {usage.usedGb} GB used of {usage.totalGb} GB ({Math.round(usagePct ?? 0)}%)
+          </div>
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {loading ? "Loading usage…" : "Usage unavailable (sandbox not running)"}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -52,13 +161,54 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
   // sandbox's actual current allocation.
   const [memoryFloor, setMemoryFloor] = useState<number | null>(null)
   const [diskFloor, setDiskFloor] = useState<number | null>(null)
+  // Live used/total, read from inside the sandbox. Null when loading, or when
+  // the sandbox is stopped (nothing to query usage from).
+  const [memoryUsage, setMemoryUsage] = useState<UsageStat | null>(null)
+  const [diskUsage, setDiskUsage] = useState<UsageStat | null>(null)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  const memoryMin = memoryFloor ?? MIN_GB
-  const diskMin = diskFloor ?? MIN_GB
+  // Applies a /api/sandbox/resize response (GET or POST) to the sliders:
+  // floor + value from the allocation, used/total from the usage block. Used
+  // both for the initial load and to refresh after a successful resize,
+  // since a resize changes both the allocation and (for disk) what "used"
+  // looks like against the new total.
+  const applyStatus = (data: {
+    memory?: number
+    disk?: number
+    usage?: {
+      memoryUsedBytes?: number
+      memoryTotalBytes?: number
+      diskUsedBytes?: number
+      diskTotalBytes?: number
+    } | null
+  }) => {
+    if (typeof data.memory === "number") {
+      // Ceil the floor so a fractional current value (e.g. 2.3 GiB) never
+      // leaves the slider sitting below what's actually allocated.
+      const floor = clamp(Math.ceil(data.memory))
+      setMemoryFloor(floor)
+      setMemory(clamp(Math.round(data.memory), floor))
+    }
+    if (typeof data.disk === "number") {
+      const floor = clamp(Math.ceil(data.disk))
+      setDiskFloor(floor)
+      setDisk(clamp(Math.round(data.disk), floor))
+    }
+    const usage = data.usage
+    setMemoryUsage(
+      usage && typeof usage.memoryUsedBytes === "number" && typeof usage.memoryTotalBytes === "number"
+        ? bytesToUsage(usage.memoryUsedBytes, usage.memoryTotalBytes)
+        : null
+    )
+    setDiskUsage(
+      usage && typeof usage.diskUsedBytes === "number" && typeof usage.diskTotalBytes === "number"
+        ? bytesToUsage(usage.diskUsedBytes, usage.diskTotalBytes)
+        : null
+    )
+  }
 
   // On open, load what's actually provisioned right now rather than
   // snapping the sliders back to a hardcoded default — otherwise a resize
@@ -76,6 +226,8 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
       setDisk(DEFAULT_DISK_GB)
       setMemoryFloor(null)
       setDiskFloor(null)
+      setMemoryUsage(null)
+      setDiskUsage(null)
       return
     }
 
@@ -84,19 +236,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
     fetch(`/api/sandbox/resize?sandboxId=${encodeURIComponent(sandboxId)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (cancelled) return
-        if (typeof data.memory === "number") {
-          // Ceil the floor so a fractional current value (e.g. 2.3 GiB)
-          // never leaves the slider sitting below what's actually allocated.
-          const floor = clamp(Math.ceil(data.memory))
-          setMemoryFloor(floor)
-          setMemory(clamp(Math.round(data.memory), floor))
-        }
-        if (typeof data.disk === "number") {
-          const floor = clamp(Math.ceil(data.disk))
-          setDiskFloor(floor)
-          setDisk(clamp(Math.round(data.disk), floor))
-        }
+        if (!cancelled) applyStatus(data)
       })
       .catch((e) => {
         if (!cancelled) {
@@ -110,6 +250,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sandboxId])
 
   const submit = async () => {
@@ -126,20 +267,14 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
       if (!res.ok) {
         throw new Error(data.error || "Could not resize sandbox")
       }
-      // Reflect exactly what the server applied, in case it differs from the
-      // request (e.g. it clamps/rounds), so the sliders stay truthful. The
-      // new value also becomes the new floor, since it can't be shrunk back.
-      if (typeof data.memory === "number") {
-        const floor = clamp(Math.ceil(data.memory))
-        setMemoryFloor(floor)
-        setMemory(clamp(Math.round(data.memory), floor))
-      }
-      if (typeof data.disk === "number") {
-        const floor = clamp(Math.ceil(data.disk))
-        setDiskFloor(floor)
-        setDisk(clamp(Math.round(data.disk), floor))
-      }
+      // The resize response doesn't include fresh usage (the sandbox was
+      // just stopped/resized/restarted, so usage right now is a race either
+      // way) — re-fetch so the bars reflect the new allocation cleanly.
       setSuccess(true)
+      const refreshed = await fetch(`/api/sandbox/resize?sandboxId=${encodeURIComponent(sandboxId)}`).then((r) =>
+        r.json()
+      )
+      applyStatus(refreshed)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not resize sandbox")
     } finally {
@@ -175,57 +310,27 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               Increasing disk requires briefly stopping the sandbox.
             </p>
 
-            {/* RAM slider */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="resize-memory" className="text-xs text-muted-foreground">
-                  RAM
-                </label>
-                <span className="text-sm font-medium tabular-nums">{memory} GB</span>
-              </div>
-              <input
-                id="resize-memory"
-                type="range"
-                min={memoryMin}
-                max={MAX_GB}
-                step={1}
-                value={memory}
-                onChange={(e) => setMemory(clamp(Number(e.target.value), memoryMin))}
-                disabled={submitting || loading}
-                aria-label="RAM in GB"
-                className={sliderClasses()}
-              />
-              <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>{memoryMin} GB{memoryFloor != null ? " (current)" : ""}</span>
-                <span>{MAX_GB} GB</span>
-              </div>
-            </div>
+            <ResourceSlider
+              id="resize-memory"
+              label="RAM"
+              value={memory}
+              floor={memoryFloor}
+              usage={memoryUsage}
+              loading={loading}
+              disabled={submitting || loading}
+              onChange={setMemory}
+            />
 
-            {/* Disk slider */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="resize-disk" className="text-xs text-muted-foreground">
-                  Disk space
-                </label>
-                <span className="text-sm font-medium tabular-nums">{disk} GB</span>
-              </div>
-              <input
-                id="resize-disk"
-                type="range"
-                min={diskMin}
-                max={MAX_GB}
-                step={1}
-                value={disk}
-                onChange={(e) => setDisk(clamp(Number(e.target.value), diskMin))}
-                disabled={submitting || loading}
-                aria-label="Disk space in GB"
-                className={sliderClasses()}
-              />
-              <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>{diskMin} GB{diskFloor != null ? " (current)" : ""}</span>
-                <span>{MAX_GB} GB</span>
-              </div>
-            </div>
+            <ResourceSlider
+              id="resize-disk"
+              label="Disk space"
+              value={disk}
+              floor={diskFloor}
+              usage={diskUsage}
+              loading={loading}
+              disabled={submitting || loading}
+              onChange={setDisk}
+            />
 
             {error && <p className="text-xs text-destructive">{error}</p>}
             {success && !error && (
