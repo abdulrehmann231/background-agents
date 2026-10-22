@@ -15,7 +15,9 @@ interface SandboxResizeModalProps {
 }
 
 const MIN_GB = 1
-const MAX_GB = 10
+/** Hard ceilings — must match MAX_MEMORY_GB/MAX_DISK_GB in the API route. */
+const MAX_MEMORY_GB = 10
+const MAX_DISK_GB = 50
 const DEFAULT_MEMORY_GB = 2
 const DEFAULT_DISK_GB = 5
 const GIB = 1024 ** 3
@@ -25,8 +27,8 @@ interface UsageStat {
   totalGb: number
 }
 
-function clamp(value: number, floor: number = MIN_GB): number {
-  return Math.min(Math.max(value, floor), MAX_GB)
+function clamp(value: number, max: number, floor: number = MIN_GB): number {
+  return Math.min(Math.max(value, floor), max)
 }
 
 function bytesToUsage(usedBytes: number, totalBytes: number): UsageStat {
@@ -51,8 +53,8 @@ function sliderClasses() {
 }
 
 /**
- * A 1-10 GB slider with the segment below `floor` visually greyed out and
- * unreachable, rather than shrinking the slider's own min — the full 1-10
+ * A MIN_GB-max GB slider with the segment below `floor` visually greyed out
+ * and unreachable, rather than shrinking the slider's own min — the full
  * range stays visible so "GB you can't go below" and "GB that don't exist"
  * read differently.
  */
@@ -60,6 +62,7 @@ function ResourceSlider({
   id,
   label,
   value,
+  max,
   floor,
   usage,
   loading,
@@ -69,6 +72,8 @@ function ResourceSlider({
   id: string
   label: string
   value: number
+  /** Highest value the thumb may reach (e.g. 10 for RAM, 50 for disk). */
+  max: number
   /** Lowest value the thumb may land on; null while still loading. */
   floor: number | null
   /** Live used/total from inside the sandbox; null while loading or stopped. */
@@ -79,7 +84,7 @@ function ResourceSlider({
   onChange: (value: number) => void
 }) {
   const effectiveFloor = floor ?? MIN_GB
-  const disabledPct = ((effectiveFloor - MIN_GB) / (MAX_GB - MIN_GB)) * 100
+  const disabledPct = ((effectiveFloor - MIN_GB) / (max - MIN_GB)) * 100
   const usagePct = usage && usage.totalGb > 0 ? Math.min(100, (usage.usedGb / usage.totalGb) * 100) : null
 
   return (
@@ -95,10 +100,10 @@ function ResourceSlider({
           id={id}
           type="range"
           min={MIN_GB}
-          max={MAX_GB}
+          max={max}
           step={1}
           value={value}
-          onChange={(e) => onChange(clamp(Number(e.target.value), effectiveFloor))}
+          onChange={(e) => onChange(clamp(Number(e.target.value), max, effectiveFloor))}
           disabled={disabled}
           aria-label={`${label} in GB`}
           aria-valuemin={effectiveFloor}
@@ -116,12 +121,12 @@ function ResourceSlider({
       </div>
       <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
         <span>{MIN_GB} GB{floor != null && floor > MIN_GB ? ` (current: ${floor})` : ""}</span>
-        <span>{MAX_GB} GB</span>
+        <span>{max} GB</span>
       </div>
 
       {/* Live used/available, read from inside the sandbox — separate scale
-          from the slider above (that one spans the fixed 1-10 GB allocation
-          range; this one is used-vs-currently-allocated). */}
+          from the slider above (that one spans the fixed allocation range;
+          this one is used-vs-currently-allocated). */}
       {usage ? (
         <div className="mt-2">
           <div className="h-1 rounded-full bg-muted overflow-hidden">
@@ -147,8 +152,9 @@ function ResourceSlider({
 }
 
 /**
- * Admin-only modal to bump a sandbox's RAM and disk allocation, up to 10 GiB
- * each. Opened from the chat title menu and the Cmd/Ctrl+K command palette
+ * Admin-only modal to bump a sandbox's RAM (up to MAX_MEMORY_GB) and disk
+ * (up to MAX_DISK_GB) allocation. Opened from the chat title menu and the
+ * Cmd/Ctrl+K command palette
  * (both gated on `session.user.isAdmin` by the caller — this component
  * doesn't re-check admin-ness, the API route does via `requireAdmin`).
  */
@@ -188,14 +194,14 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
     if (typeof data.memory === "number") {
       // Ceil the floor so a fractional current value (e.g. 2.3 GiB) never
       // leaves the slider sitting below what's actually allocated.
-      const floor = clamp(Math.ceil(data.memory))
+      const floor = clamp(Math.ceil(data.memory), MAX_MEMORY_GB)
       setMemoryFloor(floor)
-      setMemory(clamp(Math.round(data.memory), floor))
+      setMemory(clamp(Math.round(data.memory), MAX_MEMORY_GB, floor))
     }
     if (typeof data.disk === "number") {
-      const floor = clamp(Math.ceil(data.disk))
+      const floor = clamp(Math.ceil(data.disk), MAX_DISK_GB)
       setDiskFloor(floor)
-      setDisk(clamp(Math.round(data.disk), floor))
+      setDisk(clamp(Math.round(data.disk), MAX_DISK_GB, floor))
     }
     const usage = data.usage
     setMemoryUsage(
@@ -314,6 +320,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               id="resize-memory"
               label="RAM"
               value={memory}
+              max={MAX_MEMORY_GB}
               floor={memoryFloor}
               usage={memoryUsage}
               loading={loading}
@@ -325,6 +332,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               id="resize-disk"
               label="Disk space"
               value={disk}
+              max={MAX_DISK_GB}
               floor={diskFloor}
               usage={diskUsage}
               loading={loading}

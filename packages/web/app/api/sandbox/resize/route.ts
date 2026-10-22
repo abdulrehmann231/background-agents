@@ -1,9 +1,9 @@
 import { Daytona } from "@daytonaio/sdk"
 import { badRequest, requireAdmin, isAuthError, serverConfigError } from "@/lib/db/api-helpers"
 
-/** Hard ceiling enforced server-side regardless of what the client sends. */
+/** Hard ceilings enforced server-side regardless of what the client sends. */
 const MAX_MEMORY_GB = 10
-const MAX_DISK_GB = 10
+const MAX_DISK_GB = 50
 
 /**
  * Reads live disk/memory usage from inside the sandbox via `df`/`free`, in
