@@ -11,9 +11,10 @@ interface SkillSearchViewProps {
   onOpenChange: (open: boolean) => void
   chatId: string
   repo: string
+  hasSandbox: boolean
 }
 
-export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearchViewProps) {
+export function SkillSearchView({ open, onOpenChange, chatId, repo, hasSandbox }: SkillSearchViewProps) {
   const [query, setQuery] = useState("")
   const [searchResults, setSearchResults] = useState<(SkillSearchResult & { installs?: number })[]>([])
   const [installedSkills, setInstalledSkills] = useState<Skill[]>([])
@@ -140,6 +141,16 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
 
       if (!saveRes.ok) {
         throw new Error("Failed to save skills")
+      }
+
+      // Before the first message there is no sandbox yet. The saved skills are
+      // installed when that message creates it.
+      if (!hasSandbox) {
+        await fetchInstalledSkills()
+        setSelectedHandles(new Set())
+        setInstallProgress(null)
+        setActiveTab("installed")
+        return
       }
 
       // Step 2: Install in sandbox (includes --list pre-validation)
@@ -519,12 +530,14 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
           {activeTab === "installed" && (
             <div className="flex items-center gap-3 px-4 py-3 border-t border-border bg-accent/30">
               <span className="text-sm text-muted-foreground">
-                Upload your own skill: a .zip with its SKILL.md and files.
+                {hasSandbox
+                  ? "Upload your own skill: a .zip with its SKILL.md and files."
+                  : "Send a message first to upload your own .zip skill."}
               </span>
               <div className="flex-1" />
               <button
                 onClick={() => zipInputRef.current?.click()}
-                disabled={isInstalling}
+                disabled={isInstalling || !hasSandbox}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
                 {isInstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}

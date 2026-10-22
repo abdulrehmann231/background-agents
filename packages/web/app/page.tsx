@@ -593,6 +593,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     displayChats,
     displayCurrentChatId,
     currentChat,
+    draftRepo: draftChatConfig?.id === currentChatId ? draftChatConfig.repo : null,
     availableServers,
     canBranch,
     githubBranchUrl,

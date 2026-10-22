@@ -93,7 +93,9 @@ export function AppModals({
 }: AppModalsProps) {
   const modals = useModals()
   const gitDialogs = useGit()
-  const { currentChat, currentChatId, chats, settings, credentialFlags, renameChat } = useChat()
+  const { currentChat, currentChatId, chats, settings, credentialFlags, renameChat, draftChatConfig } = useChat()
+  // A new chat stays a draft until its first message, with its repo in the draft config.
+  const skillsChat = currentChat ?? (draftChatConfig?.id === currentChatId ? draftChatConfig : null)
 
   return (
     <>
@@ -137,12 +139,13 @@ export function AppModals({
       />
 
       {/* Skills Search Modal */}
-      {currentChat?.sandboxId && isRealRepo(currentChat.repo) && (
+      {skillsChat && isRealRepo(skillsChat.repo) && (
         <SkillSearchView
           open={skillsModalOpen}
           onOpenChange={onSkillsModalOpenChange}
-          chatId={currentChat.id}
-          repo={currentChat.repo}
+          chatId={skillsChat.id}
+          repo={skillsChat.repo}
+          hasSandbox={!!currentChat?.sandboxId}
         />
       )}
 
