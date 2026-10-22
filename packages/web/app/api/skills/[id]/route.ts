@@ -8,7 +8,11 @@ import {
   internalError,
 } from "@/lib/db/api-helpers"
 import { PATHS } from "@/lib/constants"
+import { ensureSandboxStarted } from "@/lib/sandbox"
 import { uninstallSkill, getSkillNameFromHandle } from "@background-agents/sandbox-skills/sandbox"
+
+// Booting a stopped sandbox can take up to ~120s, plus the removal itself.
+export const maxDuration = 300
 
 // =============================================================================
 // DELETE - Uninstall a skill by ID (DB + sandbox filesystem)
@@ -50,6 +54,8 @@ export async function DELETE(
           if (chat?.sandboxId && chat.userId === userId) {
             const daytona = new Daytona({ apiKey: daytonaApiKey })
             const sandbox = await daytona.get(chat.sandboxId)
+            // An idle sandbox is stopped; without starting it the skill stays installed.
+            await ensureSandboxStarted(sandbox)
             const repoPath = `${PATHS.SANDBOX_HOME}/project`
 
             const skillName = getSkillNameFromHandle(skill.fullHandle)

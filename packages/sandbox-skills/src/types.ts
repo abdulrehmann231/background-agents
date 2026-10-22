@@ -67,6 +67,8 @@ export interface SkillsInstallResult {
 export interface SkillRecord {
   id: string
   fullHandle: string
+  /** Zip of an uploaded skill; absent for skills.sh skills */
+  archive?: Uint8Array | null
 }
 
 /**

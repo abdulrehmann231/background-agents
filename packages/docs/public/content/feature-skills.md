@@ -1,6 +1,6 @@
 # Skills
 
-Skills are packaged, repo-scoped abilities you install into a project from the [skills.sh](https://skills.sh) marketplace — a deploy checklist, a review workflow, a framework-specific helper. Once installed, the agent can invoke a skill during a chat in that repo.
+Skills are packaged, repo-scoped abilities you install into a project from the [skills.sh](https://skills.sh) marketplace or upload yourself — a deploy checklist, a review workflow, a framework-specific helper. Once installed, the agent can invoke a skill during a chat in that repo.
 
 Where [MCP servers](#/mcp) give an agent new *tools*, skills give it new *procedures* — packaged instructions for a specific kind of task.
 
@@ -15,6 +15,10 @@ From the skills panel, search the marketplace and install the one you want. Inst
 :::media type="image" file="skills-list.png"
 The skills panel: installed skills for this repo, with search to add more from skills.sh.
 :::
+
+## Upload your own skill
+
+Open **Installed** in the skills panel and click **Upload .zip**. The zip holds one skill: a `SKILL.md` with a `name` and `description`, plus any files it uses. It's saved for the repo and reinstalled when the sandbox is recreated. To update it, upload the new version; it doesn't sync with your local copy.
 
 ## Use a skill
 

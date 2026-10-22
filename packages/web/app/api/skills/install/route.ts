@@ -78,7 +78,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const result = await installSkills(
       sandbox,
       repoPath,
-      skills.map((s) => ({ id: s.id, fullHandle: s.fullHandle })),
+      skills.map((s) => ({ id: s.id, fullHandle: s.fullHandle, archive: s.archive })),
       async (id) => {
         // Clean up invalid DB records
         await prisma.skill.delete({ where: { id } }).catch(() => {})

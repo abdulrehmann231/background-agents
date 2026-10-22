@@ -5,6 +5,7 @@
 export { listAvailableSkills } from "./list"
 export {
   installSkill,
+  installSkillArchive,
   installSkills,
   parseSkillHandle,
   type OnSkillRemove,

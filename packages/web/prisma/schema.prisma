@@ -644,7 +644,8 @@ model Skill {
   fullHandle String // "publisher/name" — the install handle
 
   // Source
-  url String? // Source URL (skills.sh link)
+  url     String? // Source URL (skills.sh link)
+  archive Bytes? // Uploaded zip for skills added with "Upload .zip"; null for skills.sh skills
 
   // Timestamps
   createdAt DateTime @default(now())

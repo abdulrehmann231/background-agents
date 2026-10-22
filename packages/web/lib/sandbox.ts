@@ -437,7 +437,7 @@ export async function installSkillsForRepo(
   const result = await installSkills(
     sandbox,
     repoPath,
-    skills.map((s) => ({ id: s.id, fullHandle: s.fullHandle })),
+    skills.map((s) => ({ id: s.id, fullHandle: s.fullHandle, archive: s.archive })),
     async (id) => {
       console.warn(`[sandbox] Removing stale skill DB record: ${id}`)
       await prisma.skill.delete({ where: { id } }).catch(() => {})

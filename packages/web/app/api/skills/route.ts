@@ -27,6 +27,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     const skills = await prisma.skill.findMany({
       where: { userId, repo },
+      omit: { archive: true },
       orderBy: { createdAt: "desc" },
     })
 
