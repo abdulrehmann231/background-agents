@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Archive, Code2, TerminalSquare, Globe, PanelRightClose, PanelRightOpen, Download, Copy, MessageSquare, Key, Sun, Moon, Monitor, Zap, Gauge } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Archive, Code2, TerminalSquare, Globe, PanelRightClose, PanelRightOpen, Download, Copy, MessageSquare, Key, Sun, Moon, Monitor, Zap, Gauge, HardDrive } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -72,6 +72,8 @@ export function CommandPalette({
   onCopyCheckoutCommand,
   onOpenEnvVars,
   onOpenSkills,
+  isAdmin = false,
+  onOpenSandboxResize,
   chats = [],
   onSelectChat,
   currentTheme = "system",
@@ -211,6 +213,12 @@ export function CommandPalette({
             <CommandItem value="manage skills agent" onSelect={() => run(onOpenSkills)}>
               <Zap className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>Manage skills</span>
+            </CommandItem>
+          )}
+          {isAdmin && onOpenSandboxResize && (
+            <CommandItem value="increase sandbox resources ram disk admin" onSelect={() => run(onOpenSandboxResize)}>
+              <HardDrive className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Increase sandbox resources</span>
             </CommandItem>
           )}
           {onArchiveChat && (

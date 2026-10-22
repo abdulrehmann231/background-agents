@@ -84,6 +84,8 @@ export function PaletteProvider({
   onCopyCheckoutCommand,
   onOpenEnvVars,
   onOpenSkills,
+  isAdmin,
+  onOpenSandboxResize,
   chatIds,
   currentChatId,
   onSelectChat,
@@ -242,6 +244,8 @@ export function PaletteProvider({
         onCopyCheckoutCommand={onCopyCheckoutCommand}
         onOpenEnvVars={onOpenEnvVars}
         onOpenSkills={onOpenSkills}
+        isAdmin={isAdmin}
+        onOpenSandboxResize={onOpenSandboxResize}
         chats={chats.map((c) => ({ id: c.id, displayName: c.displayName }))}
         onSelectChat={onSelectChat}
         currentTheme={(theme as Theme) ?? "system"}

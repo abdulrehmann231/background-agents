@@ -51,9 +51,13 @@ interface ChatPanelProps {
   onOpenCommandPalette?: () => void
   /** Whether the user is authenticated */
   isAuthenticated?: boolean
+  /** Whether the current user is an admin — gates the "Increase resources" item. */
+  isAdmin?: boolean
+  /** Open the sandbox resize modal. Omitted when there's no sandbox to resize. */
+  onOpenSandboxResize?: () => void
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, isAdmin = false, onOpenSandboxResize }: ChatPanelProps) {
   const [modelPickerRequest, setModelPickerRequest] = useState<{ chatId: string; sequence: number }>()
   const composer = useChatComposer({
     chat,
@@ -250,6 +254,8 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
           onUpdateChat={onUpdateChat}
           onOpenEnvVars={onOpenEnvVars}
           onOpenCommandPalette={onOpenCommandPalette}
+          isAdmin={isAdmin}
+          onOpenSandboxResize={onOpenSandboxResize}
         />
       )}
 
