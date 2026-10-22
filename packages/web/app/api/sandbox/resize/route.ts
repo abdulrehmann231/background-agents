@@ -6,13 +6,61 @@ const MAX_MEMORY_GB = 10
 const MAX_DISK_GB = 10
 
 /**
+ * Reads live disk/memory usage from inside the sandbox via `df`/`free`, in
+ * bytes. Only possible while the sandbox is running — a stopped sandbox has
+ * no process to run these in, so callers get `null` back and fall back to
+ * showing just the allocation.
+ */
+async function readUsage(
+  sandbox: Awaited<ReturnType<Daytona["get"]>>
+): Promise<{ diskUsedBytes: number; diskTotalBytes: number; memoryUsedBytes: number; memoryTotalBytes: number } | null> {
+  if (sandbox.state !== "started") return null
+
+  try {
+    // Line 1: disk total/avail bytes for the root filesystem.
+    // Line 2: memory total/available bytes (MemAvailable accounts for
+    // reclaimable buffers/cache, so "used" below isn't inflated by them).
+    const res = await sandbox.process.executeCommand(
+      `df -B1 --output=size,avail / | tail -1 && free -b | awk '/^Mem:/{print $2, $7}'`
+    )
+    if (res.exitCode !== 0) return null
+
+    const lines = res.result.trim().split("\n")
+    const [diskTotalStr, diskAvailStr] = lines[0]?.trim().split(/\s+/) ?? []
+    const [memTotalStr, memAvailStr] = lines[1]?.trim().split(/\s+/) ?? []
+
+    const diskTotalBytes = Number(diskTotalStr)
+    const diskAvailBytes = Number(diskAvailStr)
+    const memoryTotalBytes = Number(memTotalStr)
+    const memoryAvailBytes = Number(memAvailStr)
+
+    if (![diskTotalBytes, diskAvailBytes, memoryTotalBytes, memoryAvailBytes].every(Number.isFinite)) {
+      return null
+    }
+
+    return {
+      diskUsedBytes: diskTotalBytes - diskAvailBytes,
+      diskTotalBytes,
+      memoryUsedBytes: memoryTotalBytes - memoryAvailBytes,
+      memoryTotalBytes,
+    }
+  } catch (error) {
+    // Best-effort — usage is a nice-to-have in the modal, not something
+    // that should block showing the allocation sliders themselves.
+    console.error("[sandbox/resize] Failed to read usage:", error)
+    return null
+  }
+}
+
+/**
  * GET /api/sandbox/resize?sandboxId=...
  *
  * Admin-only: returns the sandbox's current memory/disk allocation (GiB) so
  * the resize modal can seed its sliders with what's actually provisioned
  * instead of a hardcoded default — otherwise reopening the modal after a
  * successful resize would show the sliders back at their starting position
- * even though the sandbox itself kept the new allocation.
+ * even though the sandbox itself kept the new allocation. Also returns live
+ * used/total usage (bytes) read from inside the sandbox, when running.
  */
 export async function GET(req: Request) {
   const auth = await requireAdmin()
@@ -31,7 +79,8 @@ export async function GET(req: Request) {
   try {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
     const sandbox = await daytona.get(sandboxId)
-    return Response.json({ memory: sandbox.memory, disk: sandbox.disk })
+    const usage = await readUsage(sandbox)
+    return Response.json({ memory: sandbox.memory, disk: sandbox.disk, usage })
   } catch (error) {
     console.error("[sandbox/resize] GET error:", error)
     const message = error instanceof Error ? error.message : "Unknown error"
