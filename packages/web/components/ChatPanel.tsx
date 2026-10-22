@@ -107,6 +107,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
     inConflict,
     isMergeConflict,
     hasQueued,
+    isPaused,
     isRunning,
     isCreating,
     canSend,
@@ -190,6 +191,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
       hasSlashCommands={!!onSlashCommand}
       // State flags
       isRunning={isRunning}
+      isPaused={isPaused}
       isCreating={isCreating}
       isNewChat={isNewChat}
       canSend={canSend}
