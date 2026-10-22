@@ -17,7 +17,7 @@ interface SandboxResizeModalProps {
 const MIN_GB = 1
 /** Hard ceilings — must match MAX_MEMORY_GB/MAX_DISK_GB in the API route. */
 const MAX_MEMORY_GB = 10
-const MAX_DISK_GB = 50
+const MAX_DISK_GB = 25
 const DEFAULT_MEMORY_GB = 2
 const DEFAULT_DISK_GB = 5
 const GIB = 1024 ** 3
