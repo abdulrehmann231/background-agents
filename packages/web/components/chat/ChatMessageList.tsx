@@ -258,7 +258,6 @@ export function ChatMessageList({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-sm text-foreground/80">{m.content}</div>
-                    {m.pendingSync && <div className="text-xs text-muted-foreground">Saving to queue…</div>}
                     {m.lastError && <div className="text-xs text-destructive">Paused: {m.lastError}</div>}
                   </div>
                   <DropdownMenu>
