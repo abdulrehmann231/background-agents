@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react"
 import { Search, X, Check, Loader2, Zap, Trash2, ExternalLink, Upload } from "lucide-react"
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import { cn } from "@/lib/utils"
 import type { Skill, SkillSearchResult } from "@/lib/types"
 
@@ -22,6 +23,7 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
   const [installProgress, setInstallProgress] = useState<{ installed: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [deleteSkill, setDeleteSkill] = useState<Skill | null>(null)
   const [activeTab, setActiveTab] = useState<"search" | "installed">("search")
   const inputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
@@ -211,7 +213,6 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
   }
 
   const handleUninstall = async (skill: Skill) => {
-    if (!confirm(`Remove the ${skill.name} skill from this repo?`)) return
     setError(null)
     setRemovingId(skill.id)
     try {
@@ -498,7 +499,7 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
                       </a>
                     )}
                     <button
-                      onClick={() => handleUninstall(skill)}
+                      onClick={() => setDeleteSkill(skill)}
                       disabled={removingId === skill.id}
                       className={cn(
                         "flex-shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100",
@@ -540,6 +541,16 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteSkill}
+        title="Remove skill"
+        description={`Remove the ${deleteSkill?.name} skill from this repo?`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => deleteSkill && handleUninstall(deleteSkill)}
+        onClose={() => setDeleteSkill(null)}
+      />
     </>
   )
 }
