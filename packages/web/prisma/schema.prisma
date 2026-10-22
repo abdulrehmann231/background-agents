@@ -63,6 +63,11 @@ model User {
   // with properly-scoped credentials.
   githubAppInstallationId String?
 
+  // Encrypted Google OAuth refresh token, captured in the Gmail connect
+  // callback. Only our Gmail MCP server uses it — agents get a connection token
+  // scoped by McpServerConnection.toolPolicy, never this credential.
+  googleRefreshTokenEncrypted String? @db.Text
+
   chats              Chat[]
   accounts           Account[]
   sessions           Session[]
@@ -259,6 +264,10 @@ model McpServerConnection {
   // Encrypted Smithery API key used to call mcpUrl. Stored per-row so that
   // rotating the global key doesn't silently break existing connections.
   encryptedApiKey String? @db.Text
+
+  // Tool/argument policy for first-party servers (Gmail). Parsed by
+  // parseGmailToolPolicy; null means the read-only default.
+  toolPolicy Json?
 
   // Lifecycle
   status    String  @default("pending") // pending | connected | error
