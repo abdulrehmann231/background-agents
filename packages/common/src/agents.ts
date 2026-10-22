@@ -304,7 +304,8 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode/claude-fable-5-1", label: "Claude Fable 5.1", requiresKey: "opencode" },
     { value: "opencode/gpt-5", label: "GPT-5", requiresKey: "opencode" },
     { value: "opencode/gpt-5-nano", label: "GPT-5 Nano", requiresKey: "opencode" },
-    { value: "opencode/gpt-5.4", label: "GPT-5.4", requiresKey: "opencode" },
+    // gpt-5.4 retired platform-wide Aug 31, 2026 (replaced by gpt-6-sol) — unlike
+    // gpt-5.5, whose retirement is scoped to ChatGPT sign-in only, so it stays.
     { value: "opencode/gpt-5.5", label: "GPT-5.5", requiresKey: "opencode" },
     { value: "opencode/gpt-5.6-sol", label: "GPT-5.6 Sol", requiresKey: "opencode" },
     { value: "opencode/gpt-5.6-terra", label: "GPT-5.6 Terra", requiresKey: "opencode" },
@@ -468,8 +469,9 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "kilo/anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5", requiresKey: "kilo" },
     // OpenAI via Kilo gateway
     { value: "kilo/openai/gpt-6.1-sol", label: "GPT-6.1 Sol", requiresKey: "kilo" },
+    // gpt-5.4 retired platform-wide Aug 31, 2026 (replaced by gpt-6-sol) — unlike
+    // gpt-5.5, whose retirement is scoped to ChatGPT sign-in only, so it stays.
     { value: "kilo/openai/gpt-5.5", label: "GPT-5.5", requiresKey: "kilo" },
-    { value: "kilo/openai/gpt-5.4", label: "GPT-5.4", requiresKey: "kilo" },
     // Google via Kilo gateway
     { value: "kilo/google/gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "kilo" },
     { value: "kilo/google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", requiresKey: "kilo" },
@@ -481,7 +483,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "kilo/moonshotai/kimi-k3", label: "Kimi K3", requiresKey: "kilo" },
     { value: "kilo/moonshotai/kimi-k2.6", label: "Kimi K2.6", requiresKey: "kilo" },
     { value: "kilo/qwen/qwen3-coder", label: "Qwen3 Coder", requiresKey: "kilo" },
-    { value: "kilo/x-ai/grok-4.3", label: "Grok 4.3", requiresKey: "kilo" },
+    { value: "kilo/x-ai/grok-4.6", label: "Grok 4.6", requiresKey: "kilo" },
   ],
   "kimi": [
     // Moonshot (Kimi) models, routed through the user's KIMI_API_KEY against
