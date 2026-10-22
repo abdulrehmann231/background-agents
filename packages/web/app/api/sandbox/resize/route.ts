@@ -6,6 +6,40 @@ const MAX_MEMORY_GB = 10
 const MAX_DISK_GB = 10
 
 /**
+ * GET /api/sandbox/resize?sandboxId=...
+ *
+ * Admin-only: returns the sandbox's current memory/disk allocation (GiB) so
+ * the resize modal can seed its sliders with what's actually provisioned
+ * instead of a hardcoded default — otherwise reopening the modal after a
+ * successful resize would show the sliders back at their starting position
+ * even though the sandbox itself kept the new allocation.
+ */
+export async function GET(req: Request) {
+  const auth = await requireAdmin()
+  if (isAuthError(auth)) return auth
+
+  const sandboxId = new URL(req.url).searchParams.get("sandboxId")
+  if (!sandboxId) {
+    return badRequest("Missing sandboxId")
+  }
+
+  const daytonaApiKey = process.env.DAYTONA_API_KEY
+  if (!daytonaApiKey) {
+    return serverConfigError("DAYTONA_API_KEY")
+  }
+
+  try {
+    const daytona = new Daytona({ apiKey: daytonaApiKey })
+    const sandbox = await daytona.get(sandboxId)
+    return Response.json({ memory: sandbox.memory, disk: sandbox.disk })
+  } catch (error) {
+    console.error("[sandbox/resize] GET error:", error)
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return Response.json({ error: message }, { status: 500 })
+  }
+}
+
+/**
  * POST /api/sandbox/resize
  *
  * Admin-only: bump a sandbox's RAM and/or disk allocation. Mirrors
@@ -50,6 +84,17 @@ export async function POST(req: Request) {
   try {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
     const sandbox = await daytona.get(sandboxId)
+
+    // Daytona only supports growing memory/disk, never shrinking (hot resize
+    // can only increase CPU/memory, and disk resize throws on any decrease).
+    // The UI already floors the sliders at the current allocation, but check
+    // again here in case the request didn't come from that UI.
+    if (memoryGb != null && memoryGb < sandbox.memory) {
+      return badRequest(`memory can only be increased (currently ${sandbox.memory} GiB)`)
+    }
+    if (diskGb != null && diskGb < sandbox.disk) {
+      return badRequest(`disk can only be increased (currently ${sandbox.disk} GiB)`)
+    }
 
     const wasRunning = sandbox.state === "started"
     // Disk resize requires a stopped sandbox; CPU/memory hot-resize on a
