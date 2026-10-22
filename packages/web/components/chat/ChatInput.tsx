@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useCallback, useState, type ReactNode } from "react"
-import { AlertTriangle, ArrowUp, Square, ChevronDown, Clock, Github, Paperclip, Pencil, ListChecks, Mic, GitBranch, Cpu, Brain, Plug } from "lucide-react"
+import { AlertTriangle, ArrowUp, Square, ChevronDown, Clock, Github, Paperclip, Pencil, ListChecks, Mic, GitBranch, Cpu, Brain, Plug, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useModals } from "@/lib/contexts"
 import { useSpeechRecognition } from "@/lib/hooks/useSpeechRecognition"
@@ -73,6 +73,8 @@ interface ChatInputProps {
   hasSlashCommands: boolean
   // State flags
   isRunning: boolean
+  /** True when the agent stopped with messages still waiting in the queue. */
+  isPaused?: boolean
   isCreating: boolean
   isNewChat: boolean
   canSend: boolean
@@ -107,6 +109,10 @@ interface ChatInputProps {
 interface ChatActionSlotProps {
   canStop?: boolean
   isRunning: boolean
+  /** True when the agent stopped with messages still waiting in the queue. */
+  isPaused?: boolean
+  /** Whether the composer textarea is currently empty. */
+  isInputEmpty?: boolean
   canQueue: boolean
   canSend: boolean
   isMobile: boolean
@@ -125,6 +131,8 @@ interface ChatActionSlotProps {
 export function ChatActionSlot({
   canStop = true,
   isRunning,
+  isPaused = false,
+  isInputEmpty = false,
   canQueue,
   canSend,
   isMobile,
@@ -168,6 +176,19 @@ export function ChatActionSlot({
           )}
         >
           <Square className={cn(isMobile ? "h-3.5 w-3.5" : "h-3 w-3", "fill-current")} />
+        </button>
+      ) : canSend && isPaused && isInputEmpty ? (
+        <button
+          type="button"
+          onClick={onSend}
+          title="Resume queued prompts"
+          aria-label="Resume queued prompts"
+          className={cn(
+            "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors cursor-pointer",
+            isMobile ? "h-9 w-9" : "h-7 w-7"
+          )}
+        >
+          <Play className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5", "fill-current")} />
         </button>
       ) : canSend ? (
         <button
@@ -261,6 +282,7 @@ export function ChatInput({
   hasSlashCommands,
   // State flags
   isRunning,
+  isPaused = false,
   isCreating,
   isNewChat,
   canSend,
@@ -649,6 +671,8 @@ export function ChatInput({
           <ChatActionSlot
             canStop={chat.status === "running" && !!chat.backgroundSessionId && !!chat.activeAssistantMessageId}
             isRunning={isRunning}
+            isPaused={isPaused}
+            isInputEmpty={!input.trim()}
             canQueue={canQueue}
             canSend={canSend}
             isMobile={isMobile}

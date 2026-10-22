@@ -470,6 +470,7 @@ export function useChatComposer({
     isMergeConflict,
     // derived flags
     hasQueued,
+    isPaused,
     isRunning,
     isCreating,
     canSend,
