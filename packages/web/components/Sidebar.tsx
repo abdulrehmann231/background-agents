@@ -14,7 +14,7 @@ import { useGitHubUserQuery } from "@/lib/query"
 import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH, COLLAPSE_THRESHOLD } from "@/lib/contexts"
 import { DOCS_URL } from "@/lib/constants"
 import { clearAllStorage } from "@/lib/storage"
-import { isChatVisibleForFilter } from "@/lib/chat-tree"
+import { isChatVisibleForFilter, groupChatsByParent } from "@/lib/chat-tree"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 import {
@@ -158,25 +158,13 @@ export function Sidebar({
   // Unarchive (instead of Archive) and omit drag-to-merge.
   const showingArchived = repoFilter === ARCHIVED_CHATS
 
-  // Build a parent → children lookup + root list for a chat set, preserving the
-  // incoming sort order. A chat is a root when it has no parent within the same
-  // set, so each subtree renders self-contained.
-  const buildTree = (list: Chat[]) => {
-    const ids = new Set(list.map((c) => c.id))
-    const childrenByParent = new Map<string, Chat[]>()
-    for (const chat of list) {
-      const parentId = chat.parentChatId && ids.has(chat.parentChatId) ? chat.parentChatId : null
-      if (parentId) {
-        const arr = childrenByParent.get(parentId) ?? []
-        arr.push(chat)
-        childrenByParent.set(parentId, arr)
-      }
-    }
-    const roots = list.filter((c) => !(c.parentChatId && ids.has(c.parentChatId)))
-    return { childrenByParent, roots }
-  }
-
-  const { childrenByParent, roots: rootChats } = useMemo(() => buildTree(filteredChats), [filteredChats])
+  // Build a parent → children lookup + root list for the filtered chats.
+  // Shared with keyboard navigation's tree walk via groupChatsByParent so the
+  // grouping logic lives in exactly one place.
+  const { childrenByParent, roots: rootChats } = useMemo(
+    () => groupChatsByParent(filteredChats),
+    [filteredChats]
+  )
 
   // Drag-to-merge state: which chat is being dragged, and which chat the
   // pointer is currently over (valid target only).

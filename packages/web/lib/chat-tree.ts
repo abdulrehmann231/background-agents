@@ -34,6 +34,33 @@ export function isChatVisibleForFilter(chat: Chat, repoFilter: string): boolean 
 }
 
 /**
+ * Group a chat list into a parent → children lookup plus the root list,
+ * preserving the incoming order. A chat is a root when it has no parent
+ * within the same list, so each subtree renders self-contained.
+ *
+ * Shared by the Sidebar (which renders this structure directly) and
+ * {@link buildTreeOrderedChatIds} (which flattens it for keyboard
+ * navigation) so the parent/child grouping logic lives in exactly one place.
+ */
+export function groupChatsByParent(list: Chat[]): {
+  childrenByParent: Map<string, Chat[]>
+  roots: Chat[]
+} {
+  const ids = new Set(list.map((c) => c.id))
+  const childrenByParent = new Map<string, Chat[]>()
+  for (const chat of list) {
+    const parentId = chat.parentChatId && ids.has(chat.parentChatId) ? chat.parentChatId : null
+    if (parentId) {
+      const arr = childrenByParent.get(parentId) ?? []
+      arr.push(chat)
+      childrenByParent.set(parentId, arr)
+    }
+  }
+  const roots = list.filter((c) => !(c.parentChatId && ids.has(c.parentChatId)))
+  return { childrenByParent, roots }
+}
+
+/**
  * Build the full tree-ordered id list matching the sidebar, ignoring collapsed
  * state — so keyboard navigation (Alt+Up/Down) can reach every chat, expanding
  * collapsed ancestors along the way.
@@ -47,22 +74,11 @@ export function buildTreeOrderedChatIds(chats: Chat[], repoFilter: string): stri
 
   visible.sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt))
 
-  const visibleIds = new Set(visible.map((c) => c.id))
-  const kids = new Map<string, Chat[]>()
-  for (const c of visible) {
-    const parent = c.parentChatId && visibleIds.has(c.parentChatId) ? c.parentChatId : null
-    if (parent) {
-      const list = kids.get(parent) ?? []
-      list.push(c)
-      kids.set(parent, list)
-    }
-  }
-
-  const roots = visible.filter((c) => !(c.parentChatId && visibleIds.has(c.parentChatId)))
+  const { childrenByParent, roots } = groupChatsByParent(visible)
   const out: string[] = []
   const walk = (c: Chat) => {
     out.push(c.id)
-    const children = kids.get(c.id) ?? []
+    const children = childrenByParent.get(c.id) ?? []
     for (const child of children) walk(child)
   }
   for (const r of roots) walk(r)
