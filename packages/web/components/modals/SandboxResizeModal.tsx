@@ -17,7 +17,7 @@ interface SandboxResizeModalProps {
 const MIN_GB = 1
 /** Hard ceilings — must match MAX_MEMORY_GB/MAX_DISK_GB in the API route. */
 const MAX_MEMORY_GB = 10
-const MAX_DISK_GB = 50
+const MAX_DISK_GB = 25
 const DEFAULT_MEMORY_GB = 2
 const DEFAULT_DISK_GB = 5
 const GIB = 1024 ** 3
@@ -86,6 +86,28 @@ function ResourceSlider({
   const effectiveFloor = floor ?? MIN_GB
   const disabledPct = ((effectiveFloor - MIN_GB) / (max - MIN_GB)) * 100
   const usagePct = usage && usage.totalGb > 0 ? Math.min(100, (usage.usedGb / usage.totalGb) * 100) : null
+
+  // While the real allocation/usage is in flight, show placeholder bars
+  // rather than the slider at some value that might not be true yet — the
+  // alternative (defaulting to e.g. 2 GB) would flash a wrong number before
+  // snapping to the real one once the fetch resolves.
+  if (loading) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <div className="h-3.5 w-10 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-muted animate-pulse" />
+        <div className="mt-1 flex justify-between">
+          <div className="h-2.5 w-8 rounded bg-muted animate-pulse" />
+          <div className="h-2.5 w-8 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="mt-2 h-1 w-full rounded-full bg-muted animate-pulse" />
+        <div className="mt-1 h-2.5 w-32 rounded bg-muted animate-pulse" />
+      </div>
+    )
+  }
 
   return (
     <div>
