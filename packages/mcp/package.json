@@ -37,6 +37,16 @@
         "default": "./dist/gmail/index.cjs"
       }
     },
+    "./gmail/policy": {
+      "import": {
+        "types": "./dist/gmail/policy.d.ts",
+        "default": "./dist/gmail/policy.js"
+      },
+      "require": {
+        "types": "./dist/gmail/policy.d.cts",
+        "default": "./dist/gmail/policy.cjs"
+      }
+    },
     "./smithery": {
       "import": {
         "types": "./dist/smithery/index.d.ts",
@@ -53,7 +63,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/github/index.ts src/smithery/index.ts src/gmail/index.ts --format esm,cjs --dts --clean --sourcemap",
+    "build": "tsup src/index.ts src/github/index.ts src/smithery/index.ts src/gmail/index.ts src/gmail/policy.ts --format esm,cjs --dts --clean --sourcemap",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build"

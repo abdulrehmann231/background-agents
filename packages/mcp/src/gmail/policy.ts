@@ -4,9 +4,14 @@
  * The policy is the security boundary: the agent only ever holds a token for
  * our MCP server, never a Google credential, so anything the server refuses
  * here the agent cannot do at all.
+ *
+ * Client-safe (zod only): the web UI imports it via
+ * `@background-agents/mcp/gmail/policy`.
  */
 
 import { z } from "zod"
+
+export { GMAIL_MCP_QUALIFIED_NAME } from "./constants"
 
 export const GMAIL_TOOL_NAMES = [
   "search_threads",
