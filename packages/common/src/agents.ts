@@ -426,6 +426,11 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "gpt-5.3-codex", label: "GPT-5.3 Codex", requiresKey: "github" },
     { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "github" },
     { value: "gemini-4-argon", label: "Gemini 4 Argon", requiresKey: "github" },
+    { value: "mai-code-1.1-flash", label: "MAI-Code 1.1 Flash", requiresKey: "github" },
+    { value: "kimi-k3", label: "Kimi K3", requiresKey: "github" },
+    { value: "grok-4.7", label: "Grok 4.7", requiresKey: "github" },
+    { value: "grok-4.6", label: "Grok 4.6", requiresKey: "github" },
+    { value: "grok-4.5", label: "Grok 4.5", requiresKey: "github" },
   ],
   "gemini": [
     // Default first, then Flash tier (newest → oldest), then Pro.
