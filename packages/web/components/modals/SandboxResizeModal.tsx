@@ -87,8 +87,16 @@ function ResourceSlider({
   onChange: (value: number) => void
 }) {
   const effectiveFloor = floor ?? MIN_GB
-  const disabledPct = ((effectiveFloor - MIN_GB) / (max - MIN_GB)) * 100
-  const usagePct = usage && usage.totalGb > 0 ? Math.min(100, (usage.usedGb / usage.totalGb) * 100) : null
+  const scale = max - MIN_GB
+  // Position on the slider's own MIN_GB-max scale, so the usage bar below
+  // lines up with it instead of running on its own 0-100% axis.
+  const pct = (value: number) => Math.min(100, Math.max(0, ((value - MIN_GB) / scale) * 100))
+  const disabledPct = pct(effectiveFloor)
+  // Three segments on that same scale: taken (blue), available within the
+  // current allocation (white), and unallocated headroom up to `max` (grey).
+  const takenPct = usage ? pct(usage.usedGb) : null
+  const allocatedPct = usage ? pct(usage.totalGb) : null
+  const availablePct = takenPct != null && allocatedPct != null ? allocatedPct - takenPct : null
 
   // While the real allocation/usage is in flight, show placeholder bars
   // rather than the slider at some value that might not be true yet — the
@@ -153,24 +161,32 @@ function ResourceSlider({
         <span>{max} GB</span>
       </div>
 
-      {/* Live used/available, read from inside the sandbox — separate scale
-          from the slider above (that one spans the fixed allocation range;
-          this one is used-vs-currently-allocated). Not tracked for every
-          resource (e.g. RAM), so this whole block is opt-in. */}
+      {/* Live used/available, read from inside the sandbox — drawn on the
+          same MIN_GB-max scale as the slider above, so "taken" and
+          "available" line up with where the allocation actually sits, and
+          "unallocated" lines up with the slider's own greyed-out headroom.
+          Not tracked for every resource (e.g. RAM), so this block is opt-in. */}
       {showUsage && (
-        usage ? (
+        usage && takenPct != null && availablePct != null ? (
           <div className="mt-2">
-            <div className="h-1 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  usagePct != null && usagePct >= 90 ? "bg-destructive" : "bg-foreground/40"
-                )}
-                style={{ width: `${usagePct ?? 0}%` }}
-              />
+            <div className="h-1.5 flex rounded-full overflow-hidden border border-border">
+              <div className="h-full bg-blue-500" style={{ width: `${takenPct}%` }} />
+              <div className="h-full bg-white dark:bg-neutral-200" style={{ width: `${availablePct}%` }} />
+              <div className="h-full bg-muted" style={{ width: `${100 - takenPct - availablePct}%` }} />
             </div>
-            <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
-              {usage.usedGb} GB used of {usage.totalGb} GB ({Math.round(usagePct ?? 0)}%)
+            <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                {usage.usedGb} GB taken
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-neutral-200 border border-border" />
+                {Math.max(0, Math.round((usage.totalGb - usage.usedGb) * 10) / 10)} GB available
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                {Math.max(0, max - usage.totalGb)} GB unallocated
+              </span>
             </div>
           </div>
         ) : (
