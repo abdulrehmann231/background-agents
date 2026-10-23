@@ -6,44 +6,29 @@ const MAX_MEMORY_GB = 10
 const MAX_DISK_GB = 25
 
 /**
- * Reads live disk/memory usage from inside the sandbox via `df`/`free`, in
- * bytes. Only possible while the sandbox is running — a stopped sandbox has
- * no process to run these in, so callers get `null` back and fall back to
- * showing just the allocation.
+ * Reads live disk usage from inside the sandbox via `df`, in bytes. Only
+ * possible while the sandbox is running — a stopped sandbox has no process
+ * to run this in, so callers get `null` back and fall back to showing just
+ * the allocation.
  */
 async function readUsage(
   sandbox: Awaited<ReturnType<Daytona["get"]>>
-): Promise<{ diskUsedBytes: number; diskTotalBytes: number; memoryUsedBytes: number; memoryTotalBytes: number } | null> {
+): Promise<{ diskUsedBytes: number; diskTotalBytes: number } | null> {
   if (sandbox.state !== "started") return null
 
   try {
-    // Line 1: disk total/avail bytes for the root filesystem.
-    // Line 2: memory total/available bytes (MemAvailable accounts for
-    // reclaimable buffers/cache, so "used" below isn't inflated by them).
-    const res = await sandbox.process.executeCommand(
-      `df -B1 --output=size,avail / | tail -1 && free -b | awk '/^Mem:/{print $2, $7}'`
-    )
+    const res = await sandbox.process.executeCommand(`df -B1 --output=size,avail / | tail -1`)
     if (res.exitCode !== 0) return null
 
-    const lines = res.result.trim().split("\n")
-    const [diskTotalStr, diskAvailStr] = lines[0]?.trim().split(/\s+/) ?? []
-    const [memTotalStr, memAvailStr] = lines[1]?.trim().split(/\s+/) ?? []
-
+    const [diskTotalStr, diskAvailStr] = res.result.trim().split(/\s+/)
     const diskTotalBytes = Number(diskTotalStr)
     const diskAvailBytes = Number(diskAvailStr)
-    const memoryTotalBytes = Number(memTotalStr)
-    const memoryAvailBytes = Number(memAvailStr)
 
-    if (![diskTotalBytes, diskAvailBytes, memoryTotalBytes, memoryAvailBytes].every(Number.isFinite)) {
+    if (![diskTotalBytes, diskAvailBytes].every(Number.isFinite)) {
       return null
     }
 
-    return {
-      diskUsedBytes: diskTotalBytes - diskAvailBytes,
-      diskTotalBytes,
-      memoryUsedBytes: memoryTotalBytes - memoryAvailBytes,
-      memoryTotalBytes,
-    }
+    return { diskUsedBytes: diskTotalBytes - diskAvailBytes, diskTotalBytes }
   } catch (error) {
     // Best-effort — usage is a nice-to-have in the modal, not something
     // that should block showing the allocation sliders themselves.
@@ -60,7 +45,7 @@ async function readUsage(
  * instead of a hardcoded default — otherwise reopening the modal after a
  * successful resize would show the sliders back at their starting position
  * even though the sandbox itself kept the new allocation. Also returns live
- * used/total usage (bytes) read from inside the sandbox, when running.
+ * disk used/total usage (bytes) read from inside the sandbox, when running.
  */
 export async function GET(req: Request) {
   const auth = await requireAdmin()
