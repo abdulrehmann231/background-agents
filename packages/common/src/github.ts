@@ -198,6 +198,16 @@ export async function compareBranches(
   )
 }
 
+// GitHub repo names allow alphanumerics, hyphens, underscores, and periods.
+const REPO_NAME_REGEX = /^[a-zA-Z0-9._-]+$/
+
+/**
+ * Validate a repository name against GitHub's allowed character set.
+ */
+export function isValidRepoName(name: string): boolean {
+  return REPO_NAME_REGEX.test(name)
+}
+
 /**
  * Create a new repository
  */

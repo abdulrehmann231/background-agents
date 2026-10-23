@@ -104,6 +104,7 @@ import {
   // Core helpers
   githubFetch,
   isGitHubApiError,
+  isValidRepoName,
   // High-level API methods
   getUser,
   getUserRepos,
