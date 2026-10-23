@@ -65,6 +65,7 @@ function ResourceSlider({
   max,
   floor,
   usage,
+  showUsage = true,
   loading,
   disabled,
   onChange,
@@ -72,12 +73,14 @@ function ResourceSlider({
   id: string
   label: string
   value: number
-  /** Highest value the thumb may reach (e.g. 10 for RAM, 50 for disk). */
+  /** Highest value the thumb may reach (e.g. 10 for RAM, 25 for disk). */
   max: number
   /** Lowest value the thumb may land on; null while still loading. */
   floor: number | null
   /** Live used/total from inside the sandbox; null while loading or stopped. */
   usage: UsageStat | null
+  /** Whether this resource tracks used/total at all (disk does; RAM doesn't). */
+  showUsage?: boolean
   /** Still fetching the initial allocation/usage. */
   loading: boolean
   disabled: boolean
@@ -103,8 +106,12 @@ function ResourceSlider({
           <div className="h-2.5 w-8 rounded bg-muted animate-pulse" />
           <div className="h-2.5 w-8 rounded bg-muted animate-pulse" />
         </div>
-        <div className="mt-2 h-1 w-full rounded-full bg-muted animate-pulse" />
-        <div className="mt-1 h-2.5 w-32 rounded bg-muted animate-pulse" />
+        {showUsage && (
+          <>
+            <div className="mt-2 h-1 w-full rounded-full bg-muted animate-pulse" />
+            <div className="mt-1 h-2.5 w-32 rounded bg-muted animate-pulse" />
+          </>
+        )}
       </div>
     )
   }
@@ -148,26 +155,29 @@ function ResourceSlider({
 
       {/* Live used/available, read from inside the sandbox — separate scale
           from the slider above (that one spans the fixed allocation range;
-          this one is used-vs-currently-allocated). */}
-      {usage ? (
-        <div className="mt-2">
-          <div className="h-1 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full",
-                usagePct != null && usagePct >= 90 ? "bg-destructive" : "bg-foreground/40"
-              )}
-              style={{ width: `${usagePct ?? 0}%` }}
-            />
+          this one is used-vs-currently-allocated). Not tracked for every
+          resource (e.g. RAM), so this whole block is opt-in. */}
+      {showUsage && (
+        usage ? (
+          <div className="mt-2">
+            <div className="h-1 rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full",
+                  usagePct != null && usagePct >= 90 ? "bg-destructive" : "bg-foreground/40"
+                )}
+                style={{ width: `${usagePct ?? 0}%` }}
+              />
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+              {usage.usedGb} GB used of {usage.totalGb} GB ({Math.round(usagePct ?? 0)}%)
+            </div>
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground tabular-nums">
-            {usage.usedGb} GB used of {usage.totalGb} GB ({Math.round(usagePct ?? 0)}%)
-          </div>
-        </div>
-      ) : (
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          {loading ? "Loading usage…" : "Usage unavailable (sandbox not running)"}
-        </p>
+        ) : (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {loading ? "Loading usage…" : "Usage unavailable (sandbox not running)"}
+          </p>
+        )
       )}
     </div>
   )
@@ -189,9 +199,9 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
   // sandbox's actual current allocation.
   const [memoryFloor, setMemoryFloor] = useState<number | null>(null)
   const [diskFloor, setDiskFloor] = useState<number | null>(null)
-  // Live used/total, read from inside the sandbox. Null when loading, or when
-  // the sandbox is stopped (nothing to query usage from).
-  const [memoryUsage, setMemoryUsage] = useState<UsageStat | null>(null)
+  // Live disk used/total, read from inside the sandbox. Null when loading,
+  // or when the sandbox is stopped (nothing to query usage from). RAM has no
+  // equivalent viewer — see the "remove the RAM available viewer" ask.
   const [diskUsage, setDiskUsage] = useState<UsageStat | null>(null)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -207,8 +217,6 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
     memory?: number
     disk?: number
     usage?: {
-      memoryUsedBytes?: number
-      memoryTotalBytes?: number
       diskUsedBytes?: number
       diskTotalBytes?: number
     } | null
@@ -226,11 +234,6 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
       setDisk(clamp(Math.round(data.disk), MAX_DISK_GB, floor))
     }
     const usage = data.usage
-    setMemoryUsage(
-      usage && typeof usage.memoryUsedBytes === "number" && typeof usage.memoryTotalBytes === "number"
-        ? bytesToUsage(usage.memoryUsedBytes, usage.memoryTotalBytes)
-        : null
-    )
     setDiskUsage(
       usage && typeof usage.diskUsedBytes === "number" && typeof usage.diskTotalBytes === "number"
         ? bytesToUsage(usage.diskUsedBytes, usage.diskTotalBytes)
@@ -254,7 +257,6 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
       setDisk(DEFAULT_DISK_GB)
       setMemoryFloor(null)
       setDiskFloor(null)
-      setMemoryUsage(null)
       setDiskUsage(null)
       return
     }
@@ -344,7 +346,8 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               value={memory}
               max={MAX_MEMORY_GB}
               floor={memoryFloor}
-              usage={memoryUsage}
+              usage={null}
+              showUsage={false}
               loading={loading}
               disabled={submitting || loading}
               onChange={setMemory}
