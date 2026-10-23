@@ -287,6 +287,12 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sandboxId])
 
+  // The floor is the loaded allocation itself (applyStatus clamps the initial
+  // slider value up to it), so comparing against it is exactly "has the user
+  // moved a slider away from what's currently provisioned" — no separate
+  // "initial value" state to keep in sync.
+  const hasChanges = memoryFloor != null && diskFloor != null && (memory !== memoryFloor || disk !== diskFloor)
+
   const submit = async () => {
     if (!sandboxId || submitting) return
     setSubmitting(true)
@@ -379,7 +385,7 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
             <button
               type="button"
               onClick={submit}
-              disabled={!sandboxId || submitting || loading}
+              disabled={!sandboxId || submitting || loading || !hasChanges}
               className={cn(
                 "flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground",
                 "transition-colors hover:bg-primary/90 cursor-pointer",
@@ -388,7 +394,13 @@ export function SandboxResizeModal({ open, onClose, sandboxId, isMobile = false 
               )}
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? "Resizing…" : !sandboxId ? "No sandbox" : "Apply"}
+              {submitting
+                ? "Resizing…"
+                : !sandboxId
+                  ? "No sandbox"
+                  : !hasChanges
+                    ? "No changes"
+                    : "Apply"}
             </button>
           </div>
         </Dialog.Content>
