@@ -149,7 +149,7 @@ function ResourceSlider({
         )}
       </div>
       <div className="mt-1 flex justify-between text-[11px] text-muted-foreground tabular-nums">
-        <span>{MIN_GB} GB{floor != null && floor > MIN_GB ? ` (current: ${floor})` : ""}</span>
+        <span>{MIN_GB} GB</span>
         <span>{max} GB</span>
       </div>
 
