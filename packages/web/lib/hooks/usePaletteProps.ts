@@ -24,6 +24,8 @@ interface UsePalettePropsOptions {
   displayChats: Chat[]
   displayCurrentChatId: string | null
   currentChat: Chat | null
+  /** Repo picked for a new chat that hasn't sent its first message yet. */
+  draftRepo: string | null
   availableServers: Array<{ port: number; url: string }>
   canBranch: boolean
 
@@ -76,6 +78,7 @@ export function usePaletteProps({
   displayChats,
   displayCurrentChatId,
   currentChat,
+  draftRepo,
   availableServers,
   canBranch,
   githubBranchUrl,
@@ -205,7 +208,7 @@ export function usePaletteProps({
     onCopyCloneCommand: hasRepo ? handleCopyCloneCommand : undefined,
     onCopyCheckoutCommand: currentChat?.branch ? handleCopyCheckoutCommand : undefined,
     onOpenEnvVars: currentChat ? handleOpenEnvVars : undefined,
-    onOpenSkills: sandboxId && hasRepo ? onToggleSkillsModal : undefined,
+    onOpenSkills: hasRepo || isRealRepo(draftRepo) ? onToggleSkillsModal : undefined,
     isAdmin: !!session?.user?.isAdmin,
     onOpenSandboxResize:
       sandboxId && session?.user?.isAdmin ? () => modals.setSandboxResizeModalOpen(true) : undefined,

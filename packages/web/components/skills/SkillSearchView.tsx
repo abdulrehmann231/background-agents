@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react"
 import { Search, X, Check, Loader2, Zap, Trash2, ExternalLink, Upload } from "lucide-react"
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import { cn } from "@/lib/utils"
 import type { Skill, SkillSearchResult } from "@/lib/types"
 
@@ -10,9 +11,10 @@ interface SkillSearchViewProps {
   onOpenChange: (open: boolean) => void
   chatId: string
   repo: string
+  hasSandbox: boolean
 }
 
-export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearchViewProps) {
+export function SkillSearchView({ open, onOpenChange, chatId, repo, hasSandbox }: SkillSearchViewProps) {
   const [query, setQuery] = useState("")
   const [searchResults, setSearchResults] = useState<(SkillSearchResult & { installs?: number })[]>([])
   const [installedSkills, setInstalledSkills] = useState<Skill[]>([])
@@ -22,6 +24,7 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
   const [installProgress, setInstallProgress] = useState<{ installed: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [deleteSkill, setDeleteSkill] = useState<Skill | null>(null)
   const [activeTab, setActiveTab] = useState<"search" | "installed">("search")
   const inputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
@@ -140,6 +143,16 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
         throw new Error("Failed to save skills")
       }
 
+      // Before the first message there is no sandbox yet. The saved skills are
+      // installed when that message creates it.
+      if (!hasSandbox) {
+        await fetchInstalledSkills()
+        setSelectedHandles(new Set())
+        setInstallProgress(null)
+        setActiveTab("installed")
+        return
+      }
+
       // Step 2: Install in sandbox (includes --list pre-validation)
       const installRes = await fetch("/api/skills/install", {
         method: "POST",
@@ -211,7 +224,6 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
   }
 
   const handleUninstall = async (skill: Skill) => {
-    if (!confirm(`Remove the ${skill.name} skill from this repo?`)) return
     setError(null)
     setRemovingId(skill.id)
     try {
@@ -498,7 +510,7 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
                       </a>
                     )}
                     <button
-                      onClick={() => handleUninstall(skill)}
+                      onClick={() => setDeleteSkill(skill)}
                       disabled={removingId === skill.id}
                       className={cn(
                         "flex-shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100",
@@ -518,12 +530,14 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
           {activeTab === "installed" && (
             <div className="flex items-center gap-3 px-4 py-3 border-t border-border bg-accent/30">
               <span className="text-sm text-muted-foreground">
-                Upload your own skill: a .zip with its SKILL.md and files.
+                {hasSandbox
+                  ? "Upload your own skill: a .zip with its SKILL.md and files."
+                  : "Send a message first to upload your own .zip skill."}
               </span>
               <div className="flex-1" />
               <button
                 onClick={() => zipInputRef.current?.click()}
-                disabled={isInstalling}
+                disabled={isInstalling || !hasSandbox}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
                 {isInstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -540,6 +554,16 @@ export function SkillSearchView({ open, onOpenChange, chatId, repo }: SkillSearc
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteSkill}
+        title="Remove skill"
+        description={`Remove the ${deleteSkill?.name} skill from this repo?`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => deleteSkill && handleUninstall(deleteSkill)}
+        onClose={() => setDeleteSkill(null)}
+      />
     </>
   )
 }
