@@ -125,8 +125,6 @@ Types for structured agent responses.
 import type {
   ContentBlock,
   ToolCall,
-  AgentStatus,
-  AgentStatusResponse,
 } from "@background-agents/common"
 ```
 
