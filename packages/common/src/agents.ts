@@ -70,7 +70,7 @@ export function providerLabel(provider: string): string {
 // =============================================================================
 
 /** Provider an API key is associated with. */
-export type ProviderId = "anthropic" | "commandcode" | "github" | "openai" | "opencode" | "gemini" | "kilo" | "kimi" | "factory"
+export type ProviderId = "anthropic" | "commandcode" | "github" | "openai" | "opencode" | "gemini" | "kilo" | "kimi" | "factory" | "netlify"
 
 /**
  * Credential identifiers. The id doubles as the env var name we inject
@@ -88,6 +88,7 @@ export type CredentialId =
   | "KILO_API_KEY"
   | "KIMI_API_KEY"
   | "FACTORY_API_KEY"
+  | "NETLIFY_OAUTH_TOKEN"
 
 export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
   // Server has a shared Claude credential pool (e.g. the rotating row written
@@ -176,6 +177,8 @@ const PROVIDER_ENV: Record<ProviderId, CredentialId[]> = {
   kilo: ["KILO_API_KEY"],
   kimi: ["KIMI_API_KEY"],
   factory: ["FACTORY_API_KEY"],
+  // Deploy-only; never injected into an agent.
+  netlify: [],
 }
 
 // =============================================================================
