@@ -30,8 +30,11 @@ export interface PreviewViewProps {
   sandboxId: string | null
   /** The chat this preview belongs to, so a panel can trigger sandbox recovery. */
   chatId?: string | null
-  /** Called after a panel recreates a dead sandbox, with the fresh sandboxId. */
-  onSandboxRecreated?: (sandboxId: string) => void
+  /**
+   * Called after a panel recreates a dead sandbox, with the fresh sandboxId
+   * and (for server previews) the fresh URL for that item's port.
+   */
+  onSandboxRecreated?: (sandboxId: string, serverUrl?: { port: number; url: string }) => void
   /** Optional — when provided, enables external link button for files. */
   repo?: string | null
   branch?: string | null
@@ -103,6 +106,17 @@ export function PreviewView({
   const menuJustOpenedRef = useRef(false)
   // Track the currently displayed item to detect when the user switches previews
   const prevItemKeyRef = useRef<string | null>(null)
+  // The server-preview panel's current probe status, reported via onStatusChange
+  // — lets "open in new window" tell "expired" apart from "ready" without this
+  // component re-probing the sandbox itself.
+  const [previewStatus, setPreviewStatus] = useState<
+    "loading" | "ready" | "stopped" | "expired" | "error" | null
+  >(null)
+  // The panel assigns its recreate action here (server-preview only). "Open in
+  // new window" calls it first when the preview is expired, instead of opening
+  // a dead sandbox's URL.
+  const recreateRef = useRef<(() => Promise<string | null>) | null>(null)
+  const [isOpeningPreview, setIsOpeningPreview] = useState(false)
 
   // Download a file that's not in the repo
   const handleDownloadFile = async () => {
@@ -165,6 +179,8 @@ export function PreviewView({
   if (prevItemKeyRef.current !== itemKey) {
     prevItemKeyRef.current = itemKey
     if (explicitStart) setExplicitStart(false)
+    if (previewStatus !== null) setPreviewStatus(null)
+    recreateRef.current = null
   }
 
   // When the item is a file and we have a repo/branch, build the GitHub URL
@@ -183,6 +199,26 @@ export function PreviewView({
   // External URL for opening in new tab (files -> GitHub, servers -> preview URL)
   const externalUrl = fileGithubUrl ?? (item.type === "server" ? item.url : null)
   const externalLinkTitle = item.type === "server" ? "Open in new tab" : "Open on GitHub"
+  // Only server previews can be "expired" (files/terminals have no live probe
+  // feeding previewStatus), and only while viewing that exact item.
+  const isPreviewExpired = item.type === "server" && previewStatus === "expired"
+
+  // "Open in new window" on an expired server preview: recreate the sandbox
+  // first (same recovery as the refresh button), then open whatever fresh URL
+  // that returns — never the stale `externalUrl` closed over before recreation,
+  // since preview URLs are scoped to the sandbox that no longer exists.
+  const handleOpenExternal = async (e: React.MouseEvent) => {
+    if (!isPreviewExpired) return // plain <a> handles the normal case
+    e.preventDefault()
+    if (isOpeningPreview) return
+    setIsOpeningPreview(true)
+    try {
+      const freshUrl = await recreateRef.current?.()
+      if (freshUrl) window.open(freshUrl, "_blank", "noopener,noreferrer")
+    } finally {
+      setIsOpeningPreview(false)
+    }
+  }
 
   const handleRefresh = () => {
     if (item.type === "terminal") {
@@ -319,15 +355,23 @@ export function PreviewView({
             </Select>
           )}
 
-          {/* External link button - for files in repo (GitHub) and servers (preview URL) */}
+          {/* External link button - for files in repo (GitHub) and servers (preview URL).
+              On an expired server preview this recreates the sandbox before
+              opening (see handleOpenExternal), so it's disabled meanwhile to
+              stop a second click from racing the first recreation. */}
           {externalUrl && (
             <a
               href={externalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
-              title={externalLinkTitle}
-              aria-label={externalLinkTitle}
+              onClick={handleOpenExternal}
+              aria-disabled={isPreviewExpired && isOpeningPreview}
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer",
+                isPreviewExpired && isOpeningPreview && "opacity-50 pointer-events-none"
+              )}
+              title={isPreviewExpired ? "Restart sandbox and open in new tab" : externalLinkTitle}
+              aria-label={isPreviewExpired ? "Restart sandbox and open in new tab" : externalLinkTitle}
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -374,6 +418,8 @@ export function PreviewView({
             sandboxId={sandboxId}
             chatId={chatId}
             onSandboxRecreated={onSandboxRecreated}
+            recreateRef={recreateRef}
+            onStatusChange={setPreviewStatus}
             scale={scale}
             messages={messages}
             refreshNonce={refreshNonce}

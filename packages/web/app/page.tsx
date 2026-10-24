@@ -526,7 +526,20 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     item: preview.previewItem,
     sandboxId: currentChat?.sandboxId ?? null,
     chatId: currentChat?.id ?? null,
-    onSandboxRecreated: (sandboxId: string) => handleUpdateChatProp({ sandboxId }),
+    onSandboxRecreated: (sandboxId: string, serverUrl?: { port: number; url: string }) => {
+      // Preview URLs are scoped to the sandbox that generated them, so a
+      // recreation always invalidates the open server item's url too —
+      // without this patch the iframe/external-link would keep pointing at
+      // the deleted sandbox even though sandboxId itself is now current.
+      if (!serverUrl) {
+        handleUpdateChatProp({ sandboxId })
+        return
+      }
+      const previewItems = currentChat?.previewItems?.map((it) =>
+        it.type === "server" && it.port === serverUrl.port ? { ...it, url: serverUrl.url } : it
+      )
+      handleUpdateChatProp({ sandboxId, previewItems })
+    },
     repo: currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? currentChat.repo : null,
     branch: currentChat?.branch ?? currentChat?.baseBranch ?? null,
     onClose: preview.closePreview,

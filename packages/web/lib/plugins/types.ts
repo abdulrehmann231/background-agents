@@ -22,8 +22,30 @@ export interface PanelProps {
    * panel's "expired" recovery), with the fresh sandboxId. The caller should
    * persist it onto the chat so sandboxId prop updates and future requests
    * target the new sandbox instead of the deleted one.
+   *
+   * `serverUrl` is passed when the recreated sandbox has a new preview URL
+   * for the panel's port (preview URLs are sandbox-scoped, so a recreation
+   * always changes it) — the caller should also patch the matching `server`
+   * PreviewItem's `url` so the iframe and "open in new window" don't keep
+   * pointing at the deleted sandbox.
    */
-  onSandboxRecreated?: (sandboxId: string) => void
+  onSandboxRecreated?: (sandboxId: string, serverUrl?: { port: number; url: string }) => void
+  /**
+   * Set by a panel that can recover from "expired" on demand (currently only
+   * the server preview). Lets a parent that renders its own UI outside the
+   * panel (PreviewView's "open in new window" button) trigger the same
+   * recreate-then-resume flow before acting, instead of duplicating the
+   * expired/recreate logic. Resolves to the panel's fresh URL for its item on
+   * success, or null on failure. The panel is responsible for assigning
+   * `recreateRef.current` and clearing it on unmount.
+   */
+  recreateRef?: React.RefObject<(() => Promise<string | null>) | null>
+  /**
+   * Set by a panel whenever its own resource-probe status changes, so a
+   * parent rendering UI outside the panel (PreviewView's external-link
+   * button) can tell "expired" apart from "ready" without re-probing itself.
+   */
+  onStatusChange?: (status: "loading" | "ready" | "stopped" | "expired" | "error") => void
   /** Optional scale factor for preview (e.g., 0.5, 0.75, 1) */
   scale?: number
   /** All messages in the current chat, for plugins that need live content */
