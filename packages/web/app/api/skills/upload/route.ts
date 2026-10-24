@@ -8,9 +8,12 @@ import {
   notFound,
   internalError,
   serverConfigError,
+  getGitHubToken,
 } from "@/lib/db/api-helpers"
 import { PATHS } from "@/lib/constants"
-import { ensureSandboxStarted } from "@/lib/sandbox"
+import { NEW_REPOSITORY } from "@/lib/types"
+import { ensureSandboxStarted, recreateChatSandbox } from "@/lib/sandbox"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { getSkillNameFromHandle, installSkillArchive } from "@background-agents/sandbox-skills/sandbox"
 
 // Booting a stopped sandbox can take up to ~120s, plus the install itself.
@@ -49,7 +52,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const chat = await prisma.chat.findUnique({
       where: { id: chatId },
-      select: { userId: true, sandboxId: true, repo: true },
+      select: { id: true, userId: true, sandboxId: true, repo: true, baseBranch: true, branch: true },
     })
 
     if (!chat || chat.userId !== userId) {
@@ -59,11 +62,21 @@ export async function POST(req: NextRequest): Promise<Response> {
       return badRequest("Chat has no sandbox — send a message first")
     }
 
-    // Install first, so a zip that doesn't work is never saved.
+    // Install first, so a zip that doesn't work is never saved. Buffering the
+    // archive before touching the sandbox also means a recreate-and-retry
+    // below (if the sandbox expired) has the bytes ready without re-reading
+    // the request body.
     const archive = new Uint8Array(await file.arrayBuffer())
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(chat.sandboxId)
-    await ensureSandboxStarted(sandbox)
+    let sandbox = await getSandboxOrExpired(daytona, chat.sandboxId)
+    if (sandbox instanceof Response) {
+      const githubToken = chat.repo === NEW_REPOSITORY ? null : await getGitHubToken(userId)
+      const recreated = await recreateChatSandbox({ daytona, chat, userId, githubToken })
+      if (!recreated) return sandbox
+      sandbox = recreated.sandbox
+    } else {
+      await ensureSandboxStarted(sandbox)
+    }
     const result = await installSkillArchive(sandbox, `${PATHS.SANDBOX_HOME}/project`, archive)
     if (!result.success) {
       return badRequest(result.error ?? "Could not install the skill")

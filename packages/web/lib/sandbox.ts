@@ -318,6 +318,82 @@ export async function createSandboxForChat(
   }
 }
 
+export interface RecreateChatSandboxOptions {
+  daytona: Daytona
+  chat: { id: string; repo: string; baseBranch: string | null; branch: string | null }
+  userId: string
+  githubToken: string | null
+}
+
+/**
+ * Recreate a chat's sandbox after it expired (auto-deleted by Daytona), and
+ * persist the new id onto the chat row. Restores the chat's existing branch
+ * from remote when it has one — the same semantics as the first message after
+ * deletion in `ensure-sandbox.ts`, and as `/api/chats/[chatId]/sandbox/recreate`.
+ *
+ * This is the one shared implementation both of those call, plus any other
+ * server route that needs to recover from an expired sandbox for an action
+ * that's safe to retry against a fresh clone (anything that only reads/writes
+ * already-pushed remote state — e.g. re-fetching after a GitHub-side squash,
+ * or reinstalling a skill file). It is NOT appropriate for actions whose only
+ * copy of the data lived in the dead sandbox's local working tree (e.g.
+ * pushing uncommitted local changes) — that data is already gone the moment
+ * the sandbox expired, recreating doesn't bring it back, and silently
+ * "succeeding" against an empty retry would be misleading.
+ *
+ * Returns null for the one genuinely unrecoverable case: a cloned repo with
+ * no GitHub token to re-clone from.
+ */
+export async function recreateChatSandbox(
+  options: RecreateChatSandboxOptions
+): Promise<CreatedSandbox | null> {
+  const { daytona, chat, userId, githubToken } = options
+  const isNewRepo = chat.repo === NEW_REPOSITORY || chat.repo === "__new__"
+
+  if (!isNewRepo && !githubToken) {
+    await prisma.chat.update({
+      where: { id: chat.id },
+      data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
+    })
+    return null
+  }
+
+  await prisma.chat.update({ where: { id: chat.id }, data: { status: "creating" } })
+
+  const restoreExistingBranch = !!chat.branch
+  const newBranch = chat.branch ?? `agent/${randomUUID().slice(0, 8)}`
+
+  const created = await createSandboxForChat({
+    daytona,
+    repo: chat.repo,
+    baseBranch: chat.baseBranch ?? "main",
+    newBranch,
+    githubToken: githubToken ?? undefined,
+    userId,
+    restoreExistingBranch,
+  })
+
+  // Freshly created sandbox: no agent conversation history on disk, so any
+  // stale session pointer must be dropped (same reasoning as ensure-sandbox.ts)
+  // or the next turn's "resume" would point at a session the CLI can't find.
+  await prisma.chat.update({
+    where: { id: chat.id },
+    data: {
+      sandboxId: created.sandboxId,
+      branch: created.branch,
+      previewUrlPattern: created.previewUrlPattern ?? null,
+      sessionId: null,
+      status: "idle",
+    },
+  })
+
+  if (chat.repo !== NEW_REPOSITORY) {
+    await installSkillsForRepo(created.sandbox, userId, chat.repo)
+  }
+
+  return created
+}
+
 /**
  * Upload files to an existing sandbox under destDir, resolving filename
  * conflicts with -1, -2, …, -timestamp suffixes. The directory is created if

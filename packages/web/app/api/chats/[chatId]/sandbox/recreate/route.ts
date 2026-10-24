@@ -1,8 +1,7 @@
 import { Daytona } from "@daytonaio/sdk"
-import { randomUUID } from "crypto"
 import { NEW_REPOSITORY } from "@/lib/types"
 import { prisma } from "@/lib/db/prisma"
-import { createSandboxForChat, ensureSandboxStarted, installSkillsForRepo } from "@/lib/sandbox"
+import { ensureSandboxStarted, recreateChatSandbox } from "@/lib/sandbox"
 import {
   requireAuth,
   isAuthError,
@@ -75,49 +74,13 @@ export async function POST(
   const isNewRepo = chat.repo === NEW_REPOSITORY || chat.repo === "__new__"
   const githubToken = isNewRepo ? null : await getGitHubToken(auth.userId)
 
-  if (!isNewRepo && !githubToken) {
-    await prisma.chat.update({
-      where: { id: chatId },
-      data: { sandboxId: null, branch: null, previewUrlPattern: null, status: "error" },
-    })
-    return Response.json(
-      { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found. GitHub re-authentication required to recreate." },
-      { status: 410 }
-    )
-  }
-
   try {
-    await prisma.chat.update({ where: { id: chatId }, data: { status: "creating" } })
-
-    const restoreExistingBranch = !!chat.branch
-    const newBranch = chat.branch ?? `agent/${randomUUID().slice(0, 8)}`
-
-    const created = await createSandboxForChat({
-      daytona,
-      repo: chat.repo,
-      baseBranch: chat.baseBranch ?? "main",
-      newBranch,
-      githubToken: githubToken ?? undefined,
-      userId: auth.userId,
-      restoreExistingBranch,
-    })
-
-    // Freshly created sandbox: no agent conversation history on disk, so any
-    // stale session pointer must be dropped (same reasoning as ensure-sandbox.ts)
-    // or the next turn's "resume" would point at a session the CLI can't find.
-    await prisma.chat.update({
-      where: { id: chatId },
-      data: {
-        sandboxId: created.sandboxId,
-        branch: created.branch,
-        previewUrlPattern: created.previewUrlPattern ?? null,
-        sessionId: null,
-        status: "idle",
-      },
-    })
-
-    if (chat.repo !== NEW_REPOSITORY) {
-      await installSkillsForRepo(created.sandbox, auth.userId, chat.repo)
+    const created = await recreateChatSandbox({ daytona, chat, userId: auth.userId, githubToken })
+    if (!created) {
+      return Response.json(
+        { error: "SANDBOX_NOT_FOUND", message: "Sandbox not found. GitHub re-authentication required to recreate." },
+        { status: 410 }
+      )
     }
 
     return Response.json({

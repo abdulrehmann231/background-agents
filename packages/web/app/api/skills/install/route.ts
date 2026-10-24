@@ -8,8 +8,12 @@ import {
   notFound,
   internalError,
   serverConfigError,
+  getGitHubToken,
 } from "@/lib/db/api-helpers"
 import { PATHS } from "@/lib/constants"
+import { NEW_REPOSITORY } from "@/lib/types"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
+import { recreateChatSandbox } from "@/lib/sandbox"
 import { installSkills } from "@background-agents/sandbox-skills/sandbox"
 
 // =============================================================================
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // Verify chat ownership and get sandbox info
     const chat = await prisma.chat.findUnique({
       where: { id: body.chatId },
-      select: { userId: true, sandboxId: true, repo: true },
+      select: { id: true, userId: true, sandboxId: true, repo: true, baseBranch: true, branch: true },
     })
 
     if (!chat || chat.userId !== userId) {
@@ -68,9 +72,17 @@ export async function POST(req: NextRequest): Promise<Response> {
       return Response.json({ installed: 0, total: 0, results: [] })
     }
 
-    // Connect to sandbox
+    // Connect to sandbox — recreate transparently if it expired, same path
+    // used elsewhere (sandbox/git, github/squash): reinstalling skills into a
+    // freshly recreated sandbox is safe, there's no local-only state at risk.
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(chat.sandboxId)
+    let sandbox = await getSandboxOrExpired(daytona, chat.sandboxId)
+    if (sandbox instanceof Response) {
+      const githubToken = chat.repo === NEW_REPOSITORY ? null : await getGitHubToken(userId)
+      const recreated = await recreateChatSandbox({ daytona, chat, userId, githubToken })
+      if (!recreated) return sandbox
+      sandbox = recreated.sandbox
+    }
 
     const repoPath = `${PATHS.SANDBOX_HOME}/project`
 
