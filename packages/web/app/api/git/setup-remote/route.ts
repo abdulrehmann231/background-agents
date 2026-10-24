@@ -2,6 +2,7 @@ import { Daytona } from "@daytonaio/sdk"
 import { createSandboxGit, withAuth } from "@background-agents/sandbox-git"
 import { PATHS } from "@/lib/constants"
 import { requireGitHubAuth, isGitHubAuthError, internalError, badRequest, verifySandboxOwnership, forbidden } from "@/lib/db/api-helpers"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { getUserPushOptions } from "@/lib/git/push-options"
 
 /**
@@ -48,9 +49,15 @@ export async function POST(req: Request) {
     // 4. Get user settings for push options
     const pushOptions = await getUserPushOptions(userId)
 
-    // 5. Get sandbox from Daytona
+    // 5. Get sandbox from Daytona. This pushes the sandbox's local init
+    // commit to seed a brand-new GitHub repo — if the sandbox expired, that
+    // local-only commit is already gone and recreating can't bring it back
+    // (same reasoning as /api/git/push), so classify clearly instead of
+    // silently recreating and reporting success for a no-op push.
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(sandboxId)
+    const sandboxOrExpired = await getSandboxOrExpired(daytona, sandboxId)
+    if (sandboxOrExpired instanceof Response) return sandboxOrExpired
+    const sandbox = sandboxOrExpired
 
     // 6. Always use "project" as the directory name - sandbox/create always uses this
     const repoPath = `${PATHS.SANDBOX_HOME}/project`

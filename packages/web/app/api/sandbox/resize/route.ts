@@ -1,5 +1,6 @@
 import { Daytona } from "@daytonaio/sdk"
 import { badRequest, requireAdmin, isAuthError, serverConfigError } from "@/lib/db/api-helpers"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 
 /** Hard ceilings enforced server-side regardless of what the client sends. */
 const MAX_MEMORY_GB = 10
@@ -63,7 +64,13 @@ export async function GET(req: Request) {
 
   try {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(sandboxId)
+    // Admin tool, not chat-scoped — there's no owning chat to recreate from
+    // here, just classify an expired sandbox clearly (410) instead of a bare
+    // 500 so the resize modal can say "this sandbox no longer exists" rather
+    // than a generic error.
+    const sandboxOrExpired = await getSandboxOrExpired(daytona, sandboxId)
+    if (sandboxOrExpired instanceof Response) return sandboxOrExpired
+    const sandbox = sandboxOrExpired
     const usage = await readUsage(sandbox)
     return Response.json({ memory: sandbox.memory, disk: sandbox.disk, usage })
   } catch (error) {
@@ -117,7 +124,9 @@ export async function POST(req: Request) {
 
   try {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(sandboxId)
+    const sandboxOrExpired = await getSandboxOrExpired(daytona, sandboxId)
+    if (sandboxOrExpired instanceof Response) return sandboxOrExpired
+    const sandbox = sandboxOrExpired
 
     // Daytona only supports growing memory/disk, never shrinking (hot resize
     // can only increase CPU/memory, and disk resize throws on any decrease).

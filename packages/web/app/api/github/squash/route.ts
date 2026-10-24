@@ -3,7 +3,9 @@ import { Daytona } from "@daytonaio/sdk"
 import { createSandboxGit } from "@background-agents/sandbox-git"
 import { PATHS } from "@/lib/constants"
 import { createGitOperationMessage } from "@/lib/db/git-messages"
-import { requireGitHubAuth, isGitHubAuthError, verifySandboxOwnership, forbidden } from "@/lib/db/api-helpers"
+import { requireGitHubAuth, isGitHubAuthError, verifySandboxOwnership, forbidden, getChatWithAuth } from "@/lib/db/api-helpers"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
+import { recreateChatSandbox } from "@/lib/sandbox"
 
 // maxDuration configures the timeout for this Vercel function. Squash
 // operation timeout - 60 seconds.
@@ -176,10 +178,20 @@ export async function POST(req: Request) {
         console.warn(`Failed to delete temp branch ${tempBranchName}`)
       }
 
-      // Step 5: Sync sandbox with the new squashed state
+      // Step 5: Sync sandbox with the new squashed state. This step only ever
+      // fetches + hard-resets to origin — it never reads anything that lived
+      // only in the sandbox's local working tree — so if the sandbox expired,
+      // recreating it (a fresh clone of the now-squashed branch) and running
+      // the same sync against it is just as correct as syncing the original.
       try {
         const daytona = new Daytona({ apiKey: daytonaApiKey })
-        const sandbox = await daytona.get(sandboxId)
+        let sandbox = await getSandboxOrExpired(daytona, sandboxId)
+        if (sandbox instanceof Response) {
+          const chat = chatId ? await getChatWithAuth(chatId, userId) : null
+          const recreated = chat ? await recreateChatSandbox({ daytona, chat, userId, githubToken }) : null
+          if (!recreated) throw new Error("Sandbox expired and could not be recreated")
+          sandbox = recreated.sandbox
+        }
         const repoPath = `${PATHS.SANDBOX_HOME}/project`
 
         // Fetch the latest from origin (token passed via -c http.extraHeader, not stored)
