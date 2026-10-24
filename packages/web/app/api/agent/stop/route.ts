@@ -3,6 +3,7 @@ import { PATHS } from "@/lib/constants"
 import { cancelBackgroundAgent, snapshotBackgroundAgent } from "@/lib/agent-session"
 import { persistAgentSnapshot } from "../stream/_lib/persist-snapshot"
 import { prisma } from "@/lib/db/prisma"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { abandonFinalization, claimTurnFinalization, releaseTurn } from "@/lib/server/turn-ownership"
 import {
   isAuthError,
@@ -81,7 +82,33 @@ export async function POST(req: Request) {
     }
 
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(chat.sandboxId)
+
+    // A turn that's genuinely still "running" should be keeping its sandbox
+    // alive — the cron monitor calls sandbox.refreshActivity() on every tick
+    // specifically to prevent auto-stop mid-turn. So by the time Stop is
+    // clicked, if the sandbox isn't started, the agent process inside it is
+    // already dead (stopping a sandbox kills everything in it) — there is
+    // nothing left to cancel, whether the sandbox expired outright or merely
+    // auto-stopped. Booting it back up just to perform a now-pointless
+    // "cancel" on an already-gone process isn't worth the boot latency; just
+    // finalize the turn immediately, same as the confirmed-expired case.
+    //
+    // Abandoning the claim alone (the old behavior on any failure here)
+    // isn't enough: it leaves queuePaused=true and status="running" stuck
+    // forever, since nothing else in a retry would ever start the sandbox
+    // either. getSandboxOrExpired only short-circuits like this on a
+    // confirmed 404 or a resolved-but-not-started sandbox below — a genuine
+    // timeout/transient failure still throws and keeps the existing
+    // retry-friendly path, since that case might actually recover on its own.
+    const sandboxOrExpired = await getSandboxOrExpired(daytona, chat.sandboxId)
+    if (sandboxOrExpired instanceof Response || sandboxOrExpired.state !== "started") {
+      await releaseTurn(turn, claimId, "error", null, { pauseQueue: true })
+      return Response.json({
+        success: true,
+        warning: "The agent's sandbox was no longer running; its last saved output (if any) was kept, but the run could not be cleanly stopped.",
+      })
+    }
+    const sandbox = sandboxOrExpired
 
     const sessionOpts = {
       repoPath: `${PATHS.SANDBOX_HOME}/project`,
