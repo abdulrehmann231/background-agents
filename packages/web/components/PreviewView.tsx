@@ -193,16 +193,19 @@ export function PreviewView({
   // External URL for opening in new tab (files -> GitHub, servers -> preview URL)
   const externalUrl = fileGithubUrl ?? (item.type === "server" ? item.url : null)
   const externalLinkTitle = item.type === "server" ? "Open in new tab" : "Open on GitHub"
-  // Only server previews ever set `recover` (via onRecoverableChange), and
-  // only while they're "expired".
-  const isPreviewExpired = recover !== null
+  // Only server previews ever set `recover` (via onRecoverableChange) —
+  // while the sandbox is "stopped" (needs booting) or "expired" (needs
+  // recreating).
+  const needsRecovery = recover !== null
 
-  // "Open in new window" on an expired server preview: recreate the sandbox
-  // first (same recovery as the refresh button), then open whatever fresh URL
-  // that returns — never the stale `externalUrl` closed over before recreation,
-  // since preview URLs are scoped to the sandbox that no longer exists.
+  // "Open in new window" when the sandbox isn't ready: run the same recovery
+  // the refresh button would (boot if stopped, recreate if expired) first,
+  // then open whatever URL that resolves to — never the stale `externalUrl`
+  // closed over before recovery, since a recreated sandbox's preview URL has
+  // actually changed (a merely-booted one's hasn't, but recover() returns the
+  // right one either way).
   const handleOpenExternal = async (e: React.MouseEvent) => {
-    if (!recover) return // plain <a> handles the normal case
+    if (!recover) return // plain <a> handles the normal, already-ready case
     e.preventDefault()
     if (isOpeningPreview) return
     setIsOpeningPreview(true)
@@ -350,22 +353,22 @@ export function PreviewView({
           )}
 
           {/* External link button - for files in repo (GitHub) and servers (preview URL).
-              On an expired server preview this recreates the sandbox before
-              opening (see handleOpenExternal), so it's disabled meanwhile to
-              stop a second click from racing the first recreation. */}
+              On a stopped/expired server preview this recovers the sandbox
+              before opening (see handleOpenExternal), so it's disabled
+              meanwhile to stop a second click from racing the first. */}
           {externalUrl && (
             <a
               href={externalUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleOpenExternal}
-              aria-disabled={isPreviewExpired && isOpeningPreview}
+              aria-disabled={needsRecovery && isOpeningPreview}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer",
-                isPreviewExpired && isOpeningPreview && "opacity-50 pointer-events-none"
+                needsRecovery && isOpeningPreview && "opacity-50 pointer-events-none"
               )}
-              title={isPreviewExpired ? "Restart sandbox and open in new tab" : externalLinkTitle}
-              aria-label={isPreviewExpired ? "Restart sandbox and open in new tab" : externalLinkTitle}
+              title={needsRecovery ? "Start sandbox and open in new tab" : externalLinkTitle}
+              aria-label={needsRecovery ? "Start sandbox and open in new tab" : externalLinkTitle}
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
