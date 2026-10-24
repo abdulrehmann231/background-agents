@@ -3,7 +3,6 @@ import { PATHS } from "@/lib/constants"
 import { cancelBackgroundAgent, snapshotBackgroundAgent } from "@/lib/agent-session"
 import { persistAgentSnapshot } from "../stream/_lib/persist-snapshot"
 import { prisma } from "@/lib/db/prisma"
-import { ensureSandboxStarted } from "@/lib/sandbox"
 import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { abandonFinalization, claimTurnFinalization, releaseTurn } from "@/lib/server/turn-ownership"
 import {
@@ -84,33 +83,32 @@ export async function POST(req: Request) {
 
     const daytona = new Daytona({ apiKey: daytonaApiKey })
 
-    // A confirmed-gone sandbox (expired/deleted, not a transient failure)
-    // means there's nothing left to cancel or read output from — the turn
-    // can never finish normally. Finalize it as an error right here instead
-    // of just abandoning the claim: abandoning alone leaves queuePaused=true
-    // and status="running" with nothing left that could ever resolve them
-    // (see getSandboxOrExpired — it only returns this for a confirmed 404,
-    // never for a timeout/transient failure, so a real retry chance is
-    // preserved for anything that might actually recover).
+    // A turn that's genuinely still "running" should be keeping its sandbox
+    // alive — the cron monitor calls sandbox.refreshActivity() on every tick
+    // specifically to prevent auto-stop mid-turn. So by the time Stop is
+    // clicked, if the sandbox isn't started, the agent process inside it is
+    // already dead (stopping a sandbox kills everything in it) — there is
+    // nothing left to cancel, whether the sandbox expired outright or merely
+    // auto-stopped. Booting it back up just to perform a now-pointless
+    // "cancel" on an already-gone process isn't worth the boot latency; just
+    // finalize the turn immediately, same as the confirmed-expired case.
+    //
+    // Abandoning the claim alone (the old behavior on any failure here)
+    // isn't enough: it leaves queuePaused=true and status="running" stuck
+    // forever, since nothing else in a retry would ever start the sandbox
+    // either. getSandboxOrExpired only short-circuits like this on a
+    // confirmed 404 or a resolved-but-not-started sandbox below — a genuine
+    // timeout/transient failure still throws and keeps the existing
+    // retry-friendly path, since that case might actually recover on its own.
     const sandboxOrExpired = await getSandboxOrExpired(daytona, chat.sandboxId)
-    if (sandboxOrExpired instanceof Response) {
+    if (sandboxOrExpired instanceof Response || sandboxOrExpired.state !== "started") {
       await releaseTurn(turn, claimId, "error", null, { pauseQueue: true })
       return Response.json({
         success: true,
-        warning: "The agent's sandbox expired mid-run; its last saved output (if any) was kept, but the run could not be cleanly stopped.",
+        warning: "The agent's sandbox was no longer running; its last saved output (if any) was kept, but the run could not be cleanly stopped.",
       })
     }
     const sandbox = sandboxOrExpired
-
-    // A running turn should normally keep its sandbox alive (the cron monitor
-    // refreshes activity on every tick), so this is a rare race rather than
-    // the common case — but if the sandbox is merely stopped (not expired),
-    // its disk and the agent's output files are still intact; it just needs
-    // booting before snapshot/cancel can run. Without this, every retry would
-    // fail identically (nothing else here ever starts it), which is the same
-    // permanently-stuck symptom as the expired case above, just for a
-    // different reason — here the fix is to recover, not give up.
-    await ensureSandboxStarted(sandbox)
 
     const sessionOpts = {
       repoPath: `${PATHS.SANDBOX_HOME}/project`,
