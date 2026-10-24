@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type DragEvent } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Plus, Trash2, FolderGit2, Loader2, Upload, Check } from "lucide-react"
+import { X, Plus, Trash2, FolderGit2, Loader2, Upload, Check, Eye, EyeOff } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { VariableIcon } from "@/components/icons/variable-icon"
@@ -82,6 +82,8 @@ function EnvVarRow({
   onDelete,
   onBulkPaste,
   autoFocus,
+  revealed,
+  onToggleReveal,
 }: {
   envVar: EnvVar
   onChange: (updated: EnvVar) => void
@@ -89,6 +91,9 @@ function EnvVarRow({
   /** Called when `.env`-style text is pasted into the key field. */
   onBulkPaste: (entries: ParsedEnvEntry[]) => void
   autoFocus?: boolean
+  /** Whether the value is shown in plain text instead of masked. */
+  revealed: boolean
+  onToggleReveal: () => void
 }) {
   const keyRef = useRef<HTMLInputElement>(null)
 
@@ -122,14 +127,26 @@ function EnvVarRow({
       />
       <span className="text-muted-foreground">=</span>
       <Input
-        type="text"
+        type={revealed ? "text" : "password"}
         value={envVar.value}
         onChange={(e) => onChange({ ...envVar, value: e.target.value })}
         placeholder="value"
         className="flex-1 font-mono text-sm"
-        autoComplete="off"
+        // "new-password" plus the ignore flags keep password managers from offering to save or fill it.
+        autoComplete="new-password"
+        data-1p-ignore
+        data-lpignore="true"
         spellCheck={false}
       />
+      <button
+        type="button"
+        onClick={onToggleReveal}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+        aria-label={revealed ? "Hide value" : "Show value"}
+        aria-pressed={revealed}
+      >
+        {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
       <button
         type="button"
         onClick={onDelete}
@@ -159,6 +176,8 @@ export function EnvironmentVariablesModal({
   const [repoEnvVars, setRepoEnvVars] = useState<EnvVar[]>([])
   const [activeTab, setActiveTab] = useState<TabKey>("chat")
   const [newVarId, setNewVarId] = useState<string | null>(null)
+  // Ids of rows whose value is shown in plain text; everything else is masked.
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [importStatus, setImportStatus] = useState<{ message: string; error?: boolean } | null>(null)
   const [isDraggingFile, setIsDraggingFile] = useState(false)
@@ -185,6 +204,7 @@ export function EnvironmentVariablesModal({
       setRepoEnvVars(recordToEnvVars(initialRepoEnvVars))
       setActiveTab("chat")
       setNewVarId(null)
+      setRevealedIds(new Set())
       setIsSaving(false)
       setImportStatus(null)
       setIsDraggingFile(false)
@@ -208,6 +228,8 @@ export function EnvironmentVariablesModal({
   const handleAddVariable = (tab: TabKey) => {
     const newVar: EnvVar = { id: nanoid(), key: "", value: "" }
     setNewVarId(newVar.id)
+    // Show a freshly added value so you can see what you type.
+    setRevealedIds((prev) => new Set(prev).add(newVar.id))
     if (tab === "chat") {
       setChatEnvVars((prev) => [...prev, newVar])
     } else {
@@ -307,6 +329,27 @@ export function EnvironmentVariablesModal({
   }
 
   const activeVars = activeTab === "chat" ? chatEnvVars : repoEnvVars
+  const allRevealed = activeVars.length > 0 && activeVars.every((v) => revealedIds.has(v.id))
+
+  const toggleReveal = (id: string) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }
+
+  const toggleRevealAll = () => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      for (const v of activeVars) {
+        if (allRevealed) next.delete(v.id)
+        else next.add(v.id)
+      }
+      return next
+    })
+  }
+
   const activeTitle = activeTab === "chat" ? "Chat" : (repoName || "Repository")
   const hasRepository = !!repoName
 
@@ -316,7 +359,7 @@ export function EnvironmentVariablesModal({
   const renderContent = () => (
     <>
       {/* Actions */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-2">
+      <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-5 gap-y-1 mb-2">
         <button
           type="button"
           onClick={() => handleAddVariable(activeTab)}
@@ -333,6 +376,12 @@ export function EnvironmentVariablesModal({
           <Upload className="h-4 w-4" />
           Upload .env file
         </button>
+        {activeVars.length > 0 && (
+          <button type="button" onClick={toggleRevealAll} className={actionButtonClass}>
+            {allRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {allRevealed ? "Hide all" : "Show all"}
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -379,6 +428,8 @@ export function EnvironmentVariablesModal({
               onDelete={() => handleDeleteVariable(activeTab, envVar.id)}
               onBulkPaste={(entries) => importEntries(entries, "clipboard")}
               autoFocus={envVar.id === newVarId}
+              revealed={revealedIds.has(envVar.id)}
+              onToggleReveal={() => toggleReveal(envVar.id)}
             />
           ))}
         </div>
