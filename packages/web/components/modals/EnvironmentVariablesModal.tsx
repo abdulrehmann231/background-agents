@@ -359,7 +359,7 @@ export function EnvironmentVariablesModal({
   const renderContent = () => (
     <>
       {/* Actions */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-2">
+      <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-5 gap-y-1 mb-2">
         <button
           type="button"
           onClick={() => handleAddVariable(activeTab)}
