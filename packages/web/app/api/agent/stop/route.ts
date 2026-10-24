@@ -3,6 +3,7 @@ import { PATHS } from "@/lib/constants"
 import { cancelBackgroundAgent, snapshotBackgroundAgent } from "@/lib/agent-session"
 import { persistAgentSnapshot } from "../stream/_lib/persist-snapshot"
 import { prisma } from "@/lib/db/prisma"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { abandonFinalization, claimTurnFinalization, releaseTurn } from "@/lib/server/turn-ownership"
 import {
   isAuthError,
@@ -81,7 +82,24 @@ export async function POST(req: Request) {
     }
 
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(chat.sandboxId)
+
+    // A confirmed-gone sandbox (expired/deleted, not a transient failure)
+    // means there's nothing left to cancel or read output from — the turn
+    // can never finish normally. Finalize it as an error right here instead
+    // of just abandoning the claim: abandoning alone leaves queuePaused=true
+    // and status="running" with nothing left that could ever resolve them
+    // (see getSandboxOrExpired — it only returns this for a confirmed 404,
+    // never for a timeout/transient failure, so a real retry chance is
+    // preserved for anything that might actually recover).
+    const sandboxOrExpired = await getSandboxOrExpired(daytona, chat.sandboxId)
+    if (sandboxOrExpired instanceof Response) {
+      await releaseTurn(turn, claimId, "error", null, { pauseQueue: true })
+      return Response.json({
+        success: true,
+        warning: "The agent's sandbox expired mid-run; its last saved output (if any) was kept, but the run could not be cleanly stopped.",
+      })
+    }
+    const sandbox = sandboxOrExpired
 
     const sessionOpts = {
       repoPath: `${PATHS.SANDBOX_HOME}/project`,
