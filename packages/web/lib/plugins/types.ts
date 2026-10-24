@@ -15,6 +15,30 @@ export type PreviewItem =
 export interface PanelProps {
   item: PreviewItem
   sandboxId: string | null
+  /** The chat this preview belongs to, so a panel can trigger sandbox recovery. */
+  chatId?: string | null
+  /**
+   * Called after a panel recreates a dead sandbox (e.g. the server-preview
+   * panel's "expired" recovery), with the fresh sandboxId. The caller should
+   * persist it onto the chat so sandboxId prop updates and future requests
+   * target the new sandbox instead of the deleted one.
+   *
+   * `serverUrl` is passed when the recreated sandbox has a new preview URL
+   * for the panel's port (preview URLs are sandbox-scoped, so a recreation
+   * always changes it) — the caller should also patch the matching `server`
+   * PreviewItem's `url` so the iframe and "open in new window" don't keep
+   * pointing at the deleted sandbox.
+   */
+  onSandboxRecreated?: (sandboxId: string, serverUrl?: { port: number; url: string }) => void
+  /**
+   * Called by a panel whenever its own ability to recover from "expired"
+   * changes — `recover` while expired (a function resolving to the fresh URL,
+   * or null on failure), `null` otherwise. Lets a parent that renders UI
+   * outside the panel (PreviewView's "open in new window" button) trigger the
+   * same recreate-then-resume flow before acting, without re-probing the
+   * sandbox itself or duplicating the expired/recreate logic.
+   */
+  onRecoverableChange?: (recover: (() => Promise<string | null>) | null) => void
   /** Optional scale factor for preview (e.g., 0.5, 0.75, 1) */
   scale?: number
   /** All messages in the current chat, for plugins that need live content */
