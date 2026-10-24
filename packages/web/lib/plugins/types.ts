@@ -15,6 +15,15 @@ export type PreviewItem =
 export interface PanelProps {
   item: PreviewItem
   sandboxId: string | null
+  /** The chat this preview belongs to, so a panel can trigger sandbox recovery. */
+  chatId?: string | null
+  /**
+   * Called after a panel recreates a dead sandbox (e.g. the server-preview
+   * panel's "expired" recovery), with the fresh sandboxId. The caller should
+   * persist it onto the chat so sandboxId prop updates and future requests
+   * target the new sandbox instead of the deleted one.
+   */
+  onSandboxRecreated?: (sandboxId: string) => void
   /** Optional scale factor for preview (e.g., 0.5, 0.75, 1) */
   scale?: number
   /** All messages in the current chat, for plugins that need live content */

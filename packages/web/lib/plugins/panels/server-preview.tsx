@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Globe } from "lucide-react"
 import type { PanelPlugin, PanelProps, PreviewItem } from "../types"
 import { PanelState } from "./PanelState"
@@ -13,12 +13,47 @@ interface ServerStateResponse {
   log?: string
 }
 
-function ServerPreviewComponent({ item, scale = 1, sandboxId, explicitStart, onRefresh }: PanelProps) {
+function ServerPreviewComponent({
+  item,
+  scale = 1,
+  sandboxId,
+  chatId,
+  onSandboxRecreated,
+  explicitStart,
+  onRefresh,
+}: PanelProps) {
   const url = item.type === "server" ? item.url : ""
   const port = item.type === "server" ? item.port : null
 
   // Declared before any early return so the hook order stays fixed.
   const [frameLoaded, setFrameLoaded] = useState(false)
+  const [isRecreating, setIsRecreating] = useState(false)
+
+  // The panel's own probe (below) never recreates a sandbox — /api/sandbox/state
+  // only starts/stops an existing one, so a gone sandboxId 410s forever. This is
+  // the one path that actually fixes "This sandbox expired.": recreate it on the
+  // chat (same path as sending a new agent message), tell the parent about the
+  // fresh id so the sandboxId prop updates, then run the normal refresh so the
+  // panel re-probes — and, since it's an explicit refresh with the port set,
+  // replays the recorded dev-server command too.
+  const handleRecreate = useCallback(async () => {
+    if (!chatId || isRecreating) return
+    setIsRecreating(true)
+    try {
+      const res = await fetch(`/api/chats/${chatId}/sandbox/recreate`, { method: "POST" })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.sandboxId) {
+        console.error("Failed to recreate sandbox:", data?.error ?? res.status)
+        return
+      }
+      onSandboxRecreated?.(data.sandboxId)
+      onRefresh()
+    } catch (error) {
+      console.error("Failed to recreate sandbox:", error)
+    } finally {
+      setIsRecreating(false)
+    }
+  }, [chatId, isRecreating, onSandboxRecreated, onRefresh])
 
   // Safety net for the overlay below: a server that accepts the connection but
   // never finishes responding would never fire `load`, and the cover would hide
@@ -65,7 +100,15 @@ function ServerPreviewComponent({ item, scale = 1, sandboxId, explicitStart, onR
       )
     }
     if (status === "stopped") return <PanelState status="stopped" onRefresh={onRefresh} />
-    if (status === "expired") return <PanelState status="expired" onRefresh={onRefresh} />
+    if (status === "expired") {
+      return (
+        <PanelState
+          status={isRecreating ? "loading" : "expired"}
+          message={isRecreating ? "Recreating sandbox…" : undefined}
+          onRefresh={chatId ? handleRecreate : undefined}
+        />
+      )
+    }
     if (status === "error") {
       return <PanelState status="error" message={error ?? undefined} onRefresh={onRefresh} />
     }

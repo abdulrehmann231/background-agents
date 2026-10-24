@@ -525,6 +525,8 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
   const previewCommonProps = {
     item: preview.previewItem,
     sandboxId: currentChat?.sandboxId ?? null,
+    chatId: currentChat?.id ?? null,
+    onSandboxRecreated: (sandboxId: string) => handleUpdateChatProp({ sandboxId }),
     repo: currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? currentChat.repo : null,
     branch: currentChat?.branch ?? currentChat?.baseBranch ?? null,
     onClose: preview.closePreview,

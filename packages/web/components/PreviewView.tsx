@@ -28,6 +28,10 @@ export type { PreviewItem } from "@/lib/plugins/types"
 export interface PreviewViewProps {
   item: PreviewItem | null
   sandboxId: string | null
+  /** The chat this preview belongs to, so a panel can trigger sandbox recovery. */
+  chatId?: string | null
+  /** Called after a panel recreates a dead sandbox, with the fresh sandboxId. */
+  onSandboxRecreated?: (sandboxId: string) => void
   /** Optional — when provided, enables external link button for files. */
   repo?: string | null
   branch?: string | null
@@ -74,6 +78,8 @@ const previewItemRowStyles = "flex items-center gap-1.5 px-1.5 py-1 text-left"
 export function PreviewView({
   item,
   sandboxId,
+  chatId,
+  onSandboxRecreated,
   repo,
   branch,
   onClose,
@@ -366,6 +372,8 @@ export function PreviewView({
             key={`${getItemKey(item)}-${refreshNonce}`}
             item={item}
             sandboxId={sandboxId}
+            chatId={chatId}
+            onSandboxRecreated={onSandboxRecreated}
             scale={scale}
             messages={messages}
             refreshNonce={refreshNonce}
