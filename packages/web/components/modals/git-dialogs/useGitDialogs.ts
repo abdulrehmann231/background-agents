@@ -163,6 +163,18 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
     [chatId, refetchMessages]
   )
 
+  // callSandboxGit recreates an expired sandbox transparently and retries, but
+  // the fresh sandboxId has to be persisted on the chat or the *next* action
+  // would just hit the same dead id again.
+  const syncRecreatedSandboxId = useCallback(
+    (recreatedSandboxId: string | undefined) => {
+      if (recreatedSandboxId && chat && recreatedSandboxId !== chat.sandboxId) {
+        void updateChatById(chat.id, { sandboxId: recreatedSandboxId })
+      }
+    },
+    [chat, updateChatById]
+  )
+
   // Handle merge
   const handleMerge = useCallback(async () => {
     if (!selectedBranch || !branchName || !sandboxId || !chatId) return
@@ -184,7 +196,7 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
     const targetName = resolveChatName(selectedBranch) || selectedBranch
 
     await runGitAction(async () => {
-      const { ok, status, data } = await callSandboxGit<{
+      const { ok, status, data, recreatedSandboxId } = await callSandboxGit<{
         conflict?: boolean
         inMerge?: boolean
         conflictedFiles?: string[]
@@ -203,6 +215,8 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
         sourceName,
         targetName,
       })
+
+      syncRecreatedSandboxId(recreatedSandboxId)
 
       if (status === 409 && data.conflict && data.inMerge) {
         setRebaseConflict({
@@ -227,14 +241,14 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
         void updateChatById(chat.id, { baseBranch: selectedBranch })
       }
     }, setMergeOpen)
-  }, [selectedBranch, branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, squashMerge, findOtherChatOnBranch, chat, resolveChatName, updateChatById, runGitAction])
+  }, [selectedBranch, branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, squashMerge, findOtherChatOnBranch, chat, resolveChatName, updateChatById, runGitAction, syncRecreatedSandboxId])
 
   // Handle rebase
   const handleRebase = useCallback(async () => {
     if (!selectedBranch || !branchName || !sandboxId || !chatId) return
 
     await runGitAction(async () => {
-      const { ok, status, data } = await callSandboxGit<{
+      const { ok, status, data, recreatedSandboxId } = await callSandboxGit<{
         conflict?: boolean
         conflictedFiles?: string[]
       }>({
@@ -248,6 +262,8 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
         chatId,
       })
 
+      syncRecreatedSandboxId(recreatedSandboxId)
+
       if (status === 409 && data.conflict) {
         setRebaseConflict({
           inRebase: true,
@@ -259,7 +275,7 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
 
       if (!ok) return
     }, setRebaseOpen)
-  }, [selectedBranch, branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, runGitAction])
+  }, [selectedBranch, branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, runGitAction, syncRecreatedSandboxId])
 
   // Handle create PR
   const handleCreatePR = useCallback(async (descriptionType: PRDescriptionType = "short") => {
@@ -287,7 +303,7 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
     if (!branchName || !sandboxId || !repoOwner || !repoApiName || !chatId) return
 
     await runGitAction(async () => {
-      await callSandboxGit({
+      const { recreatedSandboxId } = await callSandboxGit({
         sandboxId,
         repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
         action: "force-push",
@@ -296,8 +312,9 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
         repoApiName,
         chatId,
       })
+      syncRecreatedSandboxId(recreatedSandboxId)
     })
-  }, [branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, runGitAction])
+  }, [branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, runGitAction, syncRecreatedSandboxId])
 
   // Handle abort conflict
   const handleAbortConflict = useCallback(async () => {
@@ -305,16 +322,20 @@ export function useGitDialogs({ chat, chats, updateChatById, refetchMessages, se
     const isMerge = rebaseConflict.inMerge
 
     await runGitAction(async () => {
-      const { ok } = await callSandboxGit({
+      const { ok, recreatedSandboxId } = await callSandboxGit({
         sandboxId,
         repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
         action: isMerge ? "abort-merge" : "abort-rebase",
         chatId,
       })
 
-      if (ok) setRebaseConflict(EMPTY_CONFLICT_STATE)
+      syncRecreatedSandboxId(recreatedSandboxId)
+
+      // A recreated sandbox has no rebase/merge in progress (fresh clone) —
+      // either way there's nothing left to abort, so treat it as resolved.
+      if (ok || recreatedSandboxId) setRebaseConflict(EMPTY_CONFLICT_STATE)
     })
-  }, [sandboxId, chatId, repoName, rebaseConflict.inMerge, runGitAction])
+  }, [sandboxId, chatId, repoName, rebaseConflict.inMerge, runGitAction, syncRecreatedSandboxId])
 
   // Fetch commits ahead when squash dialog opens
   const fetchCommitsAhead = useCallback(async () => {
