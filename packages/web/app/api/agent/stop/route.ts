@@ -3,6 +3,7 @@ import { PATHS } from "@/lib/constants"
 import { cancelBackgroundAgent, snapshotBackgroundAgent } from "@/lib/agent-session"
 import { persistAgentSnapshot } from "../stream/_lib/persist-snapshot"
 import { prisma } from "@/lib/db/prisma"
+import { ensureSandboxStarted } from "@/lib/sandbox"
 import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { abandonFinalization, claimTurnFinalization, releaseTurn } from "@/lib/server/turn-ownership"
 import {
@@ -100,6 +101,16 @@ export async function POST(req: Request) {
       })
     }
     const sandbox = sandboxOrExpired
+
+    // A running turn should normally keep its sandbox alive (the cron monitor
+    // refreshes activity on every tick), so this is a rare race rather than
+    // the common case — but if the sandbox is merely stopped (not expired),
+    // its disk and the agent's output files are still intact; it just needs
+    // booting before snapshot/cancel can run. Without this, every retry would
+    // fail identically (nothing else here ever starts it), which is the same
+    // permanently-stuck symptom as the expired case above, just for a
+    // different reason — here the fix is to recover, not give up.
+    await ensureSandboxStarted(sandbox)
 
     const sessionOpts = {
       repoPath: `${PATHS.SANDBOX_HOME}/project`,
