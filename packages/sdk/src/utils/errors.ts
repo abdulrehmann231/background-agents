@@ -19,7 +19,13 @@
  * resolveAgentError() composes both and additionally logs the raw payload when
  * nothing could be extracted, so a genuinely opaque error is still inspectable
  * in server logs.
+ *
+ *   3. matchPlainTextErrorLine() — several CLIs (droid, kimi) fall back to a
+ *      bare `error: <detail>` text line instead of JSON on fatal failure; this
+ *      centralizes that one shared pattern so parsers don't each redefine it.
  */
+
+import type { Event } from "../types/events"
 
 /** Coarse buckets a failure can fall into. Drives UI affordances downstream. */
 export type AgentErrorCategory =
@@ -176,4 +182,18 @@ export function resolveAgentError(input: unknown, provider?: string): string {
     return "The agent reported an error without any details — check the agent logs."
   }
   return classifyAgentError(raw).message
+}
+
+/** Matches the plain-text `error: <detail>` fallback shape droid/kimi emit on fatal failure. */
+const PLAIN_TEXT_ERROR_LINE = /^error:\s*(.+)$/i
+
+/**
+ * Checks a non-JSON output line for the shared `error: <detail>` fallback
+ * shape and, if matched, returns a classified end-error event. Returns null
+ * when the line doesn't match, so callers can keep treating it as ignorable.
+ */
+export function matchPlainTextErrorLine(line: string, agentName: string): Event | null {
+  const m = PLAIN_TEXT_ERROR_LINE.exec(line.trim())
+  if (!m) return null
+  return { type: "end", error: resolveAgentError(m[1], agentName) }
 }
