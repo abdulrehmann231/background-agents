@@ -65,6 +65,7 @@ import {
 } from "@/lib/query/hooks"
 import { metricLabel, type StatsMetric } from "@/components/charts/chartFormatters"
 import { cn } from "@/lib/utils"
+import { sortByTimeKey } from "@/lib/time-series"
 
 const METRIC_OPTIONS: { key: StatsMetric; label: string }[] = [
   { key: "tokens", label: "Tokens" },
@@ -196,14 +197,7 @@ function combineByUserOverTime(
       byTime.set(time, entry)
     }
   }
-  // Hourly time keys are "0".."23" — a plain string sort would put "10" before
-  // "2", so sort numerically in that case; day keys ("YYYY-MM-DD") sort fine
-  // lexicographically.
-  return [...byTime.values()].sort((a, b) =>
-    isHourly
-      ? Number(a.time) - Number(b.time)
-      : String(a.time).localeCompare(String(b.time))
-  )
+  return sortByTimeKey([...byTime.values()], isHourly)
 }
 
 /** Multi-select "Providers" filter for the Leaderboard's Usage by user table —

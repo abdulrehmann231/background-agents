@@ -8,6 +8,7 @@ import { useDragToClose } from "@/lib/hooks/useDragToClose"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { createRepository } from "@/lib/github"
+import { isValidRepoName } from "@background-agents/common"
 
 interface CreateRepoModalProps {
   open: boolean
@@ -85,8 +86,7 @@ export function CreateRepoModal({
     }
 
     // Validate repo name format
-    const nameRegex = /^[a-zA-Z0-9._-]+$/
-    if (!nameRegex.test(newRepoName.trim())) {
+    if (!isValidRepoName(newRepoName.trim())) {
       setError("Repository name can only contain alphanumeric characters, hyphens, underscores, and periods")
       return
     }

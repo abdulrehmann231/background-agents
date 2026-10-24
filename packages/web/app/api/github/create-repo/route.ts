@@ -1,4 +1,4 @@
-import { createRepo, type GitHubRepo } from "@background-agents/common"
+import { createRepo, isValidRepoName, type GitHubRepo } from "@background-agents/common"
 import { requireGitHubAuth, isGitHubAuthError, internalError, badRequest } from "@/lib/db/api-helpers"
 
 export async function POST(req: Request) {
@@ -15,8 +15,7 @@ export async function POST(req: Request) {
   }
 
   // Validate repo name format (GitHub rules)
-  const nameRegex = /^[a-zA-Z0-9._-]+$/
-  if (!nameRegex.test(name)) {
+  if (!isValidRepoName(name)) {
     return badRequest("Repository name can only contain alphanumeric characters, hyphens, underscores, and periods")
   }
 

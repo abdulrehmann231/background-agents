@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db/prisma"
 import { requireAdmin, isAuthError } from "@/lib/db/api-helpers"
 import { getBucket, getBucketStep, getRangeDays, getRangeInterval, parseTimeRange } from "@/lib/db/time-range"
+import { sortByTimeKey } from "@/lib/time-series"
 
 // Primary metric the dashboard charts are weighted by. "messages" counts
 // ActivityLog rows; "tokens"/"cost" aggregate the TokenUsage ledger.
@@ -438,16 +439,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const sortFn =
-      range === "24h"
-        ? (a: Record<string, number | string>, b: Record<string, number | string>) =>
-            Number(a.time) - Number(b.time)
-        : (a: Record<string, number | string>, b: Record<string, number | string>) =>
-            (a.time as string).localeCompare(b.time as string)
-
+    const isHourly = range === "24h"
     return {
-      byAgent: Object.values(byAgentMap).sort(sortFn),
-      byModel: Object.values(byModelMap).sort(sortFn),
+      byAgent: sortByTimeKey(Object.values(byAgentMap), isHourly),
+      byModel: sortByTimeKey(Object.values(byModelMap), isHourly),
     }
   }
 
