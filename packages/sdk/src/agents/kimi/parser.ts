@@ -23,10 +23,7 @@
 import type { Event } from "../../types/events"
 import { createToolStartEvent } from "../../core/tools"
 import { safeJsonParse } from "../../utils/json"
-import { resolveAgentError } from "../../utils/errors"
-
-/** Matches Kimi's plain-text fatal error line (`error: <detail>`). */
-const KIMI_ERROR_LINE = /^error:\s*(.+)$/i
+import { matchPlainTextErrorLine } from "../../utils/errors"
 
 interface KimiToolCall {
   type?: string
@@ -50,11 +47,7 @@ export function parseKimiLine(
   const json = safeJsonParse<KimiLine>(line)
   if (!json) {
     // Non-JSON line: the only ones we care about are Kimi's fatal error lines.
-    const m = KIMI_ERROR_LINE.exec(line.trim())
-    if (m) {
-      return { type: "end", error: resolveAgentError(m[1], "kimi") }
-    }
-    return null
+    return matchPlainTextErrorLine(line, "kimi")
   }
 
   // End-of-turn marker — also carries the resumable session id.

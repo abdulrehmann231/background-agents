@@ -19,10 +19,7 @@
 import type { Event } from "../../types/events"
 import { createToolStartEvent, stringifyToolResult } from "../../core/tools"
 import { safeJsonParse } from "../../utils/json"
-import { resolveAgentError } from "../../utils/errors"
-
-/** Matches droid's plain-text fatal error line (`error: <detail>`). */
-const DROID_ERROR_LINE = /^error:\s*(.+)$/i
+import { matchPlainTextErrorLine, resolveAgentError } from "../../utils/errors"
 
 interface DroidEvent {
   type?: string
@@ -45,9 +42,7 @@ export function parseDroidLine(
   const json = safeJsonParse<DroidEvent>(line)
   if (!json) {
     // Non-JSON line: the only ones we care about are droid's plain-text errors.
-    const m = DROID_ERROR_LINE.exec(line.trim())
-    if (m) return { type: "end", error: resolveAgentError(m[1], "droid") }
-    return null
+    return matchPlainTextErrorLine(line, "droid")
   }
 
   switch (json.type) {
