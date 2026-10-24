@@ -1,6 +1,7 @@
 import { Daytona } from "@daytonaio/sdk"
 import { createSandboxGit } from "@background-agents/sandbox-git"
 import { ensureSandboxStarted } from "@/lib/sandbox"
+import { getSandboxOrExpired } from "@/lib/sandbox-lifecycle"
 import { isSafeRepoPath, isSafeBranchName, isSafeRepoSegment } from "@/lib/git/ref-validation"
 import { clearPushFailureMessages, createGitOperationMessage } from "@/lib/db/git-messages"
 import { requireGitHubAuth, isGitHubAuthError, verifySandboxOwnership, forbidden } from "@/lib/db/api-helpers"
@@ -113,7 +114,14 @@ export async function POST(req: Request) {
 
   try {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
-    const sandbox = await daytona.get(sandboxId)
+
+    // Route every sandbox lookup through the shared lifecycle helper so an
+    // expired/deleted sandbox comes back as the standard 410 SANDBOX_NOT_FOUND
+    // (which the frontend knows how to recover from by recreating) instead of
+    // falling into the generic catch below as an undifferentiated 500.
+    const sandboxOrExpired = await getSandboxOrExpired(daytona, sandboxId)
+    if (sandboxOrExpired instanceof Response) return sandboxOrExpired
+    const sandbox = sandboxOrExpired
     const git = createSandboxGit(sandbox)
 
     // Working-tree actions need the sandbox running; boot it if stopped.
@@ -533,6 +541,15 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     console.error("[sandbox/git] Error:", error)
     const message = error instanceof Error ? error.message : "Unknown error"
+    // Every handled failure branch above already writes a chat message before
+    // returning; this catch-all is the backstop for anything that throws
+    // instead (e.g. a transient Daytona API failure) — without this, such a
+    // failure reaches the frontend as a bare non-ok response with nothing in
+    // the chat to show for it (see useGitDialogs.ts's runGitAction, which
+    // relies on refetching messages rather than surfacing the raw response).
+    if (chatId) {
+      await createGitOperationMessage(chatId, `${action} failed: ${message}.`, true).catch(() => {})
+    }
     return Response.json({ error: message }, { status: 500 })
   }
 }
