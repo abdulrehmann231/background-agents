@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { RefreshCw, X, ExternalLink, ChevronsUpDown, Download } from "lucide-react"
 import { PATHS } from "@background-agents/common"
@@ -112,6 +112,30 @@ export function PreviewView({
   // opening a dead sandbox's URL.
   const [recover, setRecover] = useState<(() => Promise<string | null>) | null>(null)
   const [isOpeningPreview, setIsOpeningPreview] = useState(false)
+  // useState's setter treats a function argument as an updater `(prev) =>
+  // next`, not a value to store — passing `setRecover` straight down would
+  // call the panel's recover function instead of saving it. Wrap it so a
+  // function is always stored as-is. Stable identity (no deps) so it doesn't
+  // itself cause the panel's effect to refire every render.
+  const handleRecoverableChange = useCallback(
+    (fn: (() => Promise<string | null>) | null) => setRecover(() => fn),
+    []
+  )
+  // Memoized so it's a stable `onRefresh` prop — panels (server-preview) use it
+  // as a dep for their own recovery callbacks, and a new identity every render
+  // would retrigger those needlessly on every PreviewView re-render. Declared
+  // here (above the `!item` early return below) since hooks can't be called
+  // conditionally.
+  const handleRefresh = useCallback(() => {
+    if (!item) return
+    if (item.type === "terminal") {
+      // Sessions are cached per-panel by their unique item.id.
+      disposeTerminalSession(item.id)
+    }
+    // Explicit user action — refreshing should boot a stopped sandbox.
+    setExplicitStart(true)
+    setRefreshNonce((k) => k + 1)
+  }, [item])
 
   // Download a file that's not in the repo
   const handleDownloadFile = async () => {
@@ -215,16 +239,6 @@ export function PreviewView({
     } finally {
       setIsOpeningPreview(false)
     }
-  }
-
-  const handleRefresh = () => {
-    if (item.type === "terminal") {
-      // Sessions are cached per-panel by their unique item.id.
-      disposeTerminalSession(item.id)
-    }
-    // Explicit user action — refreshing should boot a stopped sandbox.
-    setExplicitStart(true)
-    setRefreshNonce((k) => k + 1)
   }
 
   // Check if we have multiple items to show dropdown
@@ -415,7 +429,7 @@ export function PreviewView({
             sandboxId={sandboxId}
             chatId={chatId}
             onSandboxRecreated={onSandboxRecreated}
-            onRecoverableChange={setRecover}
+            onRecoverableChange={handleRecoverableChange}
             scale={scale}
             messages={messages}
             refreshNonce={refreshNonce}
