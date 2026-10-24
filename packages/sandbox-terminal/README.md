@@ -48,7 +48,9 @@ import { setupTerminal } from "@background-agents/sandbox-terminal"
 
 const result = await setupTerminal(sandbox, {
   expiresIn: 3600,  // URL expiry in seconds (default: 3600)
-  port: 44777,      // Server port (default: 44777)
+  port: 44777,      // Preview URL port to request a signed URL for (default: 44777).
+                     // The PTY server itself always listens on 44777 — it does not
+                     // read this option, so only the default currently works.
 })
 
 // Result:

@@ -11,7 +11,7 @@ const sandbox = await daytona.create()
 
 const session = await createSession("claude", {
   sandbox,
-  env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
+  env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY! }
 })
 
 await session.start("Refactor the auth module")
@@ -108,7 +108,7 @@ const sandbox = await daytona.create()
 // 2. Create session
 const session = await createSession("claude", {
   sandbox,
-  env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY },
+  env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY! },
   model: "sonnet",
   systemPrompt: "You are a helpful coding assistant.",
 })
@@ -276,7 +276,7 @@ type Event =
 | Provider | Example | Docs |
 |----------|---------|------|
 | **Claude** | `model: "sonnet"`, `model: "opus"`, `model: "haiku"` | [Claude Code](https://code.claude.com/docs/en/model-config#model-aliases) |
-| **Codex** | `model: "gpt-6.1-sol"` (Backgrounder default); `gpt-5.5` requires API-key authentication, not ChatGPT sign-in | [Codex CLI models](https://learn.chatgpt.com/docs/models) |
+| **Codex** | `model: "gpt-6.1-sol"` (Backgrounder default), `model: "gpt-6-astra"`, `model: "gpt-6-sol"`, `model: "gpt-6-luna"`; `gpt-5.5` was fully retired Oct 14, 2026 and is no longer offered under any auth method | [Codex CLI models](https://learn.chatgpt.com/docs/models) |
 | **Command Code** | `model: "xiaomi/mimo-v2.6-pro"`, `model: "claude-sonnet-5"`, `model: "deepseek/deepseek-v4-flash"` | [Command Code models](https://commandcode.ai/docs/reference/cli/models) |
 | **Copilot** | `model: "gpt-5-mini"`, `model: "claude-sonnet-5"`, `model: "gpt-5.5"` | [GitHub Copilot](https://docs.github.com/en/copilot) |
 | **Droid** | `model: "claude-sonnet-4-5-20250929"` (BYOK), `model: "gpt-5"`, `model: "factory/<id>"` (Factory-hosted) | [Factory Droid](https://docs.factory.ai/cli/) |
