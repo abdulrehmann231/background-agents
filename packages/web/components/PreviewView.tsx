@@ -106,16 +106,11 @@ export function PreviewView({
   const menuJustOpenedRef = useRef(false)
   // Track the currently displayed item to detect when the user switches previews
   const prevItemKeyRef = useRef<string | null>(null)
-  // The server-preview panel's current probe status, reported via onStatusChange
-  // — lets "open in new window" tell "expired" apart from "ready" without this
-  // component re-probing the sandbox itself.
-  const [previewStatus, setPreviewStatus] = useState<
-    "loading" | "ready" | "stopped" | "expired" | "error" | null
-  >(null)
-  // The panel assigns its recreate action here (server-preview only). "Open in
-  // new window" calls it first when the preview is expired, instead of opening
-  // a dead sandbox's URL.
-  const recreateRef = useRef<(() => Promise<string | null>) | null>(null)
+  // Set by the panel (server-preview only) via onRecoverableChange: a function
+  // to recreate the sandbox and resolve to the fresh URL, present only while
+  // the preview is "expired". "Open in new window" calls it first instead of
+  // opening a dead sandbox's URL.
+  const [recover, setRecover] = useState<(() => Promise<string | null>) | null>(null)
   const [isOpeningPreview, setIsOpeningPreview] = useState(false)
 
   // Download a file that's not in the repo
@@ -179,8 +174,7 @@ export function PreviewView({
   if (prevItemKeyRef.current !== itemKey) {
     prevItemKeyRef.current = itemKey
     if (explicitStart) setExplicitStart(false)
-    if (previewStatus !== null) setPreviewStatus(null)
-    recreateRef.current = null
+    if (recover) setRecover(null)
   }
 
   // When the item is a file and we have a repo/branch, build the GitHub URL
@@ -199,21 +193,21 @@ export function PreviewView({
   // External URL for opening in new tab (files -> GitHub, servers -> preview URL)
   const externalUrl = fileGithubUrl ?? (item.type === "server" ? item.url : null)
   const externalLinkTitle = item.type === "server" ? "Open in new tab" : "Open on GitHub"
-  // Only server previews can be "expired" (files/terminals have no live probe
-  // feeding previewStatus), and only while viewing that exact item.
-  const isPreviewExpired = item.type === "server" && previewStatus === "expired"
+  // Only server previews ever set `recover` (via onRecoverableChange), and
+  // only while they're "expired".
+  const isPreviewExpired = recover !== null
 
   // "Open in new window" on an expired server preview: recreate the sandbox
   // first (same recovery as the refresh button), then open whatever fresh URL
   // that returns — never the stale `externalUrl` closed over before recreation,
   // since preview URLs are scoped to the sandbox that no longer exists.
   const handleOpenExternal = async (e: React.MouseEvent) => {
-    if (!isPreviewExpired) return // plain <a> handles the normal case
+    if (!recover) return // plain <a> handles the normal case
     e.preventDefault()
     if (isOpeningPreview) return
     setIsOpeningPreview(true)
     try {
-      const freshUrl = await recreateRef.current?.()
+      const freshUrl = await recover()
       if (freshUrl) window.open(freshUrl, "_blank", "noopener,noreferrer")
     } finally {
       setIsOpeningPreview(false)
@@ -418,8 +412,7 @@ export function PreviewView({
             sandboxId={sandboxId}
             chatId={chatId}
             onSandboxRecreated={onSandboxRecreated}
-            recreateRef={recreateRef}
-            onStatusChange={setPreviewStatus}
+            onRecoverableChange={setRecover}
             scale={scale}
             messages={messages}
             refreshNonce={refreshNonce}

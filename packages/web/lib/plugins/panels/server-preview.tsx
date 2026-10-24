@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Globe } from "lucide-react"
 import type { PanelPlugin, PanelProps, PreviewItem } from "../types"
 import { PanelState } from "./PanelState"
@@ -19,8 +19,7 @@ function ServerPreviewComponent({
   sandboxId,
   chatId,
   onSandboxRecreated,
-  recreateRef,
-  onStatusChange,
+  onRecoverableChange,
   explicitStart,
   onRefresh,
 }: PanelProps) {
@@ -30,10 +29,6 @@ function ServerPreviewComponent({
   // Declared before any early return so the hook order stays fixed.
   const [frameLoaded, setFrameLoaded] = useState(false)
   const [isRecreating, setIsRecreating] = useState(false)
-  // Avoids a stale closure in handleRecreate without having to include
-  // isRecreating in its deps (which would otherwise redefine it, and thus
-  // reassign recreateRef.current, on every start/stop of a recreation).
-  const isRecreatingRef = useRef(false)
 
   // The panel's own probe (below) never recreates a sandbox — /api/sandbox/state
   // only starts/stops an existing one, so a gone sandboxId 410s forever. This is
@@ -45,12 +40,11 @@ function ServerPreviewComponent({
   //
   // Returns the fresh URL for this item's port (or null on failure) so callers
   // outside the panel — PreviewView's "open in new window" button, via
-  // `recreateRef` below — can open it directly instead of the stale `item.url`
-  // closed over from before the recreation (preview URLs are sandbox-scoped, so
-  // they always change on recreate).
+  // `onRecoverableChange` below — can open it directly instead of the stale
+  // `item.url` closed over from before the recreation (preview URLs are
+  // sandbox-scoped, so they always change on recreate).
   const handleRecreate = useCallback(async (): Promise<string | null> => {
-    if (!chatId || isRecreatingRef.current) return null
-    isRecreatingRef.current = true
+    if (!chatId) return null
     setIsRecreating(true)
     try {
       const res = await fetch(`/api/chats/${chatId}/sandbox/recreate`, { method: "POST" })
@@ -73,19 +67,9 @@ function ServerPreviewComponent({
       console.error("Failed to recreate sandbox:", error)
       return null
     } finally {
-      isRecreatingRef.current = false
       setIsRecreating(false)
     }
   }, [chatId, port, onSandboxRecreated, onRefresh])
-
-  // Expose the recreate action to PreviewView (for "open in new window" on an
-  // expired preview) without it having to duplicate this panel's logic.
-  useEffect(() => {
-    if (recreateRef) recreateRef.current = handleRecreate
-    return () => {
-      if (recreateRef) recreateRef.current = null
-    }
-  }, [recreateRef, handleRecreate])
 
   // Safety net for the overlay below: a server that accepts the connection but
   // never finishes responding would never fire `load`, and the cover would hide
@@ -118,12 +102,14 @@ function ServerPreviewComponent({
     },
   })
 
-  // Tell PreviewView what this panel's probe currently says, so its
-  // "open in new window" button (rendered outside this component) can tell
-  // "expired" apart from "ready" without re-probing itself.
+  // Tell PreviewView whether this panel can currently recover from "expired",
+  // and how, so its "open in new window" button (rendered outside this
+  // component) can run the same recreate-then-resume flow before opening —
+  // without re-probing the sandbox or duplicating this logic.
   useEffect(() => {
-    onStatusChange?.(status)
-  }, [status, onStatusChange])
+    onRecoverableChange?.(status === "expired" ? handleRecreate : null)
+    return () => onRecoverableChange?.(null)
+  }, [status, handleRecreate, onRecoverableChange])
 
   // Only gate on the probe when we have a sandbox to probe; otherwise fall back
   // to rendering the iframe best-effort (preserves prior behavior).
