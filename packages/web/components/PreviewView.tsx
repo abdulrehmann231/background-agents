@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { RefreshCw, X, ExternalLink, ChevronsUpDown, Download } from "lucide-react"
 import { PATHS } from "@background-agents/common"
@@ -112,6 +112,30 @@ export function PreviewView({
   // opening a dead sandbox's URL.
   const [recover, setRecover] = useState<(() => Promise<string | null>) | null>(null)
   const [isOpeningPreview, setIsOpeningPreview] = useState(false)
+  // useState's setter treats a function argument as an updater `(prev) =>
+  // next`, not a value to store — passing `setRecover` straight down would
+  // call the panel's recover function instead of saving it. Wrap it so a
+  // function is always stored as-is. Stable identity (no deps) so it doesn't
+  // itself cause the panel's effect to refire every render.
+  const handleRecoverableChange = useCallback(
+    (fn: (() => Promise<string | null>) | null) => setRecover(() => fn),
+    []
+  )
+  // Memoized so it's a stable `onRefresh` prop — panels (server-preview) use it
+  // as a dep for their own recovery callbacks, and a new identity every render
+  // would retrigger those needlessly on every PreviewView re-render. Declared
+  // here (above the `!item` early return below) since hooks can't be called
+  // conditionally.
+  const handleRefresh = useCallback(() => {
+    if (!item) return
+    if (item.type === "terminal") {
+      // Sessions are cached per-panel by their unique item.id.
+      disposeTerminalSession(item.id)
+    }
+    // Explicit user action — refreshing should boot a stopped sandbox.
+    setExplicitStart(true)
+    setRefreshNonce((k) => k + 1)
+  }, [item])
 
   // Download a file that's not in the repo
   const handleDownloadFile = async () => {
@@ -193,16 +217,19 @@ export function PreviewView({
   // External URL for opening in new tab (files -> GitHub, servers -> preview URL)
   const externalUrl = fileGithubUrl ?? (item.type === "server" ? item.url : null)
   const externalLinkTitle = item.type === "server" ? "Open in new tab" : "Open on GitHub"
-  // Only server previews ever set `recover` (via onRecoverableChange), and
-  // only while they're "expired".
-  const isPreviewExpired = recover !== null
+  // Only server previews ever set `recover` (via onRecoverableChange) —
+  // while the sandbox is "stopped" (needs booting) or "expired" (needs
+  // recreating).
+  const needsRecovery = recover !== null
 
-  // "Open in new window" on an expired server preview: recreate the sandbox
-  // first (same recovery as the refresh button), then open whatever fresh URL
-  // that returns — never the stale `externalUrl` closed over before recreation,
-  // since preview URLs are scoped to the sandbox that no longer exists.
+  // "Open in new window" when the sandbox isn't ready: run the same recovery
+  // the refresh button would (boot if stopped, recreate if expired) first,
+  // then open whatever URL that resolves to — never the stale `externalUrl`
+  // closed over before recovery, since a recreated sandbox's preview URL has
+  // actually changed (a merely-booted one's hasn't, but recover() returns the
+  // right one either way).
   const handleOpenExternal = async (e: React.MouseEvent) => {
-    if (!recover) return // plain <a> handles the normal case
+    if (!recover) return // plain <a> handles the normal, already-ready case
     e.preventDefault()
     if (isOpeningPreview) return
     setIsOpeningPreview(true)
@@ -212,16 +239,6 @@ export function PreviewView({
     } finally {
       setIsOpeningPreview(false)
     }
-  }
-
-  const handleRefresh = () => {
-    if (item.type === "terminal") {
-      // Sessions are cached per-panel by their unique item.id.
-      disposeTerminalSession(item.id)
-    }
-    // Explicit user action — refreshing should boot a stopped sandbox.
-    setExplicitStart(true)
-    setRefreshNonce((k) => k + 1)
   }
 
   // Check if we have multiple items to show dropdown
@@ -350,22 +367,22 @@ export function PreviewView({
           )}
 
           {/* External link button - for files in repo (GitHub) and servers (preview URL).
-              On an expired server preview this recreates the sandbox before
-              opening (see handleOpenExternal), so it's disabled meanwhile to
-              stop a second click from racing the first recreation. */}
+              On a stopped/expired server preview this recovers the sandbox
+              before opening (see handleOpenExternal), so it's disabled
+              meanwhile to stop a second click from racing the first. */}
           {externalUrl && (
             <a
               href={externalUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleOpenExternal}
-              aria-disabled={isPreviewExpired && isOpeningPreview}
+              aria-disabled={needsRecovery && isOpeningPreview}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer",
-                isPreviewExpired && isOpeningPreview && "opacity-50 pointer-events-none"
+                needsRecovery && isOpeningPreview && "opacity-50 pointer-events-none"
               )}
-              title={isPreviewExpired ? "Restart sandbox and open in new tab" : externalLinkTitle}
-              aria-label={isPreviewExpired ? "Restart sandbox and open in new tab" : externalLinkTitle}
+              title={needsRecovery ? "Start sandbox and open in new tab" : externalLinkTitle}
+              aria-label={needsRecovery ? "Start sandbox and open in new tab" : externalLinkTitle}
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -412,7 +429,7 @@ export function PreviewView({
             sandboxId={sandboxId}
             chatId={chatId}
             onSandboxRecreated={onSandboxRecreated}
-            onRecoverableChange={setRecover}
+            onRecoverableChange={handleRecoverableChange}
             scale={scale}
             messages={messages}
             refreshNonce={refreshNonce}

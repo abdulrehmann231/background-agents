@@ -28,7 +28,7 @@ function ServerPreviewComponent({
 
   // Declared before any early return so the hook order stays fixed.
   const [frameLoaded, setFrameLoaded] = useState(false)
-  const [isRecreating, setIsRecreating] = useState(false)
+  const [isRecovering, setIsRecovering] = useState(false)
 
   // The panel's own probe (below) never recreates a sandbox — /api/sandbox/state
   // only starts/stops an existing one, so a gone sandboxId 410s forever. This is
@@ -45,7 +45,7 @@ function ServerPreviewComponent({
   // sandbox-scoped, so they always change on recreate).
   const handleRecreate = useCallback(async (): Promise<string | null> => {
     if (!chatId) return null
-    setIsRecreating(true)
+    setIsRecovering(true)
     try {
       const res = await fetch(`/api/chats/${chatId}/sandbox/recreate`, { method: "POST" })
       const data = await res.json().catch(() => null)
@@ -67,9 +67,38 @@ function ServerPreviewComponent({
       console.error("Failed to recreate sandbox:", error)
       return null
     } finally {
-      setIsRecreating(false)
+      setIsRecovering(false)
     }
   }, [chatId, port, onSandboxRecreated, onRefresh])
+
+  // Same idea as handleRecreate, for "stopped" rather than "expired": the
+  // sandbox still exists, it just needs booting. Unlike recreation this never
+  // changes the url (same sandboxId, same preview URL) — it waits for the
+  // boot (and, with a port, the recorded dev-server command replay) to
+  // actually finish before resolving, so "open in new window" doesn't open a
+  // tab against a sandbox that isn't listening yet.
+  const handleStart = useCallback(async (): Promise<string | null> => {
+    if (!sandboxId) return null
+    setIsRecovering(true)
+    try {
+      const res = await fetch("/api/sandbox/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId, autoStart: true, port }),
+      })
+      if (!res.ok) {
+        console.error("Failed to start sandbox:", res.status)
+        return null
+      }
+      onRefresh()
+      return url
+    } catch (error) {
+      console.error("Failed to start sandbox:", error)
+      return null
+    } finally {
+      setIsRecovering(false)
+    }
+  }, [sandboxId, port, url, onRefresh])
 
   // Safety net for the overlay below: a server that accepts the connection but
   // never finishes responding would never fire `load`, and the cover would hide
@@ -102,14 +131,17 @@ function ServerPreviewComponent({
     },
   })
 
-  // Tell PreviewView whether this panel can currently recover from "expired",
-  // and how, so its "open in new window" button (rendered outside this
-  // component) can run the same recreate-then-resume flow before opening —
-  // without re-probing the sandbox or duplicating this logic.
+  // Tell PreviewView whether this panel can currently recover on its own —
+  // recreate if "expired", boot if "stopped" — and how, so its "open in new
+  // window" button (rendered outside this component) can run the same
+  // recovery flow before opening, instead of opening a dead or sleeping
+  // sandbox's URL.
   useEffect(() => {
-    onRecoverableChange?.(status === "expired" ? handleRecreate : null)
+    const recover =
+      status === "expired" ? handleRecreate : status === "stopped" ? handleStart : null
+    onRecoverableChange?.(recover)
     return () => onRecoverableChange?.(null)
-  }, [status, handleRecreate, onRecoverableChange])
+  }, [status, handleRecreate, handleStart, onRecoverableChange])
 
   // Only gate on the probe when we have a sandbox to probe; otherwise fall back
   // to rendering the iframe best-effort (preserves prior behavior).
@@ -124,12 +156,20 @@ function ServerPreviewComponent({
         />
       )
     }
-    if (status === "stopped") return <PanelState status="stopped" onRefresh={onRefresh} />
+    if (status === "stopped") {
+      return (
+        <PanelState
+          status={isRecovering ? "loading" : "stopped"}
+          message={isRecovering ? "Starting sandbox…" : undefined}
+          onRefresh={onRefresh}
+        />
+      )
+    }
     if (status === "expired") {
       return (
         <PanelState
-          status={isRecreating ? "loading" : "expired"}
-          message={isRecreating ? "Recreating sandbox…" : undefined}
+          status={isRecovering ? "loading" : "expired"}
+          message={isRecovering ? "Recreating sandbox…" : undefined}
           onRefresh={chatId ? handleRecreate : undefined}
         />
       )

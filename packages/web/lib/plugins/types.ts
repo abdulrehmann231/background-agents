@@ -31,12 +31,14 @@ export interface PanelProps {
    */
   onSandboxRecreated?: (sandboxId: string, serverUrl?: { port: number; url: string }) => void
   /**
-   * Called by a panel whenever its own ability to recover from "expired"
-   * changes — `recover` while expired (a function resolving to the fresh URL,
-   * or null on failure), `null` otherwise. Lets a parent that renders UI
-   * outside the panel (PreviewView's "open in new window" button) trigger the
-   * same recreate-then-resume flow before acting, without re-probing the
-   * sandbox itself or duplicating the expired/recreate logic.
+   * Called by a panel whenever its own ability to recover from a non-"ready"
+   * state changes — `recover` while recovery is possible (a function that
+   * performs it and resolves to the item's URL once ready, or null on
+   * failure), `null` otherwise (e.g. "ready", or a state nothing can fix like
+   * "error"). Lets a parent that renders UI outside the panel (PreviewView's
+   * "open in new window" button) run the same recovery flow — boot a
+   * "stopped" sandbox, recreate an "expired" one — before acting, without
+   * re-probing the sandbox itself or duplicating that logic.
    */
   onRecoverableChange?: (recover: (() => Promise<string | null>) | null) => void
   /** Optional scale factor for preview (e.g., 0.5, 0.75, 1) */
