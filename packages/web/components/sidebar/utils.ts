@@ -2,6 +2,27 @@ import type { Chat, Message } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 
 /**
+ * Whether a "owner/name" repo string is owned by the given user login.
+ * Comparison is case-insensitive since GitHub logins and repo owners are
+ * case-insensitive.
+ *
+ * Shared by the sidebar and the command palette so the two never drift.
+ */
+export function isOwnedByUser(repo: string, currentUserLogin?: string | null): boolean {
+  return !!currentUserLogin && repo.toLowerCase().startsWith(`${currentUserLogin.toLowerCase()}/`)
+}
+
+/**
+ * Strip the `login/` prefix from a repo string if it's owned by the given
+ * user login (e.g. "jamesmurdza/foo" → "foo" when currentUserLogin is
+ * "jamesmurdza"); otherwise return the repo unchanged.
+ */
+export function stripOwnerPrefix(repo: string, currentUserLogin?: string | null): string {
+  if (!isOwnedByUser(repo, currentUserLogin)) return repo
+  return repo.slice(`${currentUserLogin}/`.length)
+}
+
+/**
  * Unique repositories that have at least one active (non-archived, non-empty)
  * chat — the exact set shown in the sidebar's repository selector. Repos owned
  * by the current user come first, then everyone else's, then NEW_REPOSITORY (the
@@ -17,13 +38,11 @@ export function getChatRepos(chats: Chat[], currentUserLogin?: string | null): s
       repos.add(chat.repo)
     }
   }
-  const ownedByCurrentUser = (repo: string) =>
-    !!currentUserLogin && repo.toLowerCase().startsWith(`${currentUserLogin.toLowerCase()}/`)
   return Array.from(repos).sort((a, b) => {
     if (a === NEW_REPOSITORY) return 1
     if (b === NEW_REPOSITORY) return -1
-    const aOwned = ownedByCurrentUser(a)
-    const bOwned = ownedByCurrentUser(b)
+    const aOwned = isOwnedByUser(a, currentUserLogin)
+    const bOwned = isOwnedByUser(b, currentUserLogin)
     if (aOwned !== bOwned) return aOwned ? -1 : 1
     return a.localeCompare(b)
   })
