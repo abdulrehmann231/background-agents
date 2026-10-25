@@ -7,7 +7,8 @@
  */
 import "server-only"
 import type { CredentialId } from "@background-agents/common"
-import { encrypt } from "@/lib/db/encryption"
+import { prisma } from "@/lib/db/prisma"
+import { encrypt, decrypt } from "@/lib/db/encryption"
 import { normalizeStoredCredentials } from "@/lib/credentials"
 import { escapeHtml } from "@/lib/html"
 import { withUserLock } from "./codex-credentials"
@@ -21,6 +22,16 @@ export const NETLIFY_STATE_COOKIE = "netlify_oauth_state"
 export function netlifyRedirectUri(): string {
   const base = (process.env.NEXTAUTH_URL ?? "http://localhost:4000").replace(/\/$/, "")
   return `${base}/api/netlify/callback`
+}
+
+/**
+ * The user's stored Netlify token. Read directly rather than through
+ * getUserCredentials, which falls back to process.env for unset credentials.
+ */
+export async function readNetlifyToken(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { credentials: true } })
+  const stored = normalizeStoredCredentials(user?.credentials as Record<string, unknown> | null)[CREDENTIAL_KEY]
+  return stored ? decrypt(stored) : null
 }
 
 /** Store the user's Netlify token, or remove it when `token` is null. */
