@@ -60,6 +60,8 @@ function getItemKey(item: PreviewItem): string {
       return `terminal:${item.id}`
     case "server":
       return `server:${item.port}`
+    case "directory":
+      return `directory:${item.dirPath}`
   }
 }
 

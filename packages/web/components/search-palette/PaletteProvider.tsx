@@ -73,6 +73,7 @@ export function PaletteProvider({
   onArchiveChat,
   onOpenInVSCode,
   onOpenTerminal,
+  onOpenFileBrowser,
   onToggleTerminal,
   servers,
   onOpenServer,
@@ -234,6 +235,7 @@ export function PaletteProvider({
         onArchiveChat={onArchiveChat}
         onOpenInVSCode={onOpenInVSCode}
         onOpenTerminal={onOpenTerminal}
+        onOpenFileBrowser={onOpenFileBrowser}
         servers={servers}
         onOpenServer={onOpenServer}
         onClosePreview={onClosePreview}

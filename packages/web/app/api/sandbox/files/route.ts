@@ -72,16 +72,16 @@ export async function POST(req: Request) {
     //   - `list-servers` is a 5s background poll; a stopped sandbox has no
     //     listening servers, so we answer `{ ports: [] }` without starting it
     //     (and without keeping an idle sandbox alive).
-    //   - `read-file`/`read-file-binary` from the file-viewer panel are passive;
-    //     they omit `autoStart` and get a 409 SANDBOX_STOPPED (via
-    //     `passiveReadGate`) so the UI can offer a Resume action instead of
-    //     silently spinning the sandbox up.
+    //   - `read-file`/`read-file-binary`/`list-dir` from the file-viewer and
+    //     file-browser panels are passive; they omit `autoStart` and get a 409
+    //     SANDBOX_STOPPED (via `passiveReadGate`) so the UI can offer a Resume
+    //     action instead of silently spinning the sandbox up.
     // When the sandbox is already started we fall through to the normal
     // `ensureSandboxStarted` (a no-op start that still runs its usual checks).
     if (sandbox.state !== "started" && action === "list-servers") {
       return Response.json({ ports: [] })
     }
-    if (action === "read-file" || action === "read-file-binary") {
+    if (action === "read-file" || action === "read-file-binary" || action === "list-dir") {
       const halt = passiveReadGate(sandbox, body.autoStart)
       if (halt) return halt
     }
@@ -160,6 +160,38 @@ export async function POST(req: Request) {
             "Content-Length": buffer.length.toString(),
           },
         })
+      }
+
+      case "list-dir": {
+        const resolvedPath = filePath ? resolveFilePath(filePath) : PATHS.SANDBOX_HOME
+        const safe = escapeShell(resolvedPath)
+
+        const typeCheck = await sandbox.process.executeCommand(
+          `[ -d '${safe}' ] && echo 'dir' || echo 'missing'`
+        )
+        if (typeCheck.result?.trim() !== "dir") {
+          return notFound(`Directory not found: ${resolvedPath}`)
+        }
+
+        // One line per entry: "f|name|size|mtime" or "d|name|0|mtime". `-A`
+        // includes dotfiles but skips "." and "..". `%f` is the bare filename
+        // (no path), so names with spaces still parse as one field.
+        const listCmd = `cd '${safe}' && find . -mindepth 1 -maxdepth 1 -printf '%y|%f|%s|%T@\\n' | sort -t'|' -k1,1r -k2,2`
+        const listResult = await sandbox.process.executeCommand(listCmd)
+        const entries = (listResult.result || "")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            const [kind, name, sizeStr, mtimeStr] = line.split("|")
+            return {
+              name,
+              isDirectory: kind === "d",
+              size: parseInt(sizeStr, 10) || 0,
+              modifiedAt: Math.round(parseFloat(mtimeStr) * 1000) || 0,
+            }
+          })
+
+        return Response.json({ path: resolvedPath, entries })
       }
 
       case "list-servers": {

@@ -1,5 +1,6 @@
 import type { PreviewItem, PanelPlugin } from "./types"
 import { FileViewerPlugin } from "./panels/file-viewer"
+import { FileBrowserPlugin } from "./panels/file-browser"
 import { TerminalPlugin } from "./panels/terminal"
 import { ServerPreviewPlugin } from "./panels/server-preview"
 
@@ -9,6 +10,7 @@ import { ServerPreviewPlugin } from "./panels/server-preview"
  */
 const panelPlugins: PanelPlugin[] = [
   FileViewerPlugin,
+  FileBrowserPlugin,
   TerminalPlugin,
   ServerPreviewPlugin,
 ]

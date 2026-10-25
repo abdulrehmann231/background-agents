@@ -12,6 +12,7 @@ import type { usePreview } from "@/lib/hooks/usePreview"
 import { useGitHubUserQuery } from "@/lib/query"
 import { getChatRepos } from "@/components/sidebar/index"
 import { isDraftChatId } from "@/lib/chat-state"
+import { PATHS } from "@background-agents/common"
 
 /** All props the PaletteProvider takes, minus `children` (supplied by JSX). */
 export type PaletteProps = Omit<React.ComponentProps<typeof PaletteProvider>, "children">
@@ -195,6 +196,9 @@ export function usePaletteProps({
         : undefined,
     onOpenInVSCode: sandboxId ? handleOpenInVSCode : undefined,
     onOpenTerminal: sandboxId ? openNewTerminal : undefined,
+    onOpenFileBrowser: sandboxId
+      ? () => preview.openPreview({ type: "directory", dirPath: PATHS.SANDBOX_HOME })
+      : undefined,
     onToggleTerminal: sandboxId ? toggleTerminal : undefined,
     servers: availableServers,
     onOpenServer: (port, url) => preview.openPreview({ type: "server", port, url }),
