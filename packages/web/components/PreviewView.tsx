@@ -45,6 +45,8 @@ export interface PreviewViewProps {
   allItems?: PreviewItem[]
   /** Called when user selects a different preview item from the dropdown */
   onSelectItem?: (item: PreviewItem) => void
+  /** Open a new preview item from within a panel (e.g. a file the file-browser lists). */
+  onOpenItem?: (item: PreviewItem) => void
   /** Called when user closes a specific item from the dropdown */
   onCloseItem?: (item: PreviewItem) => void
   /** All messages in the current chat, for plugins that need live content */
@@ -93,6 +95,7 @@ export function PreviewView({
   allItems,
   onSelectItem,
   onCloseItem,
+  onOpenItem,
   messages,
 }: PreviewViewProps) {
   // The single refresh nonce. Bumped by the top-bar button AND by any in-panel
@@ -437,6 +440,7 @@ export function PreviewView({
             refreshNonce={refreshNonce}
             explicitStart={explicitStart}
             onRefresh={handleRefresh}
+            onOpenItem={onOpenItem}
           />
         </div>
       </div>

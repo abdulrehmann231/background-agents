@@ -546,6 +546,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     allItems: preview.previewItems,
     onSelectItem: preview.selectPreviewItem,
     onCloseItem: preview.closePreviewItem,
+    onOpenItem: preview.openPreview,
     messages: currentChat?.messages,
   }
 

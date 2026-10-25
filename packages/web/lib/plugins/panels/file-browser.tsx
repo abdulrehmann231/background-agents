@@ -52,7 +52,7 @@ function formatSize(bytes: number): string {
   return `${size.toFixed(1)} ${units[i]}`
 }
 
-function FileBrowserComponent({ item, sandboxId, explicitStart, onRefresh }: PanelProps) {
+function FileBrowserComponent({ item, sandboxId, explicitStart, onRefresh, onOpenItem }: PanelProps) {
   const rootPath = item.type === "directory" ? item.dirPath : PATHS.SANDBOX_HOME
   // Local navigation state — starts at the item's directory, lets the user
   // browse into subdirectories without opening a new preview tab for each.
@@ -106,13 +106,15 @@ function FileBrowserComponent({ item, sandboxId, explicitStart, onRefresh }: Pan
           <button
             type="button"
             key={entry.name}
-            disabled={!entry.isDirectory}
             onClick={() => {
+              const entryPath = `${path.replace(/\/+$/, "")}/${entry.name}`
               if (entry.isDirectory) {
-                setCurrentPath(`${path.replace(/\/+$/, "")}/${entry.name}`)
+                setCurrentPath(entryPath)
+              } else {
+                onOpenItem?.({ type: "file", filePath: entryPath, filename: entry.name })
               }
             }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent cursor-pointer"
           >
             {entry.isDirectory ? (
               <Folder className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
