@@ -62,6 +62,12 @@ export interface PanelProps {
    * button) calls this so it behaves exactly like the top-bar refresh.
    */
   onRefresh: () => void
+  /**
+   * Open another preview item — adds it to the tab list (or switches to it if
+   * already open). Used by panels that let the user drill into something else
+   * from within themselves, e.g. the file-browser opening a file it lists.
+   */
+  onOpenItem?: (item: PreviewItem) => void
 }
 
 /**
