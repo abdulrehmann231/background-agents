@@ -23,6 +23,7 @@ import {
   renderChatTree,
   renderMobileChatTree,
   getChatRepos,
+  stripOwnerPrefix,
 } from "./sidebar/index"
 
 // Re-export from context for backward compatibility
@@ -229,13 +230,7 @@ export function Sidebar({
     if (repo === ALL_REPOSITORIES) return "Active chats"
     if (repo === ARCHIVED_CHATS) return "Archived chats"
     if (repo === NO_REPOSITORY) return "No repository"
-    if (currentUserLogin) {
-      const prefix = `${currentUserLogin}/`
-      if (repo.toLowerCase().startsWith(prefix.toLowerCase())) {
-        return repo.slice(prefix.length)
-      }
-    }
-    return repo
+    return stripOwnerPrefix(repo, currentUserLogin)
   }
 
   // Close repo dropdown when clicking outside
