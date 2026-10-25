@@ -32,17 +32,21 @@ interface UseStreamingOptions {
   onConflictStateChange?: ((state: { inRebase: boolean; inMerge: boolean; conflictedFiles: string[] }) => void) | null
   /** Called when a markdown file is written in plan mode, allowing the caller to open a preview */
   onMarkdownFileWrite?: ((chatId: string, filePath: string) => void) | null
+  /** Called when the agent sends one or more files to the user (SendUserFile), allowing the caller to open them in the preview panel */
+  onUserFileSend?: ((chatId: string, filePaths: string[]) => void) | null
 }
 
 export function useStreaming(options: UseStreamingOptions = {}) {
   const queryClient = useQueryClient()
   const onConflictStateChangeRef = useRef(options.onConflictStateChange)
   const onMarkdownFileWriteRef = useRef(options.onMarkdownFileWrite)
+  const onUserFileSendRef = useRef(options.onUserFileSend)
   const streamGenerations = useRef(new Map<string, symbol>())
 
   // Keep refs updated
   onConflictStateChangeRef.current = options.onConflictStateChange
   onMarkdownFileWriteRef.current = options.onMarkdownFileWrite
+  onUserFileSendRef.current = options.onUserFileSend
 
   // Helper to update query cache
   const updateChatsCache = useCallback((updater: (chats: Chat[]) => Chat[]) => {
@@ -117,6 +121,8 @@ export function useStreaming(options: UseStreamingOptions = {}) {
 
       // Track markdown files we've already opened to avoid duplicates
       const openedMarkdownFiles = new Set<string>()
+      // Track SendUserFile calls we've already opened to avoid duplicates
+      const openedUserFileCalls = new Set<string>()
 
       eventSource.addEventListener("update", (event) => {
         if (abortSignal?.aborted || !isCurrentConnection()) return
@@ -140,6 +146,24 @@ export function useStreaming(options: UseStreamingOptions = {}) {
                 if (!openedMarkdownFiles.has(filePath)) {
                   openedMarkdownFiles.add(filePath)
                   onMarkdownFileWriteRef.current(chatId, filePath)
+                }
+              }
+            }
+          }
+
+          // The agent explicitly sent the user one or more files (SendUserFile)
+          // — open them in the preview panel regardless of plan mode, since
+          // this is an explicit "show the user this" signal rather than an
+          // incidental write.
+          if (onUserFileSendRef.current) {
+            for (const toolCall of data.toolCalls) {
+              const tool = toolCall.tool?.toLowerCase()
+              const filePaths = (toolCall as { filePaths?: string[] }).filePaths
+              if (tool === "senduserfile" && filePaths?.length) {
+                const key = filePaths.join("\u0000")
+                if (!openedUserFileCalls.has(key)) {
+                  openedUserFileCalls.add(key)
+                  onUserFileSendRef.current(chatId, filePaths)
                 }
               }
             }

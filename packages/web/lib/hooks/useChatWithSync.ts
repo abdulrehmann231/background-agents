@@ -80,10 +80,14 @@ export function useChatWithSync() {
   // Callback for markdown file writes in plan mode - opens the file in preview
   const onMarkdownFileWriteRef = useRef<((chatId: string, filePath: string) => void) | null>(null)
 
+  // Callback for SendUserFile tool calls - opens the sent file(s) in preview
+  const onUserFileSendRef = useRef<((chatId: string, filePaths: string[]) => void) | null>(null)
+
   // SSE Streaming (extracted to separate hook)
   const { startStreaming, updateChatsCache } = useStreaming({
     onConflictStateChange: onConflictStateChangeRef.current,
     onMarkdownFileWrite: onMarkdownFileWriteRef.current,
+    onUserFileSend: onUserFileSendRef.current,
   })
 
   // Hydration — load persisted local state into the store once on mount.
@@ -281,6 +285,26 @@ export function useChatWithSync() {
         updateChatById(chatId, {
           previewItems: [...chatPreviewItems, { type: "file", filePath, filename }],
           activePreviewIndex: chatPreviewItems.length,
+          previewPaneHidden: false,
+        })
+      }
+    }
+  }, [localChatState.previewStates, updateChatById])
+
+  // Set up SendUserFile callback - opens every newly-sent file as its own
+  // preview tab (skipping any already open), and switches focus to the
+  // last one opened so the most recent send is what the user sees.
+  useEffect(() => {
+    onUserFileSendRef.current = (chatId: string, filePaths: string[]) => {
+      const chatPreviewItems = localChatState.previewStates[chatId]?.items ?? []
+      const newItems = filePaths
+        .filter((filePath) => !chatPreviewItems.find((i) => i.type === "file" && i.filePath === filePath))
+        .map((filePath) => ({ type: "file" as const, filePath, filename: basename(filePath) }))
+      if (newItems.length > 0) {
+        const items = [...chatPreviewItems, ...newItems]
+        updateChatById(chatId, {
+          previewItems: items,
+          activePreviewIndex: items.length - 1,
           previewPaneHidden: false,
         })
       }
