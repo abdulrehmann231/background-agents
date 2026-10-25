@@ -20,6 +20,7 @@ import { NEW_REPOSITORY } from "@/lib/types"
 import {
   UserMenu,
   RepoFilterDropdown,
+  ChatListSkeleton,
   renderChatTree,
   renderMobileChatTree,
   getChatRepos,
@@ -317,6 +318,17 @@ export function Sidebar({
     }
   }
 
+  // Open the scheduled jobs panel (if the host provides one), falling back
+  // to navigating to the standalone page. Shared by the mobile and desktop
+  // "Scheduled Agents" buttons.
+  const handleOpenScheduledJobsClick = () => {
+    if (onOpenScheduledJobs) {
+      onOpenScheduledJobs()
+    } else {
+      router.push("/scheduled-jobs")
+    }
+  }
+
   // Prevent body scroll when drawer is open
   useEffect(() => {
     if (isMobile && mobileOpen) {
@@ -392,13 +404,7 @@ export function Sidebar({
 
             {/* Scheduled Jobs Button */}
             <button
-              onClick={() => {
-                if (onOpenScheduledJobs) {
-                  onOpenScheduledJobs()
-                } else {
-                  router.push("/scheduled-jobs")
-                }
-              }}
+              onClick={handleOpenScheduledJobsClick}
               className={cn(
                 "flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target",
                 scheduledJobsActive && !selectedScheduledJob
@@ -429,14 +435,11 @@ export function Sidebar({
           <div className="flex-1 overflow-y-auto mobile-scroll scrollbar-auto-hide px-3 py-2">
             <div className="space-y-0.5">
               {isLoadingChats ? (
-                /* Chat list skeleton while loading */
-                <div className="space-y-0.5 animate-pulse">
-                  {[75, 55, 85, 60, 70].map((width, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-md">
-                      <div className="h-5 flex-1 rounded bg-muted" style={{ width: `${width}%` }} />
-                    </div>
-                  ))}
-                </div>
+                <ChatListSkeleton
+                  widths={[75, 55, 85, 60, 70]}
+                  containerClassName="space-y-0.5"
+                  rowClassName="flex items-center gap-2 px-3 py-2 rounded-md"
+                />
               ) : (
                 renderMobileChatTree({
                   roots: rootChats,
@@ -711,13 +714,7 @@ export function Sidebar({
 
         {/* Scheduled Jobs Button */}
         <button
-          onClick={() => {
-            if (onOpenScheduledJobs) {
-              onOpenScheduledJobs()
-            } else {
-              router.push("/scheduled-jobs")
-            }
-          }}
+          onClick={handleOpenScheduledJobsClick}
           className={cn(
             "flex items-center gap-2 rounded-md transition-colors cursor-pointer",
             collapsed ? "p-1.5" : "w-full px-2 py-[7px]",
@@ -754,14 +751,11 @@ export function Sidebar({
           <div className="flex-1 overflow-y-auto scrollbar-auto-hide p-2 pt-0">
             <div className="space-y-0">
               {isLoadingChats ? (
-                /* Chat list skeleton while loading */
-                <div className="space-y-0 animate-pulse">
-                  {[70, 50, 85, 55, 75, 60].map((width, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2 py-[5px] rounded-md">
-                      <div className="h-5 flex-1 rounded bg-muted" style={{ width: `${width}%` }} />
-                    </div>
-                  ))}
-                </div>
+                <ChatListSkeleton
+                  widths={[70, 50, 85, 55, 75, 60]}
+                  containerClassName="space-y-0"
+                  rowClassName="flex items-center gap-2 px-2 py-[5px] rounded-md"
+                />
               ) : (
                 renderChatTree({
                   roots: rootChats,
