@@ -211,6 +211,7 @@ export interface Chat {
     | { type: "terminal"; id: string }
     | { type: "server"; port: number; url: string }
     | { type: "plan"; content: string; messageId: string }
+    | { type: "directory"; dirPath: string }
   >
 
   /** Index of the currently active preview item in previewItems array */

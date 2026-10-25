@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Archive, Code2, TerminalSquare, Globe, PanelRightClose, PanelRightOpen, Download, Copy, MessageSquare, Key, Sun, Moon, Monitor, Zap, Gauge, HardDrive } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Archive, Code2, TerminalSquare, Globe, PanelRightClose, PanelRightOpen, Download, Copy, MessageSquare, Key, Sun, Moon, Monitor, Zap, Gauge, HardDrive, Folder } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -62,6 +62,7 @@ export function CommandPalette({
   onArchiveChat,
   onOpenInVSCode,
   onOpenTerminal,
+  onOpenFileBrowser,
   servers = [],
   onOpenServer,
   onClosePreview,
@@ -170,6 +171,12 @@ export function CommandPalette({
             <CommandItem value="open terminal" onSelect={() => run(onOpenTerminal)}>
               <TerminalSquare className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>Open terminal</span>
+            </CommandItem>
+          )}
+          {onOpenFileBrowser && (
+            <CommandItem value="open file browser files" onSelect={() => run(onOpenFileBrowser)}>
+              <Folder className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Open file browser</span>
             </CommandItem>
           )}
           {onOpenServer && servers.length > 0 && (

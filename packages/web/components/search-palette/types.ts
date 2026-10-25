@@ -41,6 +41,8 @@ export interface PaletteCommandCallbacks {
   onArchiveChat?: () => void
   onOpenInVSCode?: () => void
   onOpenTerminal?: () => void
+  /** Open a simple file browser rooted at the sandbox's home directory. */
+  onOpenFileBrowser?: () => void
   servers?: Array<{ port: number; url: string }>
   onOpenServer?: (port: number, url: string) => void
   onClosePreview?: () => void
