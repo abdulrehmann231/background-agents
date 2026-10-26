@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { Theme } from "@/lib/types"
-import { SettingsRow, MobileSectionHeader } from "./shared"
+import { SettingsRow, ToggleSwitch, MobileSectionHeader } from "./shared"
 
 const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: "system", label: "Auto", icon: Monitor },
@@ -21,13 +21,17 @@ interface AppearanceSectionProps {
   isMobile: boolean
   selectedTheme: Theme
   onThemeChange: (theme: Theme) => void
+  showCommandPaletteButton: boolean
+  setShowCommandPaletteButton: (next: boolean) => void
 }
 
-/** Appearance settings: theme picker (auto/light/dark). */
+/** Appearance settings: theme picker (auto/light/dark) and chat-header toggles. */
 export function AppearanceSection({
   isMobile,
   selectedTheme,
   onThemeChange,
+  showCommandPaletteButton,
+  setShowCommandPaletteButton,
 }: AppearanceSectionProps) {
   return (
     <div>
@@ -45,6 +49,12 @@ export function AppearanceSection({
             ))}
           </SelectContent>
         </Select>
+      </SettingsRow>
+      <SettingsRow
+        label="Command palette button"
+        description="Show a button for the command palette (⌘K). The shortcut always works, button or not."
+      >
+        <ToggleSwitch checked={showCommandPaletteButton} onChange={setShowCommandPaletteButton} />
       </SettingsRow>
     </div>
   )

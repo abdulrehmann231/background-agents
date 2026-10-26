@@ -68,6 +68,7 @@ function readSettings(raw: unknown): Settings {
     notifyOnAgentCommitted: s.notifyOnAgentCommitted ?? DEFAULT_SETTINGS.notifyOnAgentCommitted,
     elizaEnabled: s.elizaEnabled ?? DEFAULT_SETTINGS.elizaEnabled,
     notificationSound: s.notificationSound ?? DEFAULT_SETTINGS.notificationSound,
+    showCommandPaletteButton: s.showCommandPaletteButton ?? DEFAULT_SETTINGS.showCommandPaletteButton,
     maxAgentRunMinutes: s.maxAgentRunMinutes ?? DEFAULT_SETTINGS.maxAgentRunMinutes,
   }
 }
