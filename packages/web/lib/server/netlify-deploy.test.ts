@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { createRepoSite, setSiteEnv, toSiteName, DeployError, type NetlifySite } from "./netlify-deploy"
+import { createRepoSite, saveSiteEnv, toSiteName, DeployError, type NetlifySite } from "./netlify-deploy"
 
 type Call = { method: string; url: string; body?: unknown }
 let calls: Call[] = []
@@ -28,7 +28,7 @@ function githubRepo(admin: boolean, pkg: Record<string, unknown> | null) {
     json({ id: 42, name: "my-app", full_name: "owner/my-app", private: true, permissions: { admin } })
 }
 
-const opts = { token: "nf", githubToken: "gh", repo: "owner/my-app", branch: "main", name: "my-app", env: {} }
+const opts = { token: "nf", githubToken: "gh", repo: "owner/my-app", branch: "main", name: "my-app" }
 
 describe("createRepoSite", () => {
   it("links a new site to the repo's branch with the detected Next.js build and makes it public", async () => {
@@ -68,16 +68,40 @@ describe("createRepoSite", () => {
   })
 })
 
-describe("setSiteEnv", () => {
-  it("adds new variables and updates existing ones", async () => {
-    routes["GET https://api.netlify.com/api/v1/accounts/acct1/env?site_id=site1"] = () => json([{ key: "API_URL" }])
-    routes["POST https://api.netlify.com/api/v1/accounts/acct1/env?site_id=site1"] = () => json([], 201)
-    routes["PUT https://api.netlify.com/api/v1/accounts/acct1/env/API_URL?site_id=site1"] = () => json({})
+describe("saveSiteEnv", () => {
+  const env = "https://api.netlify.com/api/v1/accounts/acct1/env"
+  const all = (value: string) => [{ context: "all", value }]
 
-    await setSiteEnv("nf", site, { API_URL: "https://api.example.com", NEW_KEY: "x" })
+  beforeEach(() => {
+    routes[`GET ${env}?site_id=site1`] = () => json([
+      { key: "API_URL", values: all("https://old.example.com") },
+      { key: "OLD_KEY", values: all("x") },
+      { key: "SAME", values: all("1") },
+      // Secret and per-context values are left alone.
+      { key: "TOKEN", is_secret: true, values: all("") },
+      { key: "PROD_ONLY", values: [{ context: "production", value: "p" }] },
+    ])
+    routes[`POST ${env}?site_id=site1`] = () => json([], 201)
+    routes[`PUT ${env}/API_URL?site_id=site1`] = () => json({})
+    routes[`DELETE ${env}/OLD_KEY?site_id=site1`] = () => new Response(null, { status: 204 })
+  })
 
-    expect(calls.find((c) => c.method === "POST")?.body).toEqual([{ key: "NEW_KEY", values: [{ context: "all", value: "x" }] }])
-    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ key: "API_URL", values: [{ context: "all", value: "https://api.example.com" }] })
+  it("adds, updates and removes the variables it manages", async () => {
+    const changed = await saveSiteEnv("nf", site, { API_URL: "https://api.example.com", SAME: "1", NEW_KEY: "y" })
+
+    expect(changed).toBe(true)
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([
+      { method: "POST", url: `${env}?site_id=site1`, body: [{ key: "NEW_KEY", values: all("y") }] },
+      { method: "PUT", url: `${env}/API_URL?site_id=site1`, body: { key: "API_URL", values: all("https://api.example.com") } },
+      { method: "DELETE", url: `${env}/OLD_KEY?site_id=site1`, body: undefined },
+    ])
+  })
+
+  it("changes nothing when the variables already match", async () => {
+    const changed = await saveSiteEnv("nf", site, { API_URL: "https://old.example.com", OLD_KEY: "x", SAME: "1" })
+
+    expect(changed).toBe(false)
+    expect(calls.every((c) => c.method === "GET")).toBe(true)
   })
 })
 

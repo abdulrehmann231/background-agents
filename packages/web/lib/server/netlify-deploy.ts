@@ -78,14 +78,35 @@ export async function startBuild(token: string, siteId: string): Promise<void> {
   await netlify(token, `/sites/${siteId}/builds`, { method: "POST" })
 }
 
-/** Create or update the site's env vars, for every deploy context. */
-export async function setSiteEnv(token: string, site: NetlifySite, env: Record<string, string>): Promise<void> {
-  const keys = Object.keys(env)
-  if (keys.length === 0) return
+interface NetlifyEnvVar {
+  key: string
+  is_secret?: boolean
+  values: { context: string; value: string }[]
+}
+
+/**
+ * The site's env vars that Backgrounder manages: plain ones with one value for
+ * every deploy context. Secret values can't be read back through the API, and
+ * per-context values are Netlify's to edit, so those are never shown or changed.
+ */
+export async function getSiteEnv(token: string, site: NetlifySite): Promise<Record<string, string>> {
+  const vars = await netlify<NetlifyEnvVar[]>(token, `/accounts/${site.account_id}/env?site_id=${site.id}`)
+  return Object.fromEntries(
+    vars
+      .filter((v) => !v.is_secret && v.values.length === 1 && v.values[0].context === "all")
+      .map((v) => [v.key, v.values[0].value])
+  )
+}
+
+/** Make the site's managed env vars match `env`. Returns whether anything changed. */
+export async function saveSiteEnv(token: string, site: NetlifySite, env: Record<string, string>): Promise<boolean> {
+  const current = await getSiteEnv(token, site)
   const base = `/accounts/${site.account_id}/env`
   const query = `?site_id=${site.id}`
-  const existing = new Set((await netlify<{ key: string }[]>(token, `${base}${query}`)).map((v) => v.key))
-  const added = keys.filter((key) => !existing.has(key))
+  const added = Object.keys(env).filter((key) => !(key in current))
+  const changed = Object.keys(env).filter((key) => key in current && current[key] !== env[key])
+  const removed = Object.keys(current).filter((key) => !(key in env))
+
   if (added.length > 0) {
     await netlify(token, `${base}${query}`, {
       method: "POST",
@@ -93,12 +114,16 @@ export async function setSiteEnv(token: string, site: NetlifySite, env: Record<s
     })
   }
   // PUT replaces the variable's values; PATCH can't set the "all" context.
-  for (const key of keys.filter((k) => existing.has(k))) {
+  for (const key of changed) {
     await netlify(token, `${base}/${encodeURIComponent(key)}${query}`, {
       method: "PUT",
       body: JSON.stringify({ key, values: [{ context: "all", value: env[key] }] }),
     })
   }
+  for (const key of removed) {
+    await netlify(token, `${base}/${encodeURIComponent(key)}${query}`, { method: "DELETE" })
+  }
+  return added.length + changed.length + removed.length > 0
 }
 
 /**
@@ -144,7 +169,7 @@ async function addWebhook(githubToken: string, repo: string, url: string): Promi
 
 /**
  * Create a site linked to the repo's branch. Netlify starts the first build
- * by itself once the repo is linked, so env vars are set before that.
+ * by itself once the repo is linked.
  */
 export async function createRepoSite(opts: {
   token: string
@@ -152,9 +177,8 @@ export async function createRepoSite(opts: {
   repo: string
   branch: string
   name: string
-  env: Record<string, string>
 }): Promise<NetlifySite> {
-  const { token, githubToken, repo, branch, name, env } = opts
+  const { token, githubToken, repo, branch, name } = opts
   const [owner, repoName] = repo.split("/")
   const ghRepo = await getRepo(githubToken, owner, repoName)
   if (!ghRepo.permissions?.admin) {
@@ -164,8 +188,7 @@ export async function createRepoSite(opts: {
 
   const site = await netlify<NetlifySite>(token, "/sites", { method: "POST", body: JSON.stringify({ name }) })
   try {
-    await setSiteEnv(token, site, env)
-    const key = await netlify<{ id: string; public_key: string }>(token, "/deploy_keys", { method: "POST" })
+    const key =await netlify<{ id: string; public_key: string }>(token, "/deploy_keys", { method: "POST" })
     await githubFetch(`/repos/${repo}/keys`, githubToken, {
       method: "POST",
       body: JSON.stringify({ title: `Netlify (${site.name})`, key: key.public_key, read_only: true }),

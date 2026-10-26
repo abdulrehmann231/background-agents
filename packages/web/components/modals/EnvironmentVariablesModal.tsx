@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type DragEvent } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Plus, Trash2, FolderGit2, Loader2, Upload, Check, Eye, EyeOff } from "lucide-react"
+import { X, Plus, Trash2, FolderGit2, Loader2, Upload, Check, Eye, EyeOff, Rocket } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { VariableIcon } from "@/components/icons/variable-icon"
@@ -19,21 +19,26 @@ interface EnvironmentVariablesModalProps {
   chatId: string
   /** Repository name (e.g., "owner/repo") - undefined means hide repo tab */
   repoName?: string
-  /** Callback to save environment variables */
-  onSave: (chatEnvVars: Record<string, string>, repoEnvVars: Record<string, string>) => Promise<void>
+  /** Callback to save environment variables; deployEnvVars is undefined when the deployment tab is hidden */
+  onSave: (
+    chatEnvVars: Record<string, string>,
+    repoEnvVars: Record<string, string>,
+    deployEnvVars?: Record<string, string>
+  ) => Promise<void>
   /** Initial environment variables */
   initialChatEnvVars: Record<string, string>
   initialRepoEnvVars: Record<string, string>
   isMobile?: boolean
 }
 
-type TabKey = "chat" | "repository"
+type TabKey = "chat" | "repository" | "deployment"
 
 type TabIcon = LucideIcon | typeof VariableIcon
 
 const tabs: { key: TabKey; label: string; icon: TabIcon }[] = [
   { key: "chat", label: "Chat", icon: VariableIcon },
   { key: "repository", label: "Repository", icon: FolderGit2 },
+  { key: "deployment", label: "Deployment", icon: Rocket },
 ]
 
 /**
@@ -174,6 +179,9 @@ export function EnvironmentVariablesModal({
   // Local state for editing
   const [chatEnvVars, setChatEnvVars] = useState<EnvVar[]>([])
   const [repoEnvVars, setRepoEnvVars] = useState<EnvVar[]>([])
+  const [deployEnvVars, setDeployEnvVars] = useState<EnvVar[]>([])
+  // The repo's Netlify site; null hides the deployment tab.
+  const [deploySiteName, setDeploySiteName] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("chat")
   const [newVarId, setNewVarId] = useState<string | null>(null)
   // Ids of rows whose value is shown in plain text; everything else is masked.
@@ -212,17 +220,49 @@ export function EnvironmentVariablesModal({
     }
   }, [open, initialChatEnvVars, initialRepoEnvVars])
 
+  // The deployment tab's vars live on Netlify, which is slower to answer, so the
+  // tab appears once they load instead of holding the modal back.
+  useEffect(() => {
+    setDeploySiteName(null)
+    setDeployEnvVars([])
+    if (!open || !repoName) return
+    let cancelled = false
+    fetch(`/api/chats/${chatId}/netlify/env`)
+      .then((res) => (res.ok ? res.json() : { site: null }))
+      .then((data: { site: { name: string } | null; environmentVariables?: Record<string, string> }) => {
+        if (cancelled || !data.site) return
+        setDeploySiteName(data.site.name)
+        setDeployEnvVars(recordToEnvVars(data.environmentVariables ?? {}))
+      })
+      .catch((error) => console.error("Failed to load deployment environment variables:", error))
+    return () => {
+      cancelled = true
+    }
+  }, [open, chatId, repoName])
+
   const handleSave = async () => {
     if (isSaving) return
     setIsSaving(true)
     try {
-      await onSave(envVarsToRecord(chatEnvVars), envVarsToRecord(repoEnvVars))
+      await onSave(
+        envVarsToRecord(chatEnvVars),
+        envVarsToRecord(repoEnvVars),
+        deploySiteName ? envVarsToRecord(deployEnvVars) : undefined
+      )
       onClose()
     } catch (error) {
       console.error("Failed to save environment variables:", error)
+      setImportStatus({ message: error instanceof Error ? error.message : "Couldn't save", error: true })
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const varsByTab: Record<TabKey, EnvVar[]> = { chat: chatEnvVars, repository: repoEnvVars, deployment: deployEnvVars }
+  const setVarsByTab: Record<TabKey, React.Dispatch<React.SetStateAction<EnvVar[]>>> = {
+    chat: setChatEnvVars,
+    repository: setRepoEnvVars,
+    deployment: setDeployEnvVars,
   }
 
   const handleAddVariable = (tab: TabKey) => {
@@ -230,27 +270,15 @@ export function EnvironmentVariablesModal({
     setNewVarId(newVar.id)
     // Show a freshly added value so you can see what you type.
     setRevealedIds((prev) => new Set(prev).add(newVar.id))
-    if (tab === "chat") {
-      setChatEnvVars((prev) => [...prev, newVar])
-    } else {
-      setRepoEnvVars((prev) => [...prev, newVar])
-    }
+    setVarsByTab[tab]((prev) => [...prev, newVar])
   }
 
   const handleUpdateVariable = (tab: TabKey, id: string, updated: EnvVar) => {
-    if (tab === "chat") {
-      setChatEnvVars((prev) => prev.map((v) => (v.id === id ? updated : v)))
-    } else {
-      setRepoEnvVars((prev) => prev.map((v) => (v.id === id ? updated : v)))
-    }
+    setVarsByTab[tab]((prev) => prev.map((v) => (v.id === id ? updated : v)))
   }
 
   const handleDeleteVariable = (tab: TabKey, id: string) => {
-    if (tab === "chat") {
-      setChatEnvVars((prev) => prev.filter((v) => v.id !== id))
-    } else {
-      setRepoEnvVars((prev) => prev.filter((v) => v.id !== id))
-    }
+    setVarsByTab[tab]((prev) => prev.filter((v) => v.id !== id))
   }
 
   /** Merge parsed entries into the active tab; returns false if nothing was found. */
@@ -259,8 +287,8 @@ export function EnvironmentVariablesModal({
       setImportStatus({ message: `No variables found in ${source}. Expected lines like KEY=value.`, error: true })
       return false
     }
-    const setVars = activeTab === "chat" ? setChatEnvVars : setRepoEnvVars
-    const current = activeTab === "chat" ? chatEnvVars : repoEnvVars
+    const setVars = setVarsByTab[activeTab]
+    const current = varsByTab[activeTab]
     const { vars, added, updated } = mergeEnvEntries(current, entries, (entry) => ({
       id: nanoid(),
       ...entry,
@@ -328,7 +356,7 @@ export function EnvironmentVariablesModal({
     },
   }
 
-  const activeVars = activeTab === "chat" ? chatEnvVars : repoEnvVars
+  const activeVars = varsByTab[activeTab]
   const allRevealed = activeVars.length > 0 && activeVars.every((v) => revealedIds.has(v.id))
 
   const toggleReveal = (id: string) => {
@@ -445,8 +473,10 @@ export function EnvironmentVariablesModal({
       </div>
     ) : null
 
-  // Filter tabs based on whether repo exists
-  const visibleTabs = hasRepository ? tabs : tabs.filter((t) => t.key === "chat")
+  // Show the repository tab only for a repo, and the deployment tab only once the repo has a site
+  const visibleTabs = tabs.filter(
+    (t) => t.key === "chat" || (t.key === "repository" && hasRepository) || (t.key === "deployment" && !!deploySiteName)
+  )
 
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -585,7 +615,9 @@ export function EnvironmentVariablesModal({
                 <p className="text-sm text-muted-foreground mb-4">
                   {activeTab === "chat"
                     ? "Environment variables set here will be available for this chat only. They are passed to the agent on every message."
-                    : "Environment variables set here will be available for all your chats using this repository."}
+                    : activeTab === "repository"
+                      ? "Environment variables set here will be available for all your chats using this repository."
+                      : `Environment variables set here are saved on the Netlify site ${deploySiteName}. Saving starts a new deploy.`}
                   {" "}Tip: paste <code className="font-mono text-xs">KEY=value</code> lines into a name field to add them all at once.
                 </p>
                 {renderContent()}

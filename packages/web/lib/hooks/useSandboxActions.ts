@@ -61,7 +61,11 @@ export function useSandboxActions({
   }, [currentChatId, isDraftChatId, chats, onOpenEnvVarsModal])
 
   // Handler for saving environment variables
-  const handleSaveEnvVars = useCallback(async (chatEnvVars: Record<string, string>, repoEnvVars: Record<string, string>) => {
+  const handleSaveEnvVars = useCallback(async (
+    chatEnvVars: Record<string, string>,
+    repoEnvVars: Record<string, string>,
+    deployEnvVars?: Record<string, string>
+  ) => {
     if (!currentChatId || isDraftChatId(currentChatId)) return
 
     const chat = chats.find((c) => c.id === currentChatId)
@@ -81,6 +85,16 @@ export function useSandboxActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repo: repoName, environmentVariables: repoEnvVars }),
       })
+    }
+
+    // Save the Netlify site's env vars (the server redeploys when they changed)
+    if (deployEnvVars) {
+      const res = await fetch(`/api/chats/${currentChatId}/netlify/env`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ environmentVariables: deployEnvVars }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't save the deployment variables")
     }
   }, [currentChatId, isDraftChatId, chats])
 

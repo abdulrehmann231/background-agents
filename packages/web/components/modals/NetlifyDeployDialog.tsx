@@ -14,7 +14,6 @@ interface DeployInfo {
   connected: boolean
   branch: string
   suggestedName: string
-  envCount: number
   unmerged: boolean
   site?: { name: string; url: string; adminUrl: string } | null
   deploy?: { state: string; error: string | null } | null
@@ -40,7 +39,6 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
   const queryClient = useQueryClient()
   const [info, setInfo] = useState<DeployInfo | null>(null)
   const [name, setName] = useState("")
-  const [includeEnv, setIncludeEnv] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Bumped after connecting or deploying to load the status again.
@@ -98,7 +96,7 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
       const res = await fetch(`/api/chats/${chatId}/netlify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, includeEnv }),
+        body: JSON.stringify({ name }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? "Deploy failed")
@@ -164,21 +162,6 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
               )}
             </div>
 
-            {info.envCount > 0 && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeEnv}
-                  onChange={(e) => setIncludeEnv(e.target.checked)}
-                  disabled={busy}
-                  className="h-4 w-4 rounded border-border accent-primary disabled:opacity-50"
-                />
-                <span className={isMobile ? "text-base" : "text-sm"}>
-                  Send repository environment variables ({info.envCount})
-                </span>
-              </label>
-            )}
-
             {info.site && (
               <div className={cn("flex items-center gap-1.5", textSize)}>
                 {building && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
@@ -193,6 +176,12 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
                   View in Netlify
                 </a>
               </div>
+            )}
+
+            {info.site && (
+              <p className={cn("text-muted-foreground", textSize)}>
+                Set its environment variables in Environment Variables → Deployment.
+              </p>
             )}
           </>
         )}
