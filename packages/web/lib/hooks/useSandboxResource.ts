@@ -130,7 +130,9 @@ export function useSandboxResource<T>({
   // boots anything itself) every few seconds, updating state as it changes.
   // Skips "expired" — that sandbox id is gone for good; only an explicit
   // recreate fixes it.
-  const needsRetry = status === "stopped" || (status === "ready" && Boolean(data && retryWhile?.(data)))
+  // `data` is only ever set alongside status "ready", so checking it already
+  // implies that status — no need to check both.
+  const needsRetry = status === "stopped" || Boolean(data && retryWhile?.(data))
   useEffect(() => {
     if (!needsRetry || !sandboxId) return
     let cancelled = false
