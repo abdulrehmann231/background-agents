@@ -1,7 +1,7 @@
 "use client"
 
 import * as Dialog from "@radix-ui/react-dialog"
-import { HelpCircle, ChevronRight, Keyboard, BookOpen, Github, Mail, CircleDot } from "lucide-react"
+import { HelpCircle, ChevronRight, Keyboard, BookOpen, Github, Mail, Bug, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { GITHUB_REPO_URL } from "@/lib/bonus-credits"
@@ -16,11 +16,12 @@ interface HelpModalProps {
 const SUPPORT_EMAIL = "james@backgrounder.dev"
 
 const LINKS = [
-  { label: "Keyboard shortcuts", icon: Keyboard, href: `${DOCS_URL}/#/keyboard-shortcuts` },
   { label: "Documentation", icon: BookOpen, href: DOCS_URL },
+  { label: "Keyboard shortcuts", icon: Keyboard, href: `${DOCS_URL}/#/keyboard-shortcuts` },
+  { label: "Report a bug", icon: Bug, href: `${GITHUB_REPO_URL}/issues/new?template=bug_report.md` },
+  { label: "Request a feature", icon: Sparkles, href: `${GITHUB_REPO_URL}/issues/new?template=feature_request.md` },
   { label: "GitHub repo", icon: Github, href: GITHUB_REPO_URL },
   { label: "Email support", icon: Mail, href: `mailto:${SUPPORT_EMAIL}` },
-  { label: "Open a GitHub issue", icon: CircleDot, href: `${GITHUB_REPO_URL}/issues/new` },
 ]
 
 export function HelpModal({ open, onClose, isMobile = false }: HelpModalProps) {
@@ -56,15 +57,15 @@ export function HelpModal({ open, onClose, isMobile = false }: HelpModalProps) {
             <section className="space-y-2 text-muted-foreground">
               <p>
                 Describe what you want built or changed in the message box, and send it. An agent
-                works on it in the background — in its own sandbox, on its own branch — so you're
-                free to keep chatting, start another chat, or come back later.
+                works on it in the background—in its own sandbox, on its own branch—so you&apos;re
+                free to start another chat or even close your laptop and come back later.
               </p>
               <p>
                 Type <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/</code> in
                 the prompt for git actions like merge, rebase, squash, and opening a PR.
               </p>
               <p>
-                Need help or have feedback? Reach out any of the ways below.
+                Need help or have feedback? Use any of the ways below.
               </p>
             </section>
 
