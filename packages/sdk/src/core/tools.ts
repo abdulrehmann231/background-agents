@@ -78,17 +78,6 @@ function normalizeToolInput(
     }
   }
 
-  // Normalize the file list field for SendUserFile-style tools. `files` is
-  // already the field name the tool emits, but tolerate alternate shapes
-  // (a single path, or a differently-named array) so a provider-side rename
-  // doesn't silently drop the paths.
-  if (toolName === "user_file") {
-    const files = input.files ?? input.paths ?? input.file
-    if (files !== undefined) {
-      result.files = Array.isArray(files) ? files : [files]
-    }
-  }
-
   return result
 }
 
