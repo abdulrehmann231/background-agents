@@ -23,15 +23,13 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react"
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type ReactNode, type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   GMAIL_MCP_QUALIFIED_NAME,
-  GMAIL_POLICY_PRESETS,
-  GMAIL_TOOL_NAMES,
-  type GmailToolName,
   type GmailToolPolicy,
   parseGmailToolPolicy,
 } from "@background-agents/mcp/gmail/policy"
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import {
   Command,
   CommandEmpty,
@@ -40,9 +38,9 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { ComboboxTriggerButton } from "./ComboboxTriggerButton"
+import { GmailSettingsDialog } from "./GmailSettingsDialog"
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
@@ -52,6 +50,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { useToastStore } from "@/lib/stores/toast-store"
 import { cn } from "@/lib/utils"
 
 interface ConnectedServer {
@@ -132,14 +131,12 @@ function isSupersededRegistryServer(s: RegistryServer): boolean {
   return /gmail/i.test(s.slug) || /gmail/i.test(s.name)
 }
 
-const GMAIL_PRESET_OPTIONS: { label: string; tools: GmailToolName[] }[] = [
-  { label: "Read only", tools: GMAIL_POLICY_PRESETS.readOnly.allowedTools },
-  { label: "Read + draft", tools: GMAIL_POLICY_PRESETS.readDraft.allowedTools },
-  { label: "Full access", tools: GMAIL_POLICY_PRESETS.full.allowedTools },
-]
-
-function sameTools(a: GmailToolName[], b: GmailToolName[]): boolean {
-  return a.length === b.length && a.every((t) => b.includes(t))
+/** Pending account unlink, confirmed through ConfirmDialog. */
+interface UnlinkRequest {
+  server: FirstPartyServer
+  title: string
+  description: string
+  confirmLabel: string
 }
 
 /** Wait until the popup reports back via postMessage or is closed. */
@@ -247,6 +244,10 @@ export function McpServersCombobox({
   const [accountStatus, setAccountStatus] = useState<Record<string, AccountStatus>>({})
   const githubInstallationId = accountStatus[GITHUB_QUALIFIED_NAME]?.installationId ?? null
 
+  const [gmailSettingsOpen, setGmailSettingsOpen] = useState(false)
+  const [unlinkRequest, setUnlinkRequest] = useState<UnlinkRequest | null>(null)
+  const addToast = useToastStore((s) => s.addToast)
+
   const popupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const connectedByName = useMemo(() => {
@@ -254,6 +255,15 @@ export function McpServersCombobox({
     connected.forEach((s) => m.set(s.qualifiedName, s))
     return m
   }, [connected])
+
+  const gmailServer = connectedByName.get(GMAIL_MCP_QUALIFIED_NAME) ?? null
+  // Keyed on the policy's content so a refetch of the same rows doesn't reset
+  // unsaved edits in the open settings dialog.
+  const gmailPolicyJson = gmailServer ? JSON.stringify(gmailServer.toolPolicy ?? null) : null
+  const gmailPolicy = useMemo(
+    () => (gmailPolicyJson === null ? null : parseGmailToolPolicy(JSON.parse(gmailPolicyJson))),
+    [gmailPolicyJson]
+  )
 
   const loadConnectedFor = useCallback(async (id: string) => {
     try {
@@ -404,33 +414,48 @@ export function McpServersCombobox({
    * Hard unlink of the user-level account (GitHub App install or Google
    * grant). The server drops this server's rows across every chat and job.
    */
-  async function handleUnlinkAccount(server: FirstPartyServer, confirmText: string) {
-    if (!confirm(confirmText)) return
+  async function handleUnlinkAccount(server: FirstPartyServer) {
     setBusySlug(server.slug)
     try {
       const res = await fetch(server.connectApi, { method: "DELETE" })
-      if (res.ok) {
-        await Promise.all([loadAccountStatus(), loadConnected()])
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await Promise.all([loadAccountStatus(), loadConnected()])
+    } catch (err) {
+      console.error(`[McpServersCombobox] ${server.name} unlink failed:`, err)
+      addToast({ title: `Couldn't disconnect ${server.name}`, body: "Please try again." })
     } finally {
       setBusySlug(null)
     }
   }
 
+  /** Throws a user-facing message so the settings dialog can show it. */
   async function handleUpdateToolPolicy(serverId: string, toolPolicy: GmailToolPolicy) {
+    let res: Response
     try {
-      const res = await fetch(`${apiBase}/${effectiveId}/mcp-servers/${serverId}`, {
+      res = await fetch(`${apiBase}/${effectiveId}/mcp-servers/${serverId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toolPolicy }),
       })
-      if (!res.ok) throw new Error((await res.json()).error || "Update failed")
-      setConnected((prev) =>
-        prev.map((s) => (s.id === serverId ? { ...s, toolPolicy } : s))
-      )
     } catch (err) {
       console.error("[McpServersCombobox] tool policy update failed:", err)
+      throw new Error("Network error. Check your connection and try again.")
     }
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null
+      console.error("[McpServersCombobox] tool policy update failed:", res.status, data?.error)
+      throw new Error(data?.error || "Couldn't save Gmail settings")
+    }
+    setConnected((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, toolPolicy } : s))
+    )
+  }
+
+  function openGmailSettings() {
+    // Close the picker first: it would dismiss itself anyway once focus moves
+    // into the dialog.
+    setOpen(false)
+    setGmailSettingsOpen(true)
   }
 
   async function handleToggleServer(server: RegistryServer) {
@@ -556,6 +581,7 @@ export function McpServersCombobox({
   }, [search, registry, connectedByName])
 
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <ComboboxTriggerButton
@@ -696,37 +722,24 @@ export function McpServersCombobox({
                         <UnlinkMenuItem
                           label="Uninstall app entirely"
                           onSelect={() =>
-                            handleUnlinkAccount(
-                              firstParty,
-                              "Uninstall the GitHub App for your account? This removes GitHub MCP from every chat and scheduled job."
-                            )
+                            setUnlinkRequest({
+                              server: firstParty,
+                              title: "Uninstall GitHub App?",
+                              description:
+                                "This uninstalls the GitHub App from your account and removes GitHub MCP from every chat and scheduled job.",
+                              confirmLabel: "Uninstall",
+                            })
                           }
                         />
                       </RowSettingsMenu>
                     )}
                     {firstParty?.slug === GMAIL_MCP_QUALIFIED_NAME &&
                       (connectedServer || accountStatus[s.slug]?.connected) && (
-                        <RowSettingsMenu label="Gmail settings" disabled={isBusy}>
-                          {connectedServer && (
-                            <GmailPolicyMenuItems
-                              policy={parseGmailToolPolicy(connectedServer.toolPolicy)}
-                              onChange={(policy) =>
-                                handleUpdateToolPolicy(connectedServer.id, policy)
-                              }
-                            />
-                          )}
-                          {accountStatus[s.slug]?.connected && (
-                            <UnlinkMenuItem
-                              label="Disconnect Google account"
-                              onSelect={() =>
-                                handleUnlinkAccount(
-                                  firstParty,
-                                  "Disconnect your Google account? This removes Gmail MCP from every chat and scheduled job."
-                                )
-                              }
-                            />
-                          )}
-                        </RowSettingsMenu>
+                        <RowSettingsButton
+                          label="Gmail settings"
+                          disabled={isBusy}
+                          onClick={openGmailSettings}
+                        />
                       )}
                     {/* Status indicator */}
                     {isBusy ? (
@@ -753,6 +766,95 @@ export function McpServersCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+    <GmailSettingsDialog
+      open={gmailSettingsOpen}
+      onClose={() => setGmailSettingsOpen(false)}
+      policy={gmailPolicy}
+      onSave={(policy) =>
+        gmailServer
+          ? handleUpdateToolPolicy(gmailServer.id, policy)
+          : Promise.reject(new Error("Gmail is no longer attached"))
+      }
+      onDisconnectAccount={
+        accountStatus[GMAIL_MCP_QUALIFIED_NAME]?.connected
+          ? () =>
+              setUnlinkRequest({
+                server: FIRST_PARTY_BY_SLUG.get(GMAIL_MCP_QUALIFIED_NAME)!,
+                title: "Disconnect Google account?",
+                description:
+                  "Gmail MCP will be removed from every chat and scheduled job. You can reconnect it at any time.",
+                confirmLabel: "Disconnect",
+              })
+          : undefined
+      }
+      entityLabel={apiBase === "/api/scheduled-jobs" ? "scheduled job" : "chat"}
+      isMobile={isMobile}
+    />
+    <ConfirmDialog
+      open={!!unlinkRequest}
+      onClose={() => setUnlinkRequest(null)}
+      onConfirm={() => {
+        if (!unlinkRequest) return
+        setGmailSettingsOpen(false)
+        void handleUnlinkAccount(unlinkRequest.server)
+      }}
+      title={unlinkRequest?.title ?? ""}
+      description={unlinkRequest?.description}
+      confirmLabel={unlinkRequest?.confirmLabel}
+      variant="destructive"
+      isMobile={isMobile}
+    />
+    </>
+  )
+}
+
+const ROW_SETTINGS_BUTTON =
+  "p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
+
+/**
+ * Keeps events inside a row control from reaching the enclosing CommandItem.
+ * React bubbles events through portals along the component tree, so without
+ * this a click (or Enter) inside a portaled menu also fires cmdk's row
+ * select, which toggles the server off.
+ */
+function RowControl({ children }: { children: ReactNode }) {
+  const stop = (e: SyntheticEvent) => e.stopPropagation()
+  return (
+    <div
+      className="contents"
+      onClick={stop}
+      onPointerDown={stop}
+      onPointerUp={stop}
+      onKeyDown={stop}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** Gear button that opens a settings dialog for a first-party row. */
+function RowSettingsButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <RowControl>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className={ROW_SETTINGS_BUTTON}
+        aria-label={label}
+        title={label}
+      >
+        <Settings className="h-3.5 w-3.5" />
+      </button>
+    </RowControl>
   )
 }
 
@@ -767,24 +869,22 @@ function RowSettingsMenu({
   children: ReactNode
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        {/* Stop pointer events from bubbling so cmdk doesn't
-            treat this as a row select. */}
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
-          aria-label={label}
-        >
-          <Settings className="h-3.5 w-3.5" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{children}</DropdownMenuContent>
-    </DropdownMenu>
+    <RowControl>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            className={ROW_SETTINGS_BUTTON}
+            aria-label={label}
+            title={label}
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+      </DropdownMenu>
+    </RowControl>
   )
 }
 
@@ -796,113 +896,6 @@ function UnlinkMenuItem({ label, onSelect }: { label: string; onSelect: () => vo
     >
       <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
       {label}
-    </DropdownMenuItem>
-  )
-}
-
-const MENU_HEADING = "px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground"
-const MENU_DIVIDER = "my-1 h-px bg-border"
-
-/**
- * Per-connection Gmail scoping: presets, individual tools, and the argument
- * rules. Enforced server-side by /api/mcp/gmail on the next tool call.
- */
-function GmailPolicyMenuItems({
-  policy,
-  onChange,
-}: {
-  policy: GmailToolPolicy
-  onChange: (policy: GmailToolPolicy) => void
-}) {
-  // Keep the menu open so several toggles can be made in one go.
-  const keepOpen = (e: Event) => e.preventDefault()
-
-  function toggleTool(tool: GmailToolName, on: boolean) {
-    const allowedTools = on
-      ? [...policy.allowedTools, tool]
-      : policy.allowedTools.filter((t) => t !== tool)
-    onChange({ ...policy, allowedTools })
-  }
-
-  function editRecipients() {
-    const answer = prompt(
-      "Allowed recipients for drafts and sent mail (addresses or @domain, comma-separated). Leave empty to allow anyone.",
-      policy.allowedRecipients?.join(", ") ?? ""
-    )
-    if (answer === null) return
-    const allowedRecipients = answer.split(/[\s,]+/).filter(Boolean)
-    onChange({
-      ...policy,
-      allowedRecipients: allowedRecipients.length > 0 ? allowedRecipients : undefined,
-    })
-  }
-
-  function editLabel() {
-    const answer = prompt(
-      "Only allow threads with this Gmail label (exact name). Leave empty for the whole mailbox.",
-      policy.restrictToLabel ?? ""
-    )
-    if (answer === null) return
-    onChange({ ...policy, restrictToLabel: answer.trim() || undefined })
-  }
-
-  return (
-    <>
-      <div className={MENU_HEADING}>Access</div>
-      {GMAIL_PRESET_OPTIONS.map((preset) => (
-        <DropdownMenuCheckboxItem
-          key={preset.label}
-          checked={sameTools(policy.allowedTools, preset.tools)}
-          onSelect={keepOpen}
-          onCheckedChange={() => onChange({ ...policy, allowedTools: preset.tools })}
-        >
-          {preset.label}
-        </DropdownMenuCheckboxItem>
-      ))}
-      <div className={MENU_DIVIDER} />
-      <div className={MENU_HEADING}>Tools</div>
-      {GMAIL_TOOL_NAMES.map((tool) => (
-        <DropdownMenuCheckboxItem
-          key={tool}
-          checked={policy.allowedTools.includes(tool)}
-          onSelect={keepOpen}
-          onCheckedChange={(on) => toggleTool(tool, on)}
-        >
-          {tool.replace(/_/g, " ")}
-        </DropdownMenuCheckboxItem>
-      ))}
-      <div className={MENU_DIVIDER} />
-      <PolicyRuleItem
-        label="Allowed recipients"
-        value={policy.allowedRecipients?.join(", ") ?? "Anyone"}
-        onSelect={editRecipients}
-      />
-      <PolicyRuleItem
-        label="Restrict to label"
-        value={policy.restrictToLabel ?? "Whole mailbox"}
-        onSelect={editLabel}
-      />
-      <div className={MENU_DIVIDER} />
-    </>
-  )
-}
-
-function PolicyRuleItem({
-  label,
-  value,
-  onSelect,
-}: {
-  label: string
-  value: string
-  onSelect: () => void
-}) {
-  return (
-    <DropdownMenuItem
-      onSelect={onSelect}
-      className="flex flex-col items-start px-2 py-1.5 text-sm cursor-pointer rounded-sm"
-    >
-      {label}
-      <span className="text-xs text-muted-foreground max-w-56 truncate">{value}</span>
     </DropdownMenuItem>
   )
 }
