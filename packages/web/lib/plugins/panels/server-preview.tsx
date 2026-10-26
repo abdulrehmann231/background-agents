@@ -131,6 +131,37 @@ function ServerPreviewComponent({
     },
   })
 
+  // While the panel is showing a non-ready state, quietly re-probe every few
+  // seconds and refresh automatically the moment it's ready — so a sandbox
+  // started by *any* trigger (a new chat message, a cron wake, a manual
+  // recreate elsewhere) surfaces here without the user clicking Refresh.
+  // `autoStart: false` keeps this passive: it only notices a state someone
+  // else caused, never boots anything itself. Skips "expired", since that
+  // sandbox id is gone for good and only the manual recreate flow fixes it.
+  const isDown =
+    status === "stopped" ||
+    data?.state === "server-down" ||
+    data?.state === "starting" ||
+    data?.state === "no-recipe"
+  useEffect(() => {
+    if (!sandboxId || !isDown) return
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch("/api/sandbox/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, autoStart: false, port }),
+        })
+        if (!res.ok) return // still down (409) or transient error — try again next tick
+        const fresh: ServerStateResponse = await res.json()
+        if (fresh.state === "ready") onRefresh()
+      } catch {
+        // Network hiccup — next tick retries.
+      }
+    }, 4000)
+    return () => clearInterval(poll)
+  }, [sandboxId, port, isDown, onRefresh])
+
   // Tell PreviewView whether this panel can currently recover on its own —
   // recreate if "expired", boot if "stopped" — and how, so its "open in new
   // window" button (rendered outside this component) can run the same
