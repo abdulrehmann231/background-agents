@@ -9,13 +9,14 @@
 
 import { useEffect, useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { AlertCircle, Mail, Unlink } from "lucide-react"
+import { AlertCircle, Unlink } from "lucide-react"
 import {
   GMAIL_POLICY_PRESETS,
   GMAIL_TOOL_NAMES,
   type GmailToolName,
   type GmailToolPolicy,
 } from "@background-agents/mcp/gmail/policy"
+import { GmailIcon } from "@/components/icons/gmail-icon"
 import { DialogFooter } from "@/components/ui/dialog-parts"
 import { Input } from "@/components/ui/input"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
@@ -162,7 +163,7 @@ export function GmailSettingsDialog({
             <ModalHeader
               title={
                 <>
-                  <Mail className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <GmailIcon className="h-4 w-4" />
                   Gmail settings
                 </>
               }

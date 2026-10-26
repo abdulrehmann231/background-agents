@@ -17,13 +17,11 @@ import {
   ExternalLink,
   Github,
   Loader2,
-  Mail,
   Plug,
   Settings,
   Trash2,
-  type LucideIcon,
 } from "lucide-react"
-import { type ReactNode, type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type ComponentType, type ReactNode, type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   GMAIL_MCP_QUALIFIED_NAME,
   type GmailToolPolicy,
@@ -37,6 +35,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { GmailIcon } from "@/components/icons/gmail-icon"
 import { ComboboxTriggerButton } from "./ComboboxTriggerButton"
 import { GmailSettingsDialog } from "./GmailSettingsDialog"
 import {
@@ -81,7 +80,7 @@ const GITHUB_QUALIFIED_NAME = "github/github"
  * attaches a sentinel row via POST `${apiBase}/<id>/mcp-servers/<attachPath>`.
  */
 interface FirstPartyServer extends RegistryServer {
-  icon: LucideIcon
+  icon: ComponentType<{ className?: string }>
   connectApi: string
   attachPath: string
   /** Popup window name, also the postMessage `source` the callback sends. */
@@ -117,7 +116,7 @@ const FIRST_PARTY_SERVERS: FirstPartyServer[] = [
     url: null,
     verified: true,
     useCount: 0,
-    icon: Mail,
+    icon: GmailIcon,
     connectApi: "/api/mcp/connect/gmail",
     attachPath: "gmail",
     popupName: "gmail-oauth",
