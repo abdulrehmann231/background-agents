@@ -131,15 +131,14 @@ function ServerPreviewComponent({
     },
   })
 
-  // While the panel is showing a non-ready state, quietly re-probe every few
-  // seconds and refresh automatically the moment it's ready — so a sandbox
-  // started by *any* trigger (a new chat message, a cron wake, a manual
-  // recreate elsewhere) surfaces here without the user clicking Refresh.
+  // While the sandbox is up but the dev server itself is down, quietly
+  // re-probe every few seconds and refresh automatically the moment it's
+  // ready. (The "sandbox is stopped" case is handled generically, for every
+  // panel type, by useSandboxResource itself — this only covers the
+  // dev-server-specific states that live in this panel's own `data`.)
   // `autoStart: false` keeps this passive: it only notices a state someone
-  // else caused, never boots anything itself. Skips "expired", since that
-  // sandbox id is gone for good and only the manual recreate flow fixes it.
+  // else caused, never boots anything itself.
   const isDown =
-    status === "stopped" ||
     data?.state === "server-down" ||
     data?.state === "starting" ||
     data?.state === "no-recipe"

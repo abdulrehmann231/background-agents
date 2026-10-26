@@ -108,5 +108,33 @@ export function useSandboxResource<T>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sandboxId, explicitStart, ...deps])
 
+  // Self-heal a "stopped" sandbox: it may get booted by something other than
+  // this panel's own refresh button — a new chat message, a cron wake, a
+  // manual recreate elsewhere. Quietly re-probe every few seconds (still
+  // `autoStart: false`, so this never boots anything itself) and flip to
+  // "ready" the moment the same passive request succeeds. Skips "expired" —
+  // that sandbox id is gone for good; only an explicit recreate fixes it.
+  useEffect(() => {
+    if (status !== "stopped" || !sandboxId) return
+    let cancelled = false
+    const poll = setInterval(() => {
+      const controller = new AbortController()
+      load({ autoStart: false, signal: controller.signal })
+        .then((result) => {
+          if (cancelled) return
+          setData(result)
+          setStatus("ready")
+        })
+        .catch(() => {
+          // Still stopped, or a transient error — next tick retries either way.
+        })
+    }, 4000)
+    return () => {
+      cancelled = true
+      clearInterval(poll)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, sandboxId])
+
   return { status, data, error }
 }
