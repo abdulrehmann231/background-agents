@@ -129,37 +129,12 @@ function ServerPreviewComponent({
       await assertSandboxOk(res)
       return res.json()
     },
+    // Sandbox up but dev server down/starting/unrecorded: keep passively
+    // re-probing (see useSandboxResource) so the preview comes back on its
+    // own once something else gets the server listening again.
+    retryWhile: (result) =>
+      result.state === "server-down" || result.state === "starting" || result.state === "no-recipe",
   })
-
-  // While the sandbox is up but the dev server itself is down, quietly
-  // re-probe every few seconds and refresh automatically the moment it's
-  // ready. (The "sandbox is stopped" case is handled generically, for every
-  // panel type, by useSandboxResource itself — this only covers the
-  // dev-server-specific states that live in this panel's own `data`.)
-  // `autoStart: false` keeps this passive: it only notices a state someone
-  // else caused, never boots anything itself.
-  const isDown =
-    data?.state === "server-down" ||
-    data?.state === "starting" ||
-    data?.state === "no-recipe"
-  useEffect(() => {
-    if (!sandboxId || !isDown) return
-    const poll = setInterval(async () => {
-      try {
-        const res = await fetch("/api/sandbox/state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sandboxId, autoStart: false, port }),
-        })
-        if (!res.ok) return // still down (409) or transient error — try again next tick
-        const fresh: ServerStateResponse = await res.json()
-        if (fresh.state === "ready") onRefresh()
-      } catch {
-        // Network hiccup — next tick retries.
-      }
-    }, 4000)
-    return () => clearInterval(poll)
-  }, [sandboxId, port, isDown, onRefresh])
 
   // Tell PreviewView whether this panel can currently recover on its own —
   // recreate if "expired", boot if "stopped" — and how, so its "open in new
