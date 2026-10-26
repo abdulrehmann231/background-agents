@@ -63,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyOnAgentCommitted: true,
   elizaEnabled: false,
   notificationSound: true,
+  showCommandPaletteButton: false,
   maxAgentRunMinutes: null,
 }
 

@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown, HardDrive, Rocket } from "lucide-react"
+import { AlertTriangle, ChevronDown, Github, X, Pencil, Trash2, Loader2, Command, FolderDown, HardDrive, Rocket, HelpCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useRepoFolderButton } from "@/lib/hooks/useLocalSync"
 import { useModals, useGit } from "@/lib/contexts"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 import { Input } from "../ui/input"
 import { ShareButton } from "./ShareButton"
 import { CreditBalancePill } from "./CreditBalancePill"
@@ -39,6 +40,8 @@ export function ChatHeader({
   const modals = useModals()
   const git = useGit()
   const { isDesktopApp } = useElectron()
+  const { data: settingsData } = useSettingsQuery()
+  const showCommandPaletteButton = settingsData?.settings.showCommandPaletteButton ?? false
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -226,7 +229,7 @@ export function ChatHeader({
         <CreditBalancePill />
         <FolderSyncButton repo={chat.repo} />
         <ShareButton key={chat.id} chatId={chat.id} initialShareId={chat.shareId} />
-        {onOpenCommandPalette && (
+        {showCommandPaletteButton && onOpenCommandPalette && (
           <button
             onClick={onOpenCommandPalette}
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
@@ -236,6 +239,14 @@ export function ChatHeader({
             <Command className="h-4 w-4" />
           </button>
         )}
+        <button
+          onClick={() => modals.setHelpOpen(true)}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          title="Help"
+          aria-label="Help"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </button>
       </div>
     </div>
   )

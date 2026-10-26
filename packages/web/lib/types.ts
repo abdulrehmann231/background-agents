@@ -302,6 +302,8 @@ export interface Settings {
   elizaEnabled: boolean
   /** Play a sound when a notification is shown */
   notificationSound: boolean
+  /** Show the command palette (⌘K) button in the chat header / welcome view. Off by default — the shortcut still works either way. */
+  showCommandPaletteButton: boolean
   /**
    * Developer (admin-only): override the agent-lifecycle cron's hard timeout
    * for this admin's own runs, in minutes. Null means "use the server
