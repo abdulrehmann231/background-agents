@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 }
 
 const LAST_UPDATED = "October 26, 2026"
-const CONTACT_EMAIL = "privacy@backgrounder.dev"
+const CONTACT_EMAIL = "james@backgrounder.dev"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </section>
   )
@@ -21,129 +21,123 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function PrivacyPolicyPage() {
   return (
-    <main className="h-dvh overflow-y-auto bg-background">
-      <article className="mx-auto max-w-3xl px-6 py-12 space-y-8 text-sm leading-relaxed text-muted-foreground [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5 [&_strong]:text-foreground [&_a]:underline [&_a]:text-foreground">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">Privacy Policy</h1>
-          <p>Last updated: {LAST_UPDATED}</p>
-          <p>
-            This Privacy Policy explains how Background Agents (&quot;we&quot;, &quot;us&quot;, or
-            &quot;the Service&quot;), available at <a href="https://backgrounder.dev">backgrounder.dev</a>{" "}
-            and through our desktop app, collects, uses, stores, shares, and protects information
-            about you. Background Agents lets you run AI coding agents against your GitHub
-            repositories inside isolated cloud sandboxes. By using the Service you agree to the
-            practices described here.
-          </p>
-        </header>
+    <div className="flex flex-col h-dvh bg-background">
+      <header className="border-b border-border shrink-0">
+        <div className="max-w-3xl mx-auto w-full px-6 py-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-sm font-medium text-foreground">Privacy Policy</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">Last updated {LAST_UPDATED}</p>
+          </div>
+          <Link
+            href="/"
+            className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Background Agents
+          </Link>
+        </div>
+      </header>
 
-        <Section title="1. Information we collect">
-          <p><strong>Account information from GitHub.</strong> You sign in with GitHub OAuth. We receive and store:</p>
-          <ul>
-            <li>Your GitHub user ID, username/display name, email address, and avatar URL.</li>
-            <li>
-              A GitHub OAuth access token with the <code>repo</code>, <code>read:user</code>, and{" "}
-              <code>user:email</code> scopes, and, if you install our GitHub App, its installation ID.
-            </li>
-          </ul>
+      <main className="flex-1 min-h-0 overflow-y-auto py-6">
+        <article className="max-w-3xl mx-auto w-full px-6 space-y-6 text-sm leading-relaxed text-muted-foreground [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_strong]:font-medium [&_strong]:text-foreground [&_a]:underline [&_a]:underline-offset-2 [&_a]:text-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5">
+          <section className="space-y-3">
+            <p>
+              This Privacy Policy explains how Background Agents (&quot;we&quot;, &quot;us&quot;, or
+              &quot;the Service&quot;), available at <a href="https://backgrounder.dev">backgrounder.dev</a>{" "}
+              and through our desktop app, collects, uses, stores, shares, and protects information
+              about you. Background Agents lets you run AI coding agents against your GitHub
+              repositories inside isolated cloud sandboxes. By using the Service you agree to the
+              practices described here.
+            </p>
+          </section>
 
-          <p><strong>Content you provide.</strong></p>
-          <ul>
-            <li>Prompts and messages you send to agents, and the agents&apos; responses, tool calls, and outputs.</li>
-            <li>Files you upload into a chat, and skills you create or upload.</li>
-            <li>Chat metadata such as repository name, branch names, selected agent and model, titles, and scheduled-job definitions.</li>
-            <li>Settings and preferences, including custom model endpoints.</li>
-          </ul>
+          <Section title="1. Information we collect">
+            <p><strong>Account information from GitHub.</strong> You sign in with GitHub OAuth. We receive and store:</p>
+            <ul>
+              <li>Your GitHub user ID, username/display name, email address, and avatar URL.</li>
+              <li>
+                A GitHub OAuth access token with the <code>repo</code>, <code>read:user</code>, and{" "}
+                <code>user:email</code> scopes, and, if you install our GitHub App, its installation ID.
+              </li>
+            </ul>
 
-          <p><strong>Credentials you choose to connect.</strong> Third-party API keys or tokens (for example for AI model providers, MCP servers, or Netlify), and repository environment variables you configure. These are stored encrypted.</p>
+            <p><strong>Content you provide.</strong></p>
+            <ul>
+              <li>Prompts and messages you send to agents, and the agents&apos; responses, tool calls, and outputs.</li>
+              <li>Files you upload into a chat, and skills you create or upload.</li>
+              <li>Chat metadata such as repository name, branch names, selected agent and model, titles, and scheduled-job definitions.</li>
+              <li>Settings and preferences, including custom model endpoints.</li>
+            </ul>
 
-          <p><strong>Repository code.</strong> When you start a chat, the selected repository is cloned into a sandbox so the agent can read and modify it. The agent may commit and push changes to branches in that repository on your behalf.</p>
+            <p><strong>Credentials you choose to connect.</strong> Third-party API keys or tokens (for example for AI model providers, MCP servers, or Netlify), and repository environment variables you configure. These are stored encrypted.</p>
 
-          <p><strong>Usage and billing information.</strong></p>
-          <ul>
-            <li>Activity events (e.g. sign-in, sign-out, chat created/deleted, message sent, settings updated) with timestamps.</li>
-            <li>Per-turn AI token counts and estimated costs, used for rate limiting, credit metering, and billing.</li>
-            <li>If you buy credits: your Stripe customer ID, purchase and credit-transaction history, and balance. Card details are entered directly with Stripe; we never receive or store full payment card numbers.</li>
-          </ul>
+            <p><strong>Repository code.</strong> When you start a chat, the selected repository is cloned into a sandbox so the agent can read and modify it. The agent may commit and push changes to branches in that repository on your behalf.</p>
 
-          <p><strong>Technical information.</strong> Standard server logs (such as IP address, browser user agent, request paths, and errors) are generated by our hosting provider when you use the Service. We use a session cookie to keep you signed in. We do not use advertising cookies or third-party analytics/tracking scripts.</p>
-        </Section>
+            <p><strong>Usage and billing information.</strong></p>
+            <ul>
+              <li>Activity events (e.g. sign-in, sign-out, chat created/deleted, message sent, settings updated) with timestamps.</li>
+              <li>Per-turn AI token counts and estimated costs, used for rate limiting, credit metering, and billing.</li>
+              <li>If you buy credits: your Stripe customer ID, purchase and credit-transaction history, and balance. Card details are entered directly with Stripe; we never receive or store full payment card numbers.</li>
+            </ul>
 
-        <Section title="2. How we use your information">
-          <ul>
-            <li>To authenticate you and operate your account.</li>
-            <li>To run AI agents on your behalf: creating sandboxes, cloning repositories, sending your prompts and relevant code to the AI model you selected, and pushing resulting changes to GitHub.</li>
-            <li>To run scheduled jobs and integrations you have configured.</li>
-            <li>To measure usage, enforce fair-use limits, process payments, and maintain accurate credit balances.</li>
-            <li>To secure the Service, prevent abuse and fraud, and debug problems.</li>
-            <li>To communicate with you about your account or material changes to the Service.</li>
-          </ul>
-          <p>We do <strong>not</strong> sell your personal information, use it for advertising, or use your code or prompts to train our own AI models.</p>
-        </Section>
+            <p><strong>Technical information.</strong> Standard server logs (such as IP address, browser user agent, request paths, and errors) are generated by our hosting provider when you use the Service. We use a session cookie to keep you signed in. We do not use advertising cookies or third-party analytics/tracking scripts.</p>
+          </Section>
 
-        <Section title="3. How we share information">
-          <p>We share data only with service providers needed to operate the Service, and only as necessary for the functions you use:</p>
-          <ul>
-            <li><strong>GitHub</strong> — authentication and repository access (clone, branch, commit, push, pull requests).</li>
-            <li><strong>Daytona</strong> — hosts the isolated cloud sandboxes where your repository is cloned and agents run.</li>
-            <li><strong>AI model providers</strong> (e.g. Anthropic, OpenAI, Google, and providers reachable through OpenCode or custom endpoints you configure) — receive your prompts and the code/context the agent sends in order to generate responses. Their handling of that data is governed by their own terms and privacy policies.</li>
-            <li><strong>Stripe</strong> — payment processing for credit purchases.</li>
-            <li><strong>Vercel</strong> and our managed <strong>PostgreSQL</strong> database provider — application hosting and data storage.</li>
-            <li><strong>Optional integrations you enable</strong>, such as Smithery-hosted MCP servers or Netlify deployments — receive the data needed for that integration.</li>
-          </ul>
-          <p>
-            <strong>Shared chats.</strong> If you create a share link for a chat, anyone with that link can view the chat&apos;s messages. You can stop sharing at any time.
-          </p>
-          <p>We may also disclose information if required by law, to protect our rights or the safety of users, or as part of a merger, acquisition, or sale of assets (in which case this policy will continue to apply to your data).</p>
-        </Section>
+          <Section title="2. How we use your information">
+            <ul>
+              <li>To authenticate you and operate your account.</li>
+              <li>To run AI agents on your behalf: creating sandboxes, cloning repositories, sending your prompts and relevant code to the AI model you selected, and pushing resulting changes to GitHub.</li>
+              <li>To run scheduled jobs and integrations you have configured.</li>
+              <li>To measure usage, enforce fair-use limits, process payments, and maintain accurate credit balances.</li>
+              <li>To secure the Service, prevent abuse and fraud, and debug problems.</li>
+              <li>To communicate with you about your account or material changes to the Service.</li>
+            </ul>
+            <p>We do <strong>not</strong> sell your personal information, use it for advertising, or use your code or prompts to train our own AI models.</p>
+          </Section>
 
-        <Section title="4. Data retention">
-          <ul>
-            <li>Account data, chats, messages, and settings are kept while your account is active, or until you delete them.</li>
-            <li>Deleting a chat deletes its messages and associated records.</li>
-            <li>Sandboxes are temporary; they are stopped or deleted when no longer in use, along with the repository copy inside them.</li>
-            <li>Billing and credit-transaction records may be retained longer where required for accounting, tax, fraud prevention, or legal obligations.</li>
-            <li>When you ask us to delete your account, we delete your account and associated data (chats, messages, credentials, settings) within 30 days, except records we must keep by law.</li>
-          </ul>
-        </Section>
+          <Section title="3. How we share information">
+            <p>We share data only with service providers needed to operate the Service, and only as necessary for the functions you use:</p>
+            <ul>
+              <li><strong>GitHub</strong> — authentication and repository access (clone, branch, commit, push, pull requests).</li>
+              <li><strong>Daytona</strong> — hosts the isolated cloud sandboxes where your repository is cloned and agents run.</li>
+              <li><strong>AI model providers</strong> (e.g. Anthropic, OpenAI, Google, and providers reachable through OpenCode or custom endpoints you configure) — receive your prompts and the code/context the agent sends in order to generate responses. Their handling of that data is governed by their own terms and privacy policies.</li>
+              <li><strong>Stripe</strong> — payment processing for credit purchases.</li>
+              <li><strong>Vercel</strong> and our managed <strong>PostgreSQL</strong> database provider — application hosting and data storage.</li>
+              <li><strong>Optional integrations you enable</strong>, such as Smithery-hosted MCP servers or Netlify deployments — receive the data needed for that integration.</li>
+            </ul>
+            <p>
+              <strong>Shared chats.</strong> If you create a share link for a chat, anyone with that link can view the chat&apos;s messages. You can stop sharing at any time.
+            </p>
+            <p>We may also disclose information if required by law, to protect our rights or the safety of users, or as part of a merger, acquisition, or sale of assets (in which case this policy will continue to apply to your data).</p>
+          </Section>
 
-        <Section title="5. Security">
-          <p>
-            Data is transmitted over HTTPS. API keys, tokens, and other secrets you provide are encrypted at rest with AES encryption. Agents run in isolated sandboxes, separate per chat. Access to production systems is limited to authorized maintainers. No method of transmission or storage is perfectly secure, but we work to protect your information and will notify affected users of a breach as required by law.
-          </p>
-        </Section>
+          <Section title="4. Data retention">
+            <ul>
+              <li>Account data, chats, messages, and settings are kept while your account is active, or until you delete them.</li>
+              <li>Deleting a chat deletes its messages and associated records.</li>
+              <li>Sandboxes are temporary; they are stopped or deleted when no longer in use, along with the repository copy inside them.</li>
+              <li>Billing and credit-transaction records may be retained longer where required for accounting, tax, fraud prevention, or legal obligations.</li>
+              <li>When you ask us to delete your account, we delete your account and associated data (chats, messages, credentials, settings) within 30 days, except records we must keep by law.</li>
+            </ul>
+          </Section>
 
-        <Section title="6. Your rights and choices">
-          <ul>
-            <li><strong>Access and export</strong> — request a copy of the personal data we hold about you.</li>
-            <li><strong>Correction</strong> — your profile information comes from GitHub; update it there and it will refresh on next sign-in.</li>
-            <li><strong>Deletion</strong> — delete individual chats in the app, or email us to delete your entire account.</li>
-            <li><strong>Revoke access</strong> — revoke our OAuth app or uninstall our GitHub App at any time from your GitHub settings (Settings → Applications). Remove stored API keys from the app&apos;s settings.</li>
-          </ul>
-          <p>Depending on where you live (for example under the GDPR or CCPA), you may have additional rights, including objecting to or restricting processing and lodging a complaint with a data-protection authority. To exercise any right, contact us at the address below; we will respond within 30 days.</p>
-        </Section>
+          <Section title="5. Security">
+            <p>
+              Data is transmitted over HTTPS. API keys, tokens, and other secrets you provide are encrypted at rest with AES encryption. Agents run in isolated sandboxes, separate per chat. Access to production systems is limited to authorized maintainers. No method of transmission or storage is perfectly secure, but we work to protect your information and will notify affected users of a breach as required by law.
+            </p>
+          </Section>
 
-        <Section title="7. Children">
-          <p>The Service is not directed to children under 13 (or under 16 in the EEA), and we do not knowingly collect their personal information. If you believe a child has provided us data, contact us and we will delete it.</p>
-        </Section>
+          <Section title="6. Changes to this policy">
+            <p>We may update this policy from time to time. We will change the &quot;Last updated&quot; date above and, for material changes, notify you through the Service or by email.</p>
+          </Section>
 
-        <Section title="8. International transfers">
-          <p>We and our service providers may process data in the United States and other countries. Where required, we rely on appropriate safeguards such as Standard Contractual Clauses for transfers.</p>
-        </Section>
+          <Section title="7. Contact us">
+            <p>
+              Questions or requests about privacy: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            </p>
+          </Section>
 
-        <Section title="9. Changes to this policy">
-          <p>We may update this policy from time to time. We will change the &quot;Last updated&quot; date above and, for material changes, notify you through the Service or by email.</p>
-        </Section>
-
-        <Section title="10. Contact us">
-          <p>
-            Questions or requests about privacy: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
-          </p>
-        </Section>
-
-        <footer className="pt-4 border-t border-border">
-          <Link href="/">← Back to Background Agents</Link>
-        </footer>
-      </article>
-    </main>
+        </article>
+      </main>
+    </div>
   )
 }
