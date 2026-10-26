@@ -393,8 +393,8 @@ export function PreviewView({
             </a>
           )}
 
-          {/* Download button - for files NOT in the repo */}
-          {item.type === "file" && !isFileInRepo && (
+          {/* Download button - for every file preview */}
+          {item.type === "file" && (
             <button
               onClick={handleDownloadFile}
               disabled={isDownloading}
