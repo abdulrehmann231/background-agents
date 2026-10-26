@@ -70,6 +70,10 @@ export async function latestDeploy(token: string, siteId: string): Promise<Netli
   return deploy ?? null
 }
 
+export async function deleteSite(token: string, siteId: string): Promise<void> {
+  await netlify(token, `/sites/${siteId}`, { method: "DELETE" })
+}
+
 export async function startBuild(token: string, siteId: string): Promise<void> {
   await netlify(token, `/sites/${siteId}/builds`, { method: "POST" })
 }
@@ -190,7 +194,7 @@ export async function createRepoSite(opts: {
     return linked
   } catch (error) {
     // Remove the half-set-up site so retrying doesn't hit "name taken".
-    await netlify(token, `/sites/${site.id}`, { method: "DELETE" }).catch((cleanupError) =>
+    await deleteSite(token, site.id).catch((cleanupError) =>
       console.warn(`[netlify] couldn't remove half-created site ${site.name}:`, cleanupError)
     )
     throw error
