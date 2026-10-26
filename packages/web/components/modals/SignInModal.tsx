@@ -65,6 +65,14 @@ export function SignInModal({ open, onClose, isMobile = false }: SignInModalProp
               <Github className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
               Sign in with GitHub
             </button>
+
+            <p className="text-xs text-muted-foreground">
+              By signing in you agree to our{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                Privacy Policy
+              </a>
+              .
+            </p>
           </div>
 
           {/* Footer */}
