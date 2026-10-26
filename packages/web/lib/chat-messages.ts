@@ -19,6 +19,12 @@ export interface SendMessagePayload {
   model: string
   userMessageId: string
   assistantMessageId: string
+  /**
+   * Same `Date.now()` used for the optimistic user message's `timestamp` field.
+   * Sent so the server persists the message with this timestamp instead of its
+   * own clock reading — see MessagePayload.timestamp on the API side.
+   */
+  timestamp?: number
   newBranch?: string
   planMode?: boolean
   reasoningEffort?: string

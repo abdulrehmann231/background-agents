@@ -198,6 +198,7 @@ export function useMessageDispatch({
           model: selectedModel,
           userMessageId: userMessage.id,
           assistantMessageId: assistantMessage.id,
+          timestamp: now,
           newBranch: newBranchForSend(chat),
           planMode: planMode || undefined,
           reasoningEffort,

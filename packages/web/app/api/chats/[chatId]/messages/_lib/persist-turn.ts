@@ -30,7 +30,11 @@ export async function persistTurn(params: {
     claimedPromptId,
   } = params
 
-  const now = Date.now()
+  // Reuse the client's optimistic timestamp when available so the bubble shown
+  // immediately on send and the row persisted here sort identically on the next
+  // merge (see SendMessagePayload.timestamp) — otherwise the client and server
+  // clocks can disagree enough to reorder the message until a page refresh.
+  const now = payload.timestamp ?? Date.now()
   await prisma.$transaction(async (tx) => {
     // Reject reuse of a message ID that already exists in a different
     // chat — the upsert below would otherwise overwrite a foreign row.
