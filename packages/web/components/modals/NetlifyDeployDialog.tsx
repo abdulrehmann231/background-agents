@@ -1,11 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Rocket, Loader2 } from "lucide-react"
 import { BaseDialog } from "@/components/modals/BaseDialog"
 import { DialogLabel, DialogReadonlyField, DialogFooter, dialogIconClass } from "@/components/ui/dialog-parts"
 import { Input } from "@/components/ui/input"
 import { connectNetlify } from "@/lib/netlify-connect"
+import { queryKeys } from "@/lib/query/keys"
 import { cn } from "@/lib/utils"
 
 interface DeployInfo {
@@ -35,6 +37,7 @@ interface NetlifyDeployDialogProps {
  * push, so this dialog mostly shows the site and its latest deploy.
  */
 export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }: NetlifyDeployDialogProps) {
+  const queryClient = useQueryClient()
   const [info, setInfo] = useState<DeployInfo | null>(null)
   const [name, setName] = useState("")
   const [includeEnv, setIncludeEnv] = useState(false)
@@ -100,6 +103,8 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? "Deploy failed")
       setReloadKey((k) => k + 1)
+      // The header's deploy button turns green once the repo has a site.
+      queryClient.invalidateQueries({ queryKey: queryKeys.netlify.sites() })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

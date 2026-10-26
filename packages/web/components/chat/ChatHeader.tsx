@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useRepoFolderButton } from "@/lib/hooks/useLocalSync"
+import { useNetlifySitesQuery } from "@/lib/query/hooks/useNetlifySitesQuery"
 import { useModals, useGit } from "@/lib/contexts"
 import { Input } from "../ui/input"
 import { ShareButton } from "./ShareButton"
@@ -169,18 +170,6 @@ export function ChatHeader({
                     Open in GitHub
                   </button>
                 )}
-                {isRealRepo(chat.repo) && (
-                  <button
-                    onClick={() => {
-                      setTitleMenuOpen(false)
-                      modals.setNetlifyDeployOpen(true)
-                    }}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left cursor-pointer"
-                  >
-                    <Rocket className="h-3.5 w-3.5" />
-                    Deploy to Netlify
-                  </button>
-                )}
                 <button
                   onClick={() => {
                     setTitleMenuOpen(false)
@@ -225,6 +214,9 @@ export function ChatHeader({
       >
         <CreditBalancePill />
         <FolderSyncButton repo={chat.repo} />
+        {isRealRepo(chat.repo) && (
+          <DeployButton repo={chat.repo} branch={chat.baseBranch} onClick={() => modals.setNetlifyDeployOpen(true)} />
+        )}
         <ShareButton key={chat.id} chatId={chat.id} initialShareId={chat.shareId} />
         {onOpenCommandPalette && (
           <button
@@ -279,6 +271,32 @@ function FolderSyncButton({ repo }: { repo: string }) {
       ) : (
         <FolderDown className="h-4 w-4" />
       )}
+    </button>
+  )
+}
+
+// =============================================================================
+// DeployButton - Opens Deploy to Netlify; green once the repo has a site
+// =============================================================================
+
+function DeployButton({ repo, branch, onClick }: { repo: string; branch: string; onClick: () => void }) {
+  const { data } = useNetlifySitesQuery()
+  const site = data?.sites.find((s) => s.repo === repo && s.branch === branch)
+  const title = site ? `Deployed: ${site.url.replace(/^https:\/\//, "")}` : "Deploy to Netlify"
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded-md transition-colors cursor-pointer",
+        site
+          ? "text-green-500 hover:bg-green-500/10"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      )}
+      title={title}
+      aria-label={title}
+    >
+      <Rocket className="h-4 w-4" />
     </button>
   )
 }

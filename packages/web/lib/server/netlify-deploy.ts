@@ -53,9 +53,15 @@ export function toSiteName(value: string): string {
     .slice(0, 63)
 }
 
+/** The account's sites that are linked to a GitHub repo (the first 100 sites). */
+export async function listRepoSites(token: string): Promise<NetlifySite[]> {
+  const sites = await netlify<NetlifySite[]>(token, "/sites?filter=all&per_page=100")
+  return sites.filter((s) => s.build_settings?.repo_path)
+}
+
 /** The site linked to this repo and branch, if it was deployed before. */
 export async function findRepoSite(token: string, repo: string, branch: string): Promise<NetlifySite | null> {
-  const sites = await netlify<NetlifySite[]>(token, "/sites?filter=all&per_page=100")
+  const sites = await listRepoSites(token)
   return sites.find((s) => s.build_settings?.repo_path === repo && s.build_settings?.repo_branch === branch) ?? null
 }
 

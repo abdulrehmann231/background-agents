@@ -7,6 +7,8 @@ export { useGitHubUserQuery } from "./useGitHubUserQuery"
 export { useBranchesQuery } from "./useBranchesQuery"
 export { useServersQuery } from "./useServersQuery"
 export type { ServerInfo } from "./useServersQuery"
+export { useNetlifySitesQuery } from "./useNetlifySitesQuery"
+export type { NetlifySiteInfo } from "./useNetlifySitesQuery"
 
 // Mutations
 export { useCreateChatMutation } from "./useCreateChatMutation"
