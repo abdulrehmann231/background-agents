@@ -2,9 +2,9 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { signInWithGitHub } from "@/lib/auth-utils"
-import { SquarePen, PanelLeft, X, Loader2, Clock, Search, BarChart3, Settings, HelpCircle, LogOut, BookOpen, MessageCircle } from "lucide-react"
+import { SquarePen, PanelLeft, X, Clock, Search, MessageCircle } from "lucide-react"
 import Image from "next/image"
 import { usePalette } from "@/components/search-palette/PaletteProvider"
 import { cn } from "@/lib/utils"
@@ -12,8 +12,6 @@ import { useClickOutside } from "@/lib/hooks/useClickOutside"
 import { useElectron } from "@/lib/hooks/useElectron"
 import { useGitHubUserQuery } from "@/lib/query"
 import { useModals, ALL_REPOSITORIES, NO_REPOSITORY, ARCHIVED_CHATS, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH, COLLAPSE_THRESHOLD } from "@/lib/contexts"
-import { DOCS_URL } from "@/lib/constants"
-import { clearAllStorage } from "@/lib/storage"
 import { isChatVisibleForFilter, groupChatsByParent } from "@/lib/chat-tree"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
@@ -120,10 +118,6 @@ export function Sidebar({
   const isResizing = useRef(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
-
-  // Mobile user menu state
-  const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false)
-  const mobileUserMenuRef = useRef<HTMLDivElement>(null)
 
   // Collapsed sidebar: popup listing chat titles so a chat can be switched to
   // without expanding the sidebar.
@@ -236,9 +230,6 @@ export function Sidebar({
 
   // Close repo dropdown when clicking outside
   useClickOutside(repoDropdownRef, () => setRepoDropdownOpen(false), repoDropdownOpen)
-
-  // Close mobile user menu when clicking outside
-  useClickOutside(mobileUserMenuRef, () => setMobileUserMenuOpen(false), mobileUserMenuOpen)
 
   // Close the collapsed chat switcher popup when clicking outside
   useClickOutside(chatSwitcherRef, () => setChatSwitcherOpen(false), chatSwitcherOpen)
@@ -473,86 +464,7 @@ export function Sidebar({
                 </div>
               </div>
             ) : session?.user ? (
-              <div className="relative" ref={mobileUserMenuRef}>
-                <button
-                  onClick={() => setMobileUserMenuOpen((v) => !v)}
-                  className="flex items-center gap-3 w-full rounded-lg hover:bg-accent active:bg-accent transition-colors p-2 -m-2"
-                >
-                  {session.user.image && (
-                    <img
-                      src={session.user.image}
-                      alt={session.user.name || "User"}
-                      className="h-10 w-10 rounded-full"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-base font-medium truncate">
-                      {session.user.name}
-                    </div>
-                    <div className="text-sm text-muted-foreground truncate">
-                      {session.user.email}
-                    </div>
-                  </div>
-                </button>
-
-                {/* User Menu Popup */}
-                {mobileUserMenuOpen && (
-                  <div className="absolute bottom-full left-0 right-0 mb-2 rounded-md border border-border bg-popover shadow-md py-1 z-50">
-                    {session.user.isAdmin && (
-                      <a
-                        href="/admin"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setMobileUserMenuOpen(false)}
-                        className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                      >
-                        <BarChart3 className="h-5 w-5" />
-                        Admin Dashboard
-                      </a>
-                    )}
-                    <button
-                      onClick={() => {
-                        modals.openSettings()
-                        setMobileUserMenuOpen(false)
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <Settings className="h-5 w-5" />
-                      Settings
-                    </button>
-                    <button
-                      onClick={() => {
-                        modals.setHelpOpen(true)
-                        setMobileUserMenuOpen(false)
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                      Help
-                    </button>
-                    <a
-                      href={DOCS_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setMobileUserMenuOpen(false)}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <BookOpen className="h-5 w-5" />
-                      Docs
-                    </a>
-                    <button
-                      onClick={() => {
-                        clearAllStorage()
-                        signOut()
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-3 text-base hover:bg-accent active:bg-accent cursor-pointer"
-                    >
-                      <LogOut className="h-5 w-5" />
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
+              <UserMenu user={session.user} collapsed={false} variant="mobile" />
             ) : (
               <button
                 onClick={() => signInWithGitHub()}
