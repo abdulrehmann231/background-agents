@@ -404,11 +404,13 @@ export const agentModels: Record<Agent, ModelOption[]> = {
   "codex": [
     // GPT-5.5 retired from Codex/ChatGPT sign-in (Oct 14, 2026) — see
     // https://developers.openai.com/codex/models. GPT-6 Sol/Luna/Astra and
-    // GPT-6.1 Sol are the current generation.
+    // GPT-6.1 Sol/Terra are the current generation.
     { value: "gpt-6.1-sol", label: "GPT-6.1 Sol", requiresKey: "openai" },
+    { value: "gpt-6.1-terra", label: "GPT-6.1 Terra", requiresKey: "openai" },
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "openai" },
     { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "openai" },
     { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "openai" },
+    { value: "gpt-5.5", label: "GPT-5.5 (API key only)", requiresKey: "openai" },
   ],
   "copilot": [
     { value: "claude-fable-5.1", label: "Claude Fable 5.1", requiresKey: "github" },
@@ -567,6 +569,8 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", requiresKey: "anthropic" },
     { value: "claude-opus-5-5", label: "Claude Opus 5.5", requiresKey: "anthropic" },
     { value: "claude-haiku-5-5", label: "Claude Haiku 5.5", requiresKey: "anthropic" },
+    { value: "claude-fable-5", label: "Claude Fable 5", requiresKey: "anthropic" },
+    { value: "claude-fable-5-1", label: "Claude Fable 5.1", requiresKey: "anthropic" },
     // OpenAI models
     { value: "openai/gpt-4o", label: "GPT-4o", requiresKey: "openai" },
     { value: "openai/gpt-4o-mini", label: "GPT-4o Mini", requiresKey: "openai" },
