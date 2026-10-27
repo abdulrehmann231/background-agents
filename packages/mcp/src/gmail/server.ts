@@ -83,7 +83,10 @@ function createGmailMcpServer({ policy, getAccessToken }: ServeGmailMcpOptions):
       const body = await res.text().catch(() => "")
       throw new Error(`Gmail API ${res.status}: ${body}`)
     }
-    return (await res.json()) as T
+    // Some endpoints (e.g. drafts.delete) return 204 with no body.
+    if (res.status === 204) return undefined as T
+    const text = await res.text()
+    return (text ? JSON.parse(text) : undefined) as T
   }
 
   let scopeLabelId: Promise<string> | undefined
@@ -209,6 +212,16 @@ function createGmailMcpServer({ policy, getAccessToken }: ServeGmailMcpOptions):
         }),
       })
       return { draftId: draft.id }
+    }
+  )
+
+  register(
+    "delete_draft",
+    "Permanently delete a draft (from its draft id, not a thread or message id).",
+    { draftId: z.string() },
+    async ({ draftId }) => {
+      await gmail(`/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" })
+      return { ok: true }
     }
   )
 
