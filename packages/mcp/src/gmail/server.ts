@@ -216,6 +216,21 @@ function createGmailMcpServer({ policy, getAccessToken }: ServeGmailMcpOptions):
   )
 
   register(
+    "update_draft",
+    "Replace a draft's contents (from its draft id, not a thread or message id).",
+    { draftId: z.string(), ...messageShape },
+    async ({ draftId, ...message }) => {
+      const draft = await gmail<{ id: string }>(`/drafts/${encodeURIComponent(draftId)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          message: await prepareOutgoing(message, { enforceRecipientAllowlist: false }),
+        }),
+      })
+      return { draftId: draft.id }
+    }
+  )
+
+  register(
     "delete_draft",
     "Permanently delete a draft (from its draft id, not a thread or message id).",
     { draftId: z.string() },

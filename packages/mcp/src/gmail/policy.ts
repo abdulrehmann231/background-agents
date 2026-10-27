@@ -18,6 +18,7 @@ export const GMAIL_TOOL_NAMES = [
   "get_thread",
   "list_labels",
   "create_draft",
+  "update_draft",
   "delete_draft",
   "send_message",
   "modify_thread_labels",
@@ -49,7 +50,7 @@ const READ_TOOLS: GmailToolName[] = ["search_threads", "get_thread", "list_label
 
 export const GMAIL_POLICY_PRESETS = {
   readOnly: { allowedTools: READ_TOOLS },
-  readDraft: { allowedTools: [...READ_TOOLS, "create_draft", "delete_draft"] },
+  readDraft: { allowedTools: [...READ_TOOLS, "create_draft", "update_draft", "delete_draft"] },
   full: { allowedTools: [...GMAIL_TOOL_NAMES] },
 } satisfies Record<string, GmailToolPolicy>
 
