@@ -47,6 +47,9 @@ interface AppModalsProps {
   // Create-repo modal — called with the newly-created repo + default branch.
   onRepoSelect: ComponentProps<typeof CreateRepoModal>["onSelect"]
 
+  /** Opens the Changes panel from the Merge dialog. */
+  onReviewChanges?: () => void
+
   // Settings
   onSaveSettings: ComponentProps<typeof SettingsModal>["onSave"]
 
@@ -80,6 +83,7 @@ export function AppModals({
   githubTokenInvalid,
   onDismissReAuthBanner,
   onRepoSelect,
+  onReviewChanges,
   onSaveSettings,
   onSaveEnvVars,
   envVarsChatEnvVars,
@@ -167,6 +171,7 @@ export function AppModals({
         gitDialogs={gitDialogs}
         chat={currentChat}
         isMobile={isMobile}
+        onReviewChanges={onReviewChanges}
       />
       <RebaseDialog
         open={gitDialogs.rebaseOpen}

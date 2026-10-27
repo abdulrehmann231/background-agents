@@ -32,6 +32,7 @@ interface ChatPanelProps {
   onUpdateChat?: (updates: Partial<Chat>) => void
   onSlashCommand?: (command: SlashCommandType) => void
   onOpenFile?: (filePath: string) => void
+  onOpenChanges?: () => void
   /** Callback to open the environment variables modal */
   onOpenEnvVars?: () => void
   /** True when the current chat is a not-yet-persisted draft. */
@@ -57,7 +58,7 @@ interface ChatPanelProps {
   onOpenSandboxResize?: () => void
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, isAdmin = false, onOpenSandboxResize }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, onSendMessage, onReload, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onUpdateChat, onSlashCommand, onOpenFile, onOpenChanges, onOpenEnvVars, isDraftChat = false, onMaterializeDraftForMcp, isMobile = false, isLoadingMessages = false, draft = "", onDraftChange, isSending = false, onOpenCommandPalette, isAuthenticated = false, isAdmin = false, onOpenSandboxResize }: ChatPanelProps) {
   const [modelPickerRequest, setModelPickerRequest] = useState<{ chatId: string; sequence: number }>()
   const composer = useChatComposer({
     chat,
@@ -280,6 +281,7 @@ export function ChatPanel({ chat, settings, credentialFlags, showCreditDialog, o
         isNewRepo={isNewRepo}
         git={git}
         onOpenFile={onOpenFile}
+        onOpenChanges={onOpenChanges}
         onReload={onReload}
         onSendMessage={onSendMessage}
         onRemoveQueuedMessage={onRemoveQueuedMessage}
