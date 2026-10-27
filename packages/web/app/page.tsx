@@ -163,6 +163,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
     githubBranchUrl,
     envVarsChatEnvVars,
     envVarsRepoEnvVars,
+    envVarsDeployEnvVars,
     handleOpenEnvVars,
     handleSaveEnvVars,
     handleDownloadProject,
@@ -820,6 +821,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         onSaveEnvVars={handleSaveEnvVars}
         envVarsChatEnvVars={envVarsChatEnvVars}
         envVarsRepoEnvVars={envVarsRepoEnvVars}
+        envVarsDeployEnvVars={envVarsDeployEnvVars}
         skillsModalOpen={skillsModalOpen}
         onSkillsModalOpenChange={setSkillsModalOpen}
         onScheduledJobSuccess={() => setScheduledJobsRefreshKey((k) => k + 1)}

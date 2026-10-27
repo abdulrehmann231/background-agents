@@ -35,6 +35,10 @@ model User {
   // { "owner/repo": { "KEY1": "encrypted_value1", ... }, ... }
   repoEnvironmentVariables Json?
 
+  // JSONB for encrypted deployment environment variables, sent to the repo's Netlify site
+  // { "owner/repo": { "KEY1": "encrypted_value1", ... }, ... }
+  deployEnvironmentVariables Json?
+
   // JSONB list of user-defined custom endpoints (Custom endpoints settings tab).
   // Array<{ id, name, type: "anthropic"|"codex"|"opencode", baseUrl, model, headers }>
   // where `headers` is encrypted at rest (it can carry auth); the rest is plaintext.

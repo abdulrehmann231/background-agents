@@ -32,6 +32,8 @@ export function useSandboxActions({
 }: UseSandboxActionsOptions) {
   const [envVarsChatEnvVars, setEnvVarsChatEnvVars] = useState<Record<string, string>>({})
   const [envVarsRepoEnvVars, setEnvVarsRepoEnvVars] = useState<Record<string, string>>({})
+  // null when Netlify isn't connected, which hides the Deployment tab
+  const [envVarsDeployEnvVars, setEnvVarsDeployEnvVars] = useState<Record<string, string> | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   // Logs on failure (e.g. clipboard permission denied) instead of swallowing it silently.
   const { copy } = useCopyToClipboard()
@@ -52,8 +54,13 @@ export function useSandboxActions({
       const chat = chats.find((c) => c.id === currentChatId)
       const repoName = isRealRepo(chat?.repo) ? chat?.repo : undefined
 
+      // Fetch deployment env vars
+      const deployRes = repoName ? await fetch(`/api/chats/${currentChatId}/netlify/env`) : null
+      const deployData = deployRes?.ok ? await deployRes.json() : { connected: false }
+
       setEnvVarsChatEnvVars(chatData.environmentVariables || {})
       setEnvVarsRepoEnvVars(repoName && repoData.repoEnvironmentVariables?.[repoName] || {})
+      setEnvVarsDeployEnvVars(deployData.connected ? deployData.environmentVariables : null)
       onOpenEnvVarsModal()
     } catch (error) {
       console.error("Failed to fetch environment variables:", error)
@@ -184,6 +191,7 @@ export function useSandboxActions({
     githubBranchUrl,
     envVarsChatEnvVars,
     envVarsRepoEnvVars,
+    envVarsDeployEnvVars,
     handleOpenEnvVars,
     handleSaveEnvVars,
     handleDownloadProject,

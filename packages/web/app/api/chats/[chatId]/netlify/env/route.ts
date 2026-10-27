@@ -1,17 +1,20 @@
 /**
  * /api/chats/[chatId]/netlify/env — the Deployment tab of Environment Variables.
  *
- * GET → the env vars on the chat repo's Netlify site, or `site: null` when the
- *       repo isn't deployed (then the tab is hidden).
- * PUT → make the site's env vars match the body, then start a new deploy if
- *       anything changed so the site picks them up.
+ * The variables are stored in Backgrounder, like the repository ones, and sent
+ * to the repo's Netlify site; they're never read back from Netlify.
+ *
+ * GET → the repo's deployment env vars, or `connected: false` (then the tab is
+ *       hidden) when Netlify isn't connected.
+ * PUT → save them. If the repo already has a site, the changes go to Netlify
+ *       first and a new deploy starts; otherwise the first deploy sets them.
  */
 
 import { NextRequest } from "next/server"
 import { requireAuth, isAuthError, getChatWithAuth, notFound, badRequest, internalError } from "@/lib/db/api-helpers"
 import { isRealRepo } from "@/lib/types"
-import { readNetlifyToken } from "@/lib/server/netlify"
-import { DeployError, findRepoSite, getSiteEnv, saveSiteEnv, startBuild } from "@/lib/server/netlify-deploy"
+import { readDeployEnv, readNetlifyToken, writeDeployEnv } from "@/lib/server/netlify"
+import { DeployError, findRepoSite, setSiteEnv, startBuild } from "@/lib/server/netlify-deploy"
 
 type Params = { params: Promise<{ chatId: string }> }
 
@@ -22,17 +25,8 @@ export async function GET(_req: NextRequest, { params }: Params): Promise<Respon
   const chat = await getChatWithAuth(chatId, auth.userId)
   if (!chat) return notFound("Chat not found")
 
-  const token = await readNetlifyToken(auth.userId)
-  if (!token || !isRealRepo(chat.repo)) return Response.json({ site: null })
-  try {
-    const site = await findRepoSite(token, chat.repo, chat.baseBranch)
-    if (!site) return Response.json({ site: null })
-    return Response.json({ site: { name: site.name }, environmentVariables: await getSiteEnv(token, site) })
-  } catch (error) {
-    // A revoked authorization shows up as 401; hide the tab like an unconnected account.
-    if (error instanceof DeployError && error.status === 401) return Response.json({ site: null })
-    return internalError(error)
-  }
+  if (!isRealRepo(chat.repo) || !(await readNetlifyToken(auth.userId))) return Response.json({ connected: false })
+  return Response.json({ connected: true, environmentVariables: await readDeployEnv(auth.userId, chat.repo) })
 }
 
 export async function PUT(req: NextRequest, { params }: Params): Promise<Response> {
@@ -43,15 +37,27 @@ export async function PUT(req: NextRequest, { params }: Params): Promise<Respons
   if (!chat) return notFound("Chat not found")
   if (!isRealRepo(chat.repo)) return badRequest("Deploying needs a GitHub repository")
 
-  const body = (await req.json().catch(() => ({}))) as { environmentVariables?: Record<string, string> }
+  const body = (await req.json().catch(() => ({}))) as { environmentVariables?: Record<string, unknown> }
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(body.environmentVariables ?? {})) {
+    if (typeof value === "string" && key.trim()) env[key.trim()] = value
+  }
   const token = await readNetlifyToken(auth.userId)
   if (!token) return badRequest("Connect Netlify first")
+
   try {
+    const previous = await readDeployEnv(auth.userId, chat.repo)
+    const changed = Object.keys(env).filter((key) => previous[key] !== env[key])
+    const removed = Object.keys(previous).filter((key) => !(key in env))
+    if (changed.length + removed.length === 0) return Response.json({ redeployed: false })
+
     const site = await findRepoSite(token, chat.repo, chat.baseBranch)
-    if (!site) return badRequest("Deploy this repository to Netlify first")
-    const changed = await saveSiteEnv(token, site, body.environmentVariables ?? {})
-    if (changed) await startBuild(token, site.id)
-    return Response.json({ redeployed: changed })
+    if (site) {
+      await setSiteEnv(token, site, Object.fromEntries(changed.map((key) => [key, env[key]])), removed)
+      await startBuild(token, site.id)
+    }
+    await writeDeployEnv(auth.userId, chat.repo, env)
+    return Response.json({ redeployed: !!site })
   } catch (error) {
     if (error instanceof DeployError) return Response.json({ error: error.message }, { status: 400 })
     return internalError(error)

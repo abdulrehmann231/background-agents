@@ -4,8 +4,8 @@
  * GET  → what the Deploy to Netlify dialog shows: whether Netlify is
  *        connected, the repo's site and its latest deploy, and whether this
  *        chat has commits that aren't on the base branch yet.
- * POST → deploy. The first deploy creates the repo's site (Netlify then
- *        builds it); later ones start a new build.
+ * POST → deploy. The first deploy creates the repo's site with its deployment
+ *        env vars (Netlify then builds it); later ones start a new build.
  */
 
 import { NextRequest } from "next/server"
@@ -20,7 +20,7 @@ import {
   internalError,
 } from "@/lib/db/api-helpers"
 import { isRealRepo } from "@/lib/types"
-import { readNetlifyToken } from "@/lib/server/netlify"
+import { readDeployEnv, readNetlifyToken } from "@/lib/server/netlify"
 import {
   DeployError,
   createRepoSite,
@@ -96,7 +96,8 @@ export async function POST(req: NextRequest, { params }: Params): Promise<Respon
     } else {
       const name = toSiteName(body.name ?? "")
       if (!name) return badRequest("Enter a site name")
-      await createRepoSite({ token, githubToken, repo: chat.repo, branch: chat.baseBranch, name })
+      const env = await readDeployEnv(auth.userId, chat.repo)
+      await createRepoSite({ token, githubToken, repo: chat.repo, branch: chat.baseBranch, name, env })
     }
     return Response.json({ ok: true })
   } catch (error) {

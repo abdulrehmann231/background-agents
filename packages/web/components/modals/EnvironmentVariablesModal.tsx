@@ -28,6 +28,8 @@ interface EnvironmentVariablesModalProps {
   /** Initial environment variables */
   initialChatEnvVars: Record<string, string>
   initialRepoEnvVars: Record<string, string>
+  /** Initial deployment environment variables - null hides deployment tab (Netlify not connected) */
+  initialDeployEnvVars: Record<string, string> | null
   isMobile?: boolean
 }
 
@@ -172,6 +174,7 @@ export function EnvironmentVariablesModal({
   onSave,
   initialChatEnvVars,
   initialRepoEnvVars,
+  initialDeployEnvVars,
   isMobile = false,
 }: EnvironmentVariablesModalProps) {
   const contentRef = useRef<HTMLDivElement>(null)
@@ -180,8 +183,6 @@ export function EnvironmentVariablesModal({
   const [chatEnvVars, setChatEnvVars] = useState<EnvVar[]>([])
   const [repoEnvVars, setRepoEnvVars] = useState<EnvVar[]>([])
   const [deployEnvVars, setDeployEnvVars] = useState<EnvVar[]>([])
-  // The repo's Netlify site; null hides the deployment tab.
-  const [deploySiteName, setDeploySiteName] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("chat")
   const [newVarId, setNewVarId] = useState<string | null>(null)
   // Ids of rows whose value is shown in plain text; everything else is masked.
@@ -210,6 +211,7 @@ export function EnvironmentVariablesModal({
     if (open) {
       setChatEnvVars(recordToEnvVars(initialChatEnvVars))
       setRepoEnvVars(recordToEnvVars(initialRepoEnvVars))
+      setDeployEnvVars(recordToEnvVars(initialDeployEnvVars ?? {}))
       setActiveTab("chat")
       setNewVarId(null)
       setRevealedIds(new Set())
@@ -218,27 +220,7 @@ export function EnvironmentVariablesModal({
       setIsDraggingFile(false)
       dragDepthRef.current = 0
     }
-  }, [open, initialChatEnvVars, initialRepoEnvVars])
-
-  // The deployment tab's vars live on Netlify, which is slower to answer, so the
-  // tab appears once they load instead of holding the modal back.
-  useEffect(() => {
-    setDeploySiteName(null)
-    setDeployEnvVars([])
-    if (!open || !repoName) return
-    let cancelled = false
-    fetch(`/api/chats/${chatId}/netlify/env`)
-      .then((res) => (res.ok ? res.json() : { site: null }))
-      .then((data: { site: { name: string } | null; environmentVariables?: Record<string, string> }) => {
-        if (cancelled || !data.site) return
-        setDeploySiteName(data.site.name)
-        setDeployEnvVars(recordToEnvVars(data.environmentVariables ?? {}))
-      })
-      .catch((error) => console.error("Failed to load deployment environment variables:", error))
-    return () => {
-      cancelled = true
-    }
-  }, [open, chatId, repoName])
+  }, [open, initialChatEnvVars, initialRepoEnvVars, initialDeployEnvVars])
 
   const handleSave = async () => {
     if (isSaving) return
@@ -247,7 +229,7 @@ export function EnvironmentVariablesModal({
       await onSave(
         envVarsToRecord(chatEnvVars),
         envVarsToRecord(repoEnvVars),
-        deploySiteName ? envVarsToRecord(deployEnvVars) : undefined
+        initialDeployEnvVars ? envVarsToRecord(deployEnvVars) : undefined
       )
       onClose()
     } catch (error) {
@@ -475,7 +457,7 @@ export function EnvironmentVariablesModal({
 
   // Show the repository tab only for a repo, and the deployment tab only once the repo has a site
   const visibleTabs = tabs.filter(
-    (t) => t.key === "chat" || (t.key === "repository" && hasRepository) || (t.key === "deployment" && !!deploySiteName)
+    (t) => t.key === "chat" || (t.key === "repository" && hasRepository) || (t.key === "deployment" && initialDeployEnvVars !== null)
   )
 
   return (
@@ -617,7 +599,7 @@ export function EnvironmentVariablesModal({
                     ? "Environment variables set here will be available for this chat only. They are passed to the agent on every message."
                     : activeTab === "repository"
                       ? "Environment variables set here will be available for all your chats using this repository."
-                      : `Environment variables set here are saved on the Netlify site ${deploySiteName}. Saving starts a new deploy.`}
+                      : "Environment variables set here are used when this repository deploys to Netlify. Saving redeploys a site that's already live."}
                   {" "}Tip: paste <code className="font-mono text-xs">KEY=value</code> lines into a name field to add them all at once.
                 </p>
                 {renderContent()}

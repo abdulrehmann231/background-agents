@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { createRepoSite, saveSiteEnv, toSiteName, unlinkRepo, DeployError, type NetlifySite } from "./netlify-deploy"
+import { createRepoSite, setSiteEnv, toSiteName, unlinkRepo, DeployError, type NetlifySite } from "./netlify-deploy"
 
 type Call = { method: string; url: string; body?: unknown }
 let calls: Call[] = []
@@ -28,7 +28,7 @@ function githubRepo(admin: boolean, pkg: Record<string, unknown> | null) {
     json({ id: 42, name: "my-app", full_name: "owner/my-app", private: true, permissions: { admin } })
 }
 
-const opts = { token: "nf", githubToken: "gh", repo: "owner/my-app", branch: "main", name: "my-app" }
+const opts = { token: "nf", githubToken: "gh", repo: "owner/my-app", branch: "main", name: "my-app", env: {} }
 
 describe("createRepoSite", () => {
   it("links a new site to the repo's branch with the detected Next.js build and makes it public", async () => {
@@ -68,40 +68,26 @@ describe("createRepoSite", () => {
   })
 })
 
-describe("saveSiteEnv", () => {
+describe("setSiteEnv", () => {
   const env = "https://api.netlify.com/api/v1/accounts/acct1/env"
   const all = (value: string) => [{ context: "all", value }]
 
-  beforeEach(() => {
-    routes[`GET ${env}?site_id=site1`] = () => json([
-      { key: "API_URL", values: all("https://old.example.com") },
-      { key: "OLD_KEY", values: all("x") },
-      { key: "SAME", values: all("1") },
-      // Secret and per-context values are left alone.
-      { key: "TOKEN", is_secret: true, values: all("") },
-      { key: "PROD_ONLY", values: [{ context: "production", value: "p" }] },
-    ])
+  it("adds new variables, replaces existing ones and deletes removed ones", async () => {
+    routes[`GET ${env}?site_id=site1`] = () => json([{ key: "API_URL" }, { key: "SET_IN_NETLIFY" }])
     routes[`POST ${env}?site_id=site1`] = () => json([], 201)
     routes[`PUT ${env}/API_URL?site_id=site1`] = () => json({})
     routes[`DELETE ${env}/OLD_KEY?site_id=site1`] = () => new Response(null, { status: 204 })
-  })
+    // Already deleted in Netlify's dashboard.
+    routes[`DELETE ${env}/GONE?site_id=site1`] = () => json({ message: "Not Found" }, 404)
 
-  it("adds, updates and removes the variables it manages", async () => {
-    const changed = await saveSiteEnv("nf", site, { API_URL: "https://api.example.com", SAME: "1", NEW_KEY: "y" })
+    await setSiteEnv("nf", site, { API_URL: "https://api.example.com", NEW_KEY: "y" }, ["OLD_KEY", "GONE"])
 
-    expect(changed).toBe(true)
     expect(calls.filter((c) => c.method !== "GET")).toEqual([
       { method: "POST", url: `${env}?site_id=site1`, body: [{ key: "NEW_KEY", values: all("y") }] },
       { method: "PUT", url: `${env}/API_URL?site_id=site1`, body: { key: "API_URL", values: all("https://api.example.com") } },
       { method: "DELETE", url: `${env}/OLD_KEY?site_id=site1`, body: undefined },
+      { method: "DELETE", url: `${env}/GONE?site_id=site1`, body: undefined },
     ])
-  })
-
-  it("changes nothing when the variables already match", async () => {
-    const changed = await saveSiteEnv("nf", site, { API_URL: "https://old.example.com", OLD_KEY: "x", SAME: "1" })
-
-    expect(changed).toBe(false)
-    expect(calls.every((c) => c.method === "GET")).toBe(true)
   })
 })
 
