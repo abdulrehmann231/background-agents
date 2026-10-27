@@ -34,6 +34,27 @@ export async function readNetlifyToken(userId: string): Promise<string | null> {
   return stored ? decrypt(stored) : null
 }
 
+type EnvByRepo = Record<string, Record<string, string>>
+
+/** The repo's deployment env vars (Environment Variables → Deployment), decrypted. */
+export async function readDeployEnv(userId: string, repo: string): Promise<Record<string, string>> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { deployEnvironmentVariables: true } })
+  const encrypted = (user?.deployEnvironmentVariables as EnvByRepo | null)?.[repo] ?? {}
+  return Object.fromEntries(Object.entries(encrypted).map(([key, value]) => [key, decrypt(value)]))
+}
+
+/** Store the repo's deployment env vars encrypted, like the repository ones. */
+export async function writeDeployEnv(userId: string, repo: string, env: Record<string, string>): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { deployEnvironmentVariables: true } })
+  const all = (user?.deployEnvironmentVariables as EnvByRepo | null) ?? {}
+  if (Object.keys(env).length > 0) {
+    all[repo] = Object.fromEntries(Object.entries(env).map(([key, value]) => [key, encrypt(value)]))
+  } else {
+    delete all[repo]
+  }
+  await prisma.user.update({ where: { id: userId }, data: { deployEnvironmentVariables: all } })
+}
+
 /** Store the user's Netlify token, or remove it when `token` is null. */
 export async function writeNetlifyToken(userId: string, token: string | null): Promise<void> {
   await withUserLock(userId, async (tx) => {

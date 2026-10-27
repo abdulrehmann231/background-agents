@@ -53,9 +53,15 @@ export function toSiteName(value: string): string {
     .slice(0, 63)
 }
 
+/** The account's sites that are linked to a GitHub repo (the first 100 sites). */
+export async function listRepoSites(token: string): Promise<NetlifySite[]> {
+  const sites = await netlify<NetlifySite[]>(token, "/sites?filter=all&per_page=100")
+  return sites.filter((s) => s.build_settings?.repo_path)
+}
+
 /** The site linked to this repo and branch, if it was deployed before. */
 export async function findRepoSite(token: string, repo: string, branch: string): Promise<NetlifySite | null> {
-  const sites = await netlify<NetlifySite[]>(token, "/sites?filter=all&per_page=100")
+  const sites = await listRepoSites(token)
   return sites.find((s) => s.build_settings?.repo_path === repo && s.build_settings?.repo_branch === branch) ?? null
 }
 
@@ -64,29 +70,52 @@ export async function latestDeploy(token: string, siteId: string): Promise<Netli
   return deploy ?? null
 }
 
+export async function getSite(token: string, siteId: string): Promise<NetlifySite> {
+  return netlify<NetlifySite>(token, `/sites/${siteId}`)
+}
+
+export async function deleteSite(token: string, siteId: string): Promise<void> {
+  await netlify(token, `/sites/${siteId}`, { method: "DELETE" })
+}
+
 export async function startBuild(token: string, siteId: string): Promise<void> {
   await netlify(token, `/sites/${siteId}/builds`, { method: "POST" })
 }
 
-/** Create or update the site's env vars, for every deploy context. */
-export async function setSiteEnv(token: string, site: NetlifySite, env: Record<string, string>): Promise<void> {
-  const keys = Object.keys(env)
-  if (keys.length === 0) return
+/**
+ * Set `env` on the site for every deploy context and delete the `removed`
+ * keys. Other variables on the site are left as they are.
+ */
+export async function setSiteEnv(
+  token: string,
+  site: NetlifySite,
+  env: Record<string, string>,
+  removed: string[] = []
+): Promise<void> {
   const base = `/accounts/${site.account_id}/env`
   const query = `?site_id=${site.id}`
-  const existing = new Set((await netlify<{ key: string }[]>(token, `${base}${query}`)).map((v) => v.key))
-  const added = keys.filter((key) => !existing.has(key))
-  if (added.length > 0) {
-    await netlify(token, `${base}${query}`, {
-      method: "POST",
-      body: JSON.stringify(added.map((key) => ({ key, values: [{ context: "all", value: env[key] }] }))),
-    })
+  const keys = Object.keys(env)
+  if (keys.length > 0) {
+    const existing = new Set((await netlify<{ key: string }[]>(token, `${base}${query}`)).map((v) => v.key))
+    const added = keys.filter((key) => !existing.has(key))
+    if (added.length > 0) {
+      await netlify(token, `${base}${query}`, {
+        method: "POST",
+        body: JSON.stringify(added.map((key) => ({ key, values: [{ context: "all", value: env[key] }] }))),
+      })
+    }
+    // PUT replaces the variable's values; PATCH can't set the "all" context.
+    for (const key of keys.filter((k) => existing.has(k))) {
+      await netlify(token, `${base}/${encodeURIComponent(key)}${query}`, {
+        method: "PUT",
+        body: JSON.stringify({ key, values: [{ context: "all", value: env[key] }] }),
+      })
+    }
   }
-  // PUT replaces the variable's values; PATCH can't set the "all" context.
-  for (const key of keys.filter((k) => existing.has(k))) {
-    await netlify(token, `${base}/${encodeURIComponent(key)}${query}`, {
-      method: "PUT",
-      body: JSON.stringify({ key, values: [{ context: "all", value: env[key] }] }),
+  for (const key of removed) {
+    await netlify(token, `${base}/${encodeURIComponent(key)}${query}`, { method: "DELETE" }).catch((error) => {
+      // Already gone from the site, e.g. removed in Netlify's dashboard.
+      if (!(error instanceof DeployError && error.status === 404)) throw error
     })
   }
 }
@@ -129,6 +158,31 @@ async function addWebhook(githubToken: string, repo: string, url: string): Promi
   } catch (error) {
     // GitHub answers 422 when the repo already has this hook.
     if (!(isGitHubApiError(error) && error.status === 422)) throw error
+  }
+}
+
+/** githubFetch parses a JSON body, and GitHub answers a DELETE with 204 and none. */
+async function githubDelete(githubToken: string, path: string): Promise<void> {
+  const res = await fetch(`https://api.github.com${path}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${githubToken}`, Accept: "application/vnd.github.v3+json" },
+  })
+  if (!res.ok && res.status !== 404) throw new Error(`GitHub API error: ${res.status}`)
+}
+
+/**
+ * Remove what createRepoSite added to the repo: the site's deploy key, and
+ * Netlify's webhook unless another site still deploys from the repo.
+ */
+export async function unlinkRepo(githubToken: string, repo: string, siteName: string, keepWebhook: boolean): Promise<void> {
+  const keys = await githubFetch<{ id: number; title: string }[]>(`/repos/${repo}/keys`, githubToken)
+  for (const key of keys.filter((k) => k.title === `Netlify (${siteName})`)) {
+    await githubDelete(githubToken, `/repos/${repo}/keys/${key.id}`)
+  }
+  if (keepWebhook) return
+  const hooks = await githubFetch<{ id: number; config: { url?: string } }[]>(`/repos/${repo}/hooks`, githubToken)
+  for (const hook of hooks.filter((h) => h.config.url?.startsWith("https://api.netlify.com/hooks/github"))) {
+    await githubDelete(githubToken, `/repos/${repo}/hooks/${hook.id}`)
   }
 }
 
@@ -184,7 +238,7 @@ export async function createRepoSite(opts: {
     return linked
   } catch (error) {
     // Remove the half-set-up site so retrying doesn't hit "name taken".
-    await netlify(token, `/sites/${site.id}`, { method: "DELETE" }).catch((cleanupError) =>
+    await deleteSite(token, site.id).catch((cleanupError) =>
       console.warn(`[netlify] couldn't remove half-created site ${site.name}:`, cleanupError)
     )
     throw error

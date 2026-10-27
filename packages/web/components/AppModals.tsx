@@ -54,6 +54,7 @@ interface AppModalsProps {
   onSaveEnvVars: ComponentProps<typeof EnvironmentVariablesModal>["onSave"]
   envVarsChatEnvVars: Record<string, string>
   envVarsRepoEnvVars: Record<string, string>
+  envVarsDeployEnvVars: Record<string, string> | null
 
   // Skills search
   skillsModalOpen: boolean
@@ -83,6 +84,7 @@ export function AppModals({
   onSaveEnvVars,
   envVarsChatEnvVars,
   envVarsRepoEnvVars,
+  envVarsDeployEnvVars,
   skillsModalOpen,
   onSkillsModalOpenChange,
   onScheduledJobSuccess,
@@ -129,6 +131,7 @@ export function AppModals({
         onSave={onSaveEnvVars}
         initialChatEnvVars={envVarsChatEnvVars}
         initialRepoEnvVars={envVarsRepoEnvVars}
+        initialDeployEnvVars={envVarsDeployEnvVars}
         isMobile={isMobile}
       />
 

@@ -1,18 +1,19 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Rocket, Loader2 } from "lucide-react"
 import { BaseDialog } from "@/components/modals/BaseDialog"
 import { DialogLabel, DialogReadonlyField, DialogFooter, dialogIconClass } from "@/components/ui/dialog-parts"
 import { Input } from "@/components/ui/input"
 import { connectNetlify } from "@/lib/netlify-connect"
+import { queryKeys } from "@/lib/query/keys"
 import { cn } from "@/lib/utils"
 
 interface DeployInfo {
   connected: boolean
   branch: string
   suggestedName: string
-  envCount: number
   unmerged: boolean
   site?: { name: string; url: string; adminUrl: string } | null
   deploy?: { state: string; error: string | null } | null
@@ -35,9 +36,9 @@ interface NetlifyDeployDialogProps {
  * push, so this dialog mostly shows the site and its latest deploy.
  */
 export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }: NetlifyDeployDialogProps) {
+  const queryClient = useQueryClient()
   const [info, setInfo] = useState<DeployInfo | null>(null)
   const [name, setName] = useState("")
-  const [includeEnv, setIncludeEnv] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Bumped after connecting or deploying to load the status again.
@@ -95,11 +96,13 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
       const res = await fetch(`/api/chats/${chatId}/netlify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, includeEnv }),
+        body: JSON.stringify({ name }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? "Deploy failed")
       setReloadKey((k) => k + 1)
+      // The header's deploy button turns green once the repo has a site.
+      queryClient.invalidateQueries({ queryKey: queryKeys.netlify.sites() })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -159,21 +162,6 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
               )}
             </div>
 
-            {info.envCount > 0 && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeEnv}
-                  onChange={(e) => setIncludeEnv(e.target.checked)}
-                  disabled={busy}
-                  className="h-4 w-4 rounded border-border accent-primary disabled:opacity-50"
-                />
-                <span className={isMobile ? "text-base" : "text-sm"}>
-                  Send repository environment variables ({info.envCount})
-                </span>
-              </label>
-            )}
-
             {info.site && (
               <div className={cn("flex items-center gap-1.5", textSize)}>
                 {building && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
@@ -188,6 +176,12 @@ export function NetlifyDeployDialog({ open, onClose, chatId, isMobile = false }:
                   View in Netlify
                 </a>
               </div>
+            )}
+
+            {info.site && (
+              <p className={cn("text-muted-foreground", textSize)}>
+                Set its environment variables in Environment Variables → Deployment.
+              </p>
             )}
           </>
         )}

@@ -2,17 +2,14 @@
  * /api/chats/[chatId]/netlify
  *
  * GET  → what the Deploy to Netlify dialog shows: whether Netlify is
- *        connected, the repo's site and its latest deploy, how many repository
- *        env vars there are, and whether this chat has commits that aren't on
- *        the base branch yet.
- * POST → deploy. The first deploy creates the repo's site (Netlify then
- *        builds it); later ones update the env vars and start a new build.
+ *        connected, the repo's site and its latest deploy, and whether this
+ *        chat has commits that aren't on the base branch yet.
+ * POST → deploy. The first deploy creates the repo's site with its deployment
+ *        env vars (Netlify then builds it); later ones start a new build.
  */
 
 import { NextRequest } from "next/server"
 import { compareBranches, isGitHubApiError } from "@background-agents/common"
-import { prisma } from "@/lib/db/prisma"
-import { decrypt } from "@/lib/db/encryption"
 import {
   requireAuth,
   isAuthError,
@@ -23,24 +20,17 @@ import {
   internalError,
 } from "@/lib/db/api-helpers"
 import { isRealRepo } from "@/lib/types"
-import { readNetlifyToken } from "@/lib/server/netlify"
+import { readDeployEnv, readNetlifyToken } from "@/lib/server/netlify"
 import {
   DeployError,
   createRepoSite,
   findRepoSite,
   latestDeploy,
-  setSiteEnv,
   startBuild,
   toSiteName,
 } from "@/lib/server/netlify-deploy"
 
 type Params = { params: Promise<{ chatId: string }> }
-
-/** The repo's environment variables (Settings → Environment variables → Repository), encrypted. */
-async function repoEnvVars(userId: string, repo: string): Promise<Record<string, string>> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { repoEnvironmentVariables: true } })
-  return (user?.repoEnvironmentVariables as Record<string, Record<string, string>> | null)?.[repo] ?? {}
-}
 
 export async function GET(_req: NextRequest, { params }: Params): Promise<Response> {
   const auth = await requireAuth()
@@ -64,7 +54,6 @@ export async function GET(_req: NextRequest, { params }: Params): Promise<Respon
   const info = {
     branch: chat.baseBranch,
     suggestedName: toSiteName(repoName),
-    envCount: Object.keys(await repoEnvVars(auth.userId, chat.repo)).length,
     unmerged,
   }
 
@@ -94,22 +83,20 @@ export async function POST(req: NextRequest, { params }: Params): Promise<Respon
   if (!chat) return notFound("Chat not found")
   if (!isRealRepo(chat.repo)) return badRequest("Deploying needs a GitHub repository")
 
-  const body = (await req.json().catch(() => ({}))) as { name?: string; includeEnv?: boolean }
+  const body = (await req.json().catch(() => ({}))) as { name?: string }
   const token = await readNetlifyToken(auth.userId)
   if (!token) return badRequest("Connect Netlify first")
   const githubToken = await getGitHubToken(auth.userId)
   if (!githubToken) return badRequest("Sign in with GitHub again to deploy")
 
   try {
-    const encrypted = body.includeEnv ? await repoEnvVars(auth.userId, chat.repo) : {}
-    const env = Object.fromEntries(Object.entries(encrypted).map(([key, value]) => [key, decrypt(value)]))
     const site = await findRepoSite(token, chat.repo, chat.baseBranch)
     if (site) {
-      await setSiteEnv(token, site, env)
       await startBuild(token, site.id)
     } else {
       const name = toSiteName(body.name ?? "")
       if (!name) return badRequest("Enter a site name")
+      const env = await readDeployEnv(auth.userId, chat.repo)
       await createRepoSite({ token, githubToken, repo: chat.repo, branch: chat.baseBranch, name, env })
     }
     return Response.json({ ok: true })

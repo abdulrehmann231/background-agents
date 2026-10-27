@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { createRepoSite, setSiteEnv, toSiteName, DeployError, type NetlifySite } from "./netlify-deploy"
+import { createRepoSite, setSiteEnv, toSiteName, unlinkRepo, DeployError, type NetlifySite } from "./netlify-deploy"
 
 type Call = { method: string; url: string; body?: unknown }
 let calls: Call[] = []
@@ -69,15 +69,46 @@ describe("createRepoSite", () => {
 })
 
 describe("setSiteEnv", () => {
-  it("adds new variables and updates existing ones", async () => {
-    routes["GET https://api.netlify.com/api/v1/accounts/acct1/env?site_id=site1"] = () => json([{ key: "API_URL" }])
-    routes["POST https://api.netlify.com/api/v1/accounts/acct1/env?site_id=site1"] = () => json([], 201)
-    routes["PUT https://api.netlify.com/api/v1/accounts/acct1/env/API_URL?site_id=site1"] = () => json({})
+  const env = "https://api.netlify.com/api/v1/accounts/acct1/env"
+  const all = (value: string) => [{ context: "all", value }]
 
-    await setSiteEnv("nf", site, { API_URL: "https://api.example.com", NEW_KEY: "x" })
+  it("adds new variables, replaces existing ones and deletes removed ones", async () => {
+    routes[`GET ${env}?site_id=site1`] = () => json([{ key: "API_URL" }, { key: "SET_IN_NETLIFY" }])
+    routes[`POST ${env}?site_id=site1`] = () => json([], 201)
+    routes[`PUT ${env}/API_URL?site_id=site1`] = () => json({})
+    routes[`DELETE ${env}/OLD_KEY?site_id=site1`] = () => new Response(null, { status: 204 })
+    // Already deleted in Netlify's dashboard.
+    routes[`DELETE ${env}/GONE?site_id=site1`] = () => json({ message: "Not Found" }, 404)
 
-    expect(calls.find((c) => c.method === "POST")?.body).toEqual([{ key: "NEW_KEY", values: [{ context: "all", value: "x" }] }])
-    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ key: "API_URL", values: [{ context: "all", value: "https://api.example.com" }] })
+    await setSiteEnv("nf", site, { API_URL: "https://api.example.com", NEW_KEY: "y" }, ["OLD_KEY", "GONE"])
+
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([
+      { method: "POST", url: `${env}?site_id=site1`, body: [{ key: "NEW_KEY", values: all("y") }] },
+      { method: "PUT", url: `${env}/API_URL?site_id=site1`, body: { key: "API_URL", values: all("https://api.example.com") } },
+      { method: "DELETE", url: `${env}/OLD_KEY?site_id=site1`, body: undefined },
+      { method: "DELETE", url: `${env}/GONE?site_id=site1`, body: undefined },
+    ])
+  })
+})
+
+describe("unlinkRepo", () => {
+  beforeEach(() => {
+    routes["GET https://api.github.com/repos/owner/my-app/keys"] = () =>
+      json([{ id: 1, title: "Netlify (my-app)" }, { id: 2, title: "Netlify (other-site)" }, { id: 3, title: "laptop" }])
+    routes["GET https://api.github.com/repos/owner/my-app/hooks"] = () =>
+      json([{ id: 10, config: { url: "https://api.netlify.com/hooks/github" } }, { id: 11, config: { url: "https://ci.example.com" } }])
+    routes["DELETE https://api.github.com/repos/owner/my-app/"] = () => new Response(null, { status: 204 })
+  })
+  const deleted = () => calls.filter((c) => c.method === "DELETE").map((c) => c.url.replace("https://api.github.com/repos/owner/my-app/", ""))
+
+  it("removes the site's deploy key and Netlify's webhook", async () => {
+    await unlinkRepo("gh", "owner/my-app", "my-app", false)
+    expect(deleted()).toEqual(["keys/1", "hooks/10"])
+  })
+
+  it("keeps the webhook while another site deploys from the repo", async () => {
+    await unlinkRepo("gh", "owner/my-app", "my-app", true)
+    expect(deleted()).toEqual(["keys/1"])
   })
 })
 

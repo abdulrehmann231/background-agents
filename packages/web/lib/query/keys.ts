@@ -30,6 +30,11 @@ export const queryKeys = {
       [...queryKeys.github.all, "compare", owner, repo, base, head] as const,
   },
 
+  // Netlify
+  netlify: {
+    sites: () => ["netlify", "sites"] as const,
+  },
+
   // Sandbox
   sandbox: {
     all: ["sandbox"] as const,
