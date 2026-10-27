@@ -29,6 +29,7 @@ function renderWarning(uncommittedFilesCount: number, isNewRepo = false, overrid
     isNewRepo,
     git: {} as GitContextValue,
     onSendMessage: () => {},
+    onOpenChanges: () => {},
     onReload: () => {},
     onResumeQueue: () => {},
     onChooseModel: () => {},
@@ -44,16 +45,18 @@ function renderWarning(uncommittedFilesCount: number, isNewRepo = false, overrid
 }
 
 describe("uncommitted file warning", () => {
-  it("appears in a GitHub chat with new uncommitted files", () => {
+  it("appears in a GitHub chat with uncommitted files", () => {
     const html = renderWarning(2)
     expect(html).toContain('data-testid="uncommitted-files-warning"')
-    expect(html).toContain("You have 2 new uncommitted files")
-    expect(html).toContain("Commit your changes")
+    expect(html).toContain("You have 2 uncommitted files")
+    expect(html).toContain(">Review</button>")
+    expect(html).toContain(">commit</button> them.")
   })
 
   it("singularizes the count when there is exactly one file", () => {
     const html = renderWarning(1)
-    expect(html).toContain("You have 1 new uncommitted file.")
+    expect(html).toContain("You have 1 uncommitted file.")
+    expect(html).toContain(">commit</button> it.")
   })
 
   it("disappears when the authoritative chat count clears", () => {

@@ -63,6 +63,7 @@ export function usePreview({ currentChat, updateCurrentChat, availableServers }:
       case "terminal": return `terminal:${item.id}`
       case "server": return `server:${item.port}`
       case "directory": return `directory:${item.dirPath}`
+      case "changes": return "changes"
     }
   }, [])
 

@@ -212,6 +212,7 @@ export interface Chat {
     | { type: "server"; port: number; url: string }
     | { type: "plan"; content: string; messageId: string }
     | { type: "directory"; dirPath: string }
+    | { type: "changes" }
   >
 
   /** Index of the currently active preview item in previewItems array */

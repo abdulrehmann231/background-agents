@@ -185,7 +185,7 @@ model Chat {
   // Sync flag for git pull on next execution
   needsSync Boolean @default(false)
 
-  // Count of new, non-ignored files still outside a commit, from the latest
+  // Count of non-ignored files still outside a commit, from the latest
   // confirmed check after a completed agent turn. A failed check keeps the
   // last known value; this is surfaced independently of push notifications.
   uncommittedFilesCount Int @default(0)

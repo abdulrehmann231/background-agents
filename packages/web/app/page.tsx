@@ -740,6 +740,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                     const filename = basename(filePath)
                     preview.openPreview({ type: "file", filePath, filename })
                   }}
+                  onOpenChanges={() => preview.openPreview({ type: "changes" })}
                   onOpenEnvVars={handleOpenEnvVars}
                   isDraftChat={!!displayCurrentChatId && isDraftChatId(displayCurrentChatId)}
                   onMaterializeDraftForMcp={handleMaterializeDraftForMcp}
@@ -817,6 +818,7 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
         githubTokenInvalid={githubTokenInvalid}
         onDismissReAuthBanner={dismissReAuthBanner}
         onRepoSelect={handleRepoSelect}
+        onReviewChanges={currentChat?.sandboxId ? () => preview.openPreview({ type: "changes" }) : undefined}
         onSaveSettings={updateSettings}
         onSaveEnvVars={handleSaveEnvVars}
         envVarsChatEnvVars={envVarsChatEnvVars}

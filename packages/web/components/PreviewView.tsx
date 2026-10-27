@@ -64,6 +64,8 @@ function getItemKey(item: PreviewItem): string {
       return `server:${item.port}`
     case "directory":
       return `directory:${item.dirPath}`
+    case "changes":
+      return "changes"
   }
 }
 

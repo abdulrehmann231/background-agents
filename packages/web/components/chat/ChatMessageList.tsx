@@ -22,6 +22,8 @@ interface ChatMessageListProps {
   isNewRepo: boolean
   git: GitContextValue
   onOpenFile?: (filePath: string) => void
+  /** Opens the Changes panel, linked from the uncommitted-files warning. */
+  onOpenChanges?: () => void
   onReload?: (chatId: string) => Promise<void> | void
   onSendMessage: (message: string, agent: string, model: string, files?: File[], planMode?: boolean, reasoningEffort?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
@@ -51,6 +53,7 @@ export function ChatMessageList({
   isNewRepo,
   git,
   onOpenFile,
+  onOpenChanges,
   onReload,
   onSendMessage,
   onRemoveQueuedMessage,
@@ -155,8 +158,20 @@ export function ChatMessageList({
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>
-                You have {chat.uncommittedFilesCount} new uncommitted{" "}
+                You have {chat.uncommittedFilesCount} uncommitted{" "}
                 {chat.uncommittedFilesCount === 1 ? "file" : "files"}.{" "}
+                {onOpenChanges && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onOpenChanges}
+                      className="underline underline-offset-2 hover:no-underline cursor-pointer"
+                    >
+                      Review
+                    </button>{" "}
+                    or{" "}
+                  </>
+                )}
                 <button
                   type="button"
                   data-testid="uncommitted-files-commit"
@@ -166,9 +181,9 @@ export function ChatMessageList({
                   }}
                   className="underline underline-offset-2 hover:no-underline cursor-pointer"
                 >
-                  Commit your changes
+                  {onOpenChanges ? "commit" : "Commit"}
                 </button>{" "}
-                to save these files.
+                {chat.uncommittedFilesCount === 1 ? "it" : "them"}.
               </span>
             </div>
           )}

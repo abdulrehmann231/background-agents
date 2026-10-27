@@ -199,6 +199,7 @@ export function usePaletteProps({
     onOpenFileBrowser: sandboxId
       ? () => preview.openPreview({ type: "directory", dirPath: PATHS.SANDBOX_HOME })
       : undefined,
+    onOpenChanges: sandboxId && hasRepo ? () => preview.openPreview({ type: "changes" }) : undefined,
     onToggleTerminal: sandboxId ? toggleTerminal : undefined,
     servers: availableServers,
     onOpenServer: (port, url) => preview.openPreview({ type: "server", port, url }),
