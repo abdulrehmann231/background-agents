@@ -152,6 +152,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   const [notifyOnAgentFinished, setNotifyOnAgentFinished] = useState(settings.notifyOnAgentFinished)
   const [notifyOnAgentCommitted, setNotifyOnAgentCommitted] = useState(settings.notifyOnAgentCommitted)
   const [notificationSound, setNotificationSound] = useState(settings.notificationSound)
+  const [showCommandPaletteButton, setShowCommandPaletteButton] = useState(settings.showCommandPaletteButton)
   const [elizaEnabled, setElizaEnabled] = useState(settings.elizaEnabled)
   const [maxAgentRunMinutes, setMaxAgentRunMinutes] = useState(settings.maxAgentRunMinutes)
   const [activeSection, setActiveSection] = useState<SectionKey>(defaultSection)
@@ -210,6 +211,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
       setNotifyOnAgentFinished(settings.notifyOnAgentFinished)
       setNotifyOnAgentCommitted(settings.notifyOnAgentCommitted)
       setNotificationSound(settings.notificationSound)
+      setShowCommandPaletteButton(settings.showCommandPaletteButton)
       setElizaEnabled(settings.elizaEnabled)
       setMaxAgentRunMinutes(settings.maxAgentRunMinutes)
       setActiveSection(defaultSection)
@@ -308,6 +310,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
     if (notifyOnAgentFinished !== settings.notifyOnAgentFinished) settingsPatch.notifyOnAgentFinished = notifyOnAgentFinished
     if (notifyOnAgentCommitted !== settings.notifyOnAgentCommitted) settingsPatch.notifyOnAgentCommitted = notifyOnAgentCommitted
     if (notificationSound !== settings.notificationSound) settingsPatch.notificationSound = notificationSound
+    if (showCommandPaletteButton !== settings.showCommandPaletteButton) settingsPatch.showCommandPaletteButton = showCommandPaletteButton
     if (elizaEnabled !== settings.elizaEnabled) settingsPatch.elizaEnabled = elizaEnabled
     if (maxAgentRunMinutes !== settings.maxAgentRunMinutes) settingsPatch.maxAgentRunMinutes = maxAgentRunMinutes
 
@@ -348,7 +351,7 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
   }, [
     defaultAgent, initialDefaultAgent, defaultModel, initialDefaultModel,
     selectedTheme, enablePrepushHooks, notifyOnAgentFinished, notifyOnAgentCommitted,
-    notificationSound, elizaEnabled, maxAgentRunMinutes, settings, credValues, initialCreds,
+    notificationSound, showCommandPaletteButton, elizaEnabled, maxAgentRunMinutes, settings, credValues, initialCreds,
     isDesktopApp, licenseAutoDetectEnabled, licenseDetectResult, endpoints, endpointsChanged,
   ])
 
@@ -456,6 +459,8 @@ export function SettingsModal({ open, onClose, settings, credentialFlags, onSave
             isMobile={isMobile}
             selectedTheme={selectedTheme}
             onThemeChange={handleThemeChange}
+            showCommandPaletteButton={showCommandPaletteButton}
+            setShowCommandPaletteButton={setShowCommandPaletteButton}
           />
         )
       case "developer":

@@ -31,6 +31,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
   edit: "Edit",
   glob: "Glob",
   grep: "Grep",
+  user_file: "SendUserFile",
 }
 
 function mapToolName(sdkTool: string): string {
@@ -137,6 +138,7 @@ interface ToolDetailResult {
   summary: string
   fullDetail?: string
   filePath?: string
+  filePaths?: string[]
 }
 
 /** Max chars kept for a Bash command summary before falling back to a
@@ -170,6 +172,13 @@ function getToolDetail(toolName: string, input: unknown): ToolDetailResult {
       return { summary: filename, fullDetail: path, filePath: path }
     }
     return { summary: filename, filePath: path }
+  }
+  if (mappedName === "SendUserFile" && Array.isArray(inp.files) && inp.files.length > 0) {
+    const paths = inp.files.map((f) => String(f))
+    const filenames = paths.map((p) => basename(p))
+    const summary = filenames.length === 1 ? filenames[0] : `${filenames.length} files`
+    const fullDetail = paths.join(", ")
+    return { summary, fullDetail, filePath: paths[0], filePaths: paths }
   }
   if (mappedName === "Glob" && inp.pattern) {
     return { summary: String(inp.pattern) }
@@ -219,13 +228,13 @@ export function buildContentBlocks(events: Event[]): BuildContentBlocksResult {
         pendingText = ""
       }
       const tool = mapToolName(toolEvent.name)
-      const { summary: detail, fullDetail, filePath } = getToolDetail(
+      const { summary: detail, fullDetail, filePath, filePaths } = getToolDetail(
         toolEvent.name,
         toolEvent.input
       )
       const summary = detail ? `${tool}: ${detail}` : tool
       const fullSummary = fullDetail ? `${tool}: ${fullDetail}` : undefined
-      const toolCall: ToolCall = { tool, summary, fullSummary, filePath }
+      const toolCall: ToolCall = { tool, summary, fullSummary, filePath, filePaths }
       pendingToolCalls.push(toolCall)
       allToolCalls.push(toolCall)
     } else if (event.type === "tool_end") {

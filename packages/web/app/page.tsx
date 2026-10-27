@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { ChevronLeft } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { MobileHeader } from "@/components/MobileHeader"
@@ -770,6 +771,16 @@ function HomePageContent({ isMobile }: HomePageContentProps) {
                   {...previewCommonProps}
                 />
               </>
+            )}
+            {!preview.previewOpen && preview.previewItems.length > 0 && (
+              <button
+                onClick={preview.showPreview}
+                className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex h-12 w-5 items-center justify-center rounded-l-md border border-r-0 border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+                title="Show preview"
+                aria-label="Show preview panel"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
             )}
           </div>
       </div>

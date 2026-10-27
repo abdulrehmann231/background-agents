@@ -1,10 +1,11 @@
 "use client"
 
 import { useRef, useEffect } from "react"
-import { Menu, MoreVertical, ChevronDown, Pencil, Github, Trash2, Clock, Command, HardDrive, Rocket } from "lucide-react"
+import { Menu, MoreVertical, ChevronDown, Pencil, Github, Trash2, Clock, Command, HardDrive, Rocket, HelpCircle } from "lucide-react"
 import { useModals, useSidebar } from "@/lib/contexts"
 import { CreditBalancePill } from "@/components/chat/CreditBalancePill"
 import { isRealRepo, type Chat } from "@/lib/types"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 
 interface MobileHeaderProps {
   chat: Chat | null
@@ -33,6 +34,8 @@ export function MobileHeader({
 }: MobileHeaderProps) {
   const modals = useModals()
   const mobileTitleMenuRef = useRef<HTMLDivElement>(null)
+  const { data: settingsData } = useSettingsQuery()
+  const showCommandPaletteButton = settingsData?.settings.showCommandPaletteButton ?? false
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -156,14 +159,25 @@ export function MobileHeader({
 
       {viewMode === "chat" && <CreditBalancePill compact />}
 
-      {/* Command palette - only show for chat view */}
-      {viewMode === "chat" && onOpenCommandPalette && (
+      {/* Command palette - only show for chat view, and only when enabled in Appearance settings */}
+      {viewMode === "chat" && showCommandPaletteButton && onOpenCommandPalette && (
         <button
           onClick={onOpenCommandPalette}
           className="p-2 -mr-1 rounded-lg hover:bg-accent active:bg-accent text-foreground transition-colors touch-target"
           aria-label="Open command palette"
         >
           <Command className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* Help - only show for chat view */}
+      {viewMode === "chat" && (
+        <button
+          onClick={() => modals.setHelpOpen(true)}
+          className="p-2 -mr-1 rounded-lg hover:bg-accent active:bg-accent text-foreground transition-colors touch-target"
+          aria-label="Help"
+        >
+          <HelpCircle className="h-5 w-5" />
         </button>
       )}
 

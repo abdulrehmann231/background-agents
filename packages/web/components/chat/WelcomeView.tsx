@@ -3,6 +3,7 @@ import { Github, HelpCircle, Command } from "lucide-react"
 import { CreditBalancePill } from "./CreditBalancePill"
 import { cn } from "@/lib/utils"
 import { GITHUB_REPO_URL } from "@/lib/bonus-credits"
+import { useSettingsQuery } from "@/lib/query/hooks/useSettingsQuery"
 
 interface WelcomeViewProps {
   isMobile: boolean
@@ -25,6 +26,9 @@ export function WelcomeView({
   chatInput,
   filePreviewModal,
 }: WelcomeViewProps) {
+  const { data: settingsData } = useSettingsQuery()
+  const showCommandPaletteButton = settingsData?.settings.showCommandPaletteButton ?? false
+
   return (
     <>
       <div className={cn(
@@ -36,7 +40,7 @@ export function WelcomeView({
               but on mobile the header above already carries it, and two would
               be two. */}
           {!isMobile && <CreditBalancePill />}
-          {!isMobile && onOpenCommandPalette && (
+          {!isMobile && showCommandPaletteButton && onOpenCommandPalette && (
             <button
               onClick={onOpenCommandPalette}
               className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"

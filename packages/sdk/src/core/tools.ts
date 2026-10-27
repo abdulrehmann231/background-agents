@@ -19,6 +19,7 @@ export type CanonicalToolName =
   | "grep"
   | "shell"
   | "web_search"
+  | "user_file"
 
 /**
  * Normalize a provider-specific tool name to canonical form.

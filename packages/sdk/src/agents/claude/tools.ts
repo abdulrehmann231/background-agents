@@ -12,4 +12,5 @@ export const CLAUDE_TOOL_MAPPINGS: Record<string, string> = {
   Grep: "grep",
   Bash: "shell",
   WebSearch: "web_search",
+  SendUserFile: "user_file",
 }

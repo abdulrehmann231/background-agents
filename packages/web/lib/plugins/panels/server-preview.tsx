@@ -129,6 +129,11 @@ function ServerPreviewComponent({
       await assertSandboxOk(res)
       return res.json()
     },
+    // Sandbox up but dev server down/starting/unrecorded: keep passively
+    // re-probing (see useSandboxResource) so the preview comes back on its
+    // own once something else gets the server listening again.
+    retryWhile: (result) =>
+      result.state === "server-down" || result.state === "starting" || result.state === "no-recipe",
   })
 
   // Tell PreviewView whether this panel can currently recover on its own —

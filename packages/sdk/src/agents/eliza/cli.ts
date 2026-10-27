@@ -53,69 +53,15 @@ async function pushMemory(
   const memoryFile = path.join(cwd, filename)
 
   // Emit Write tool_use
-  await emit(
-    {
-      type: "assistant",
-      message: {
-        id: `msg_${generateId()}`,
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "tool_use",
-            id: toolId,
-            name: "Write",
-            input: {
-              file_path: memoryFile,
-              content: memoryResponse,
-            },
-          },
-        ],
-      },
-      session_id: sessionId,
-    },
-    interEventDelay
-  )
+  await emitToolUse(toolId, "Write", { file_path: memoryFile, content: memoryResponse }, interEventDelay)
 
   // Actually write the file
   await sleep(100)
   try {
     fs.writeFileSync(memoryFile, memoryResponse)
-
-    await emit(
-      {
-        type: "user",
-        message: {
-          content: [
-            {
-              tool_use_id: toolId,
-              type: "tool_result",
-              content: `File written: ${memoryFile}`,
-            },
-          ],
-        },
-        session_id: sessionId,
-      },
-      interEventDelay
-    )
+    await emitToolResult(toolId, `File written: ${memoryFile}`, interEventDelay)
   } catch {
-    await emit(
-      {
-        type: "user",
-        message: {
-          content: [
-            {
-              tool_use_id: toolId,
-              type: "tool_result",
-              content: "Failed to store",
-              is_error: true,
-            },
-          ],
-        },
-        session_id: sessionId,
-      },
-      interEventDelay
-    )
+    await emitToolResult(toolId, "Failed to store", interEventDelay, true)
   }
 }
 
@@ -158,6 +104,77 @@ async function emit(obj: unknown, delayMs: number = 0): Promise<void> {
 }
 
 /**
+ * Emit an assistant "tool_use" event — the request to call a tool.
+ */
+async function emitToolUse(
+  toolId: string,
+  name: string,
+  input: Record<string, unknown>,
+  delayMs: number
+): Promise<void> {
+  await emit(
+    {
+      type: "assistant",
+      message: {
+        id: `msg_${generateId()}`,
+        type: "message",
+        role: "assistant",
+        content: [{ type: "tool_use", id: toolId, name, input }],
+      },
+      session_id: sessionId,
+    },
+    delayMs
+  )
+}
+
+/**
+ * Emit a user "tool_result" event — the outcome of a previously emitted tool_use.
+ */
+async function emitToolResult(
+  toolId: string,
+  content: string,
+  delayMs: number,
+  isError: boolean = false
+): Promise<void> {
+  await emit(
+    {
+      type: "user",
+      message: {
+        content: [
+          {
+            tool_use_id: toolId,
+            type: "tool_result",
+            content,
+            ...(isError ? { is_error: true } : {}),
+          },
+        ],
+      },
+      session_id: sessionId,
+    },
+    delayMs
+  )
+}
+
+/**
+ * Emit an assistant plain-text message (no tool call).
+ */
+async function emitText(text: string, delayMs: number): Promise<void> {
+  await emit(
+    {
+      type: "assistant",
+      message: {
+        id: `msg_${generateId()}`,
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text }],
+      },
+      session_id: sessionId,
+    },
+    delayMs
+  )
+}
+
+/**
  * Main ELIZA processing function
  */
 async function runEliza(prompt: string): Promise<void> {
@@ -194,144 +211,36 @@ async function runEliza(prompt: string): Promise<void> {
     // Pop from memory using visible Bash tool calls
     // Step 1: List memory files to find the newest one
     const listToolId = `toolu_${generateId()}`
-    await emit(
-      {
-        type: "assistant",
-        message: {
-          id: `msg_${generateId()}`,
-          type: "message",
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: listToolId,
-              name: "Bash",
-              input: {
-                command: `ls -t ${MEMORY_PREFIX}*.txt 2>/dev/null | head -1`,
-                description: "Check for stored memories",
-              },
-            },
-          ],
-        },
-        session_id: sessionId,
-      },
+    await emitToolUse(
+      listToolId,
+      "Bash",
+      { command: `ls -t ${MEMORY_PREFIX}*.txt 2>/dev/null | head -1`, description: "Check for stored memories" },
       interEventDelay
     )
 
     // Actually get the newest file (using fs)
     const memoryFilename = getNewestMemoryFile()
-    await emit(
-      {
-        type: "user",
-        message: {
-          content: [
-            {
-              tool_use_id: listToolId,
-              type: "tool_result",
-              content: memoryFilename || "(no memories found)",
-            },
-          ],
-        },
-        session_id: sessionId,
-      },
-      interEventDelay
-    )
+    await emitToolResult(listToolId, memoryFilename || "(no memories found)", interEventDelay)
 
     if (memoryFilename) {
       const memoryFilePath = path.join(cwd, memoryFilename)
 
       // Step 2: Read the memory file
-      // Step 2: Read the memory file
       const readToolId = `toolu_${generateId()}`
-      await emit(
-        {
-          type: "assistant",
-          message: {
-            id: `msg_${generateId()}`,
-            type: "message",
-            role: "assistant",
-            content: [
-              {
-                type: "tool_use",
-                id: readToolId,
-                name: "Read",
-                input: {
-                  file_path: memoryFilePath,
-                },
-              },
-            ],
-          },
-          session_id: sessionId,
-        },
-        interEventDelay
-      )
+      await emitToolUse(readToolId, "Read", { file_path: memoryFilePath }, interEventDelay)
 
       // Actually read the memory (using fs)
       try {
         const memoryContent = fs.readFileSync(memoryFilePath, "utf-8").trim()
-
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: readToolId,
-                  type: "tool_result",
-                  content: memoryContent,
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          interEventDelay
-        )
+        await emitToolResult(readToolId, memoryContent, interEventDelay)
 
         // Step 3: Delete the memory file (pop from stack)
         const rmToolId = `toolu_${generateId()}`
-        await emit(
-          {
-            type: "assistant",
-            message: {
-              id: `msg_${generateId()}`,
-              type: "message",
-              role: "assistant",
-              content: [
-                {
-                  type: "tool_use",
-                  id: rmToolId,
-                  name: "Bash",
-                  input: {
-                    command: `rm "${memoryFilename}"`,
-                    description: "Clear recalled memory",
-                  },
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          interEventDelay
-        )
+        await emitToolUse(rmToolId, "Bash", { command: `rm "${memoryFilename}"`, description: "Clear recalled memory" }, interEventDelay)
 
         // Actually delete it (using fs)
         fs.unlinkSync(memoryFilePath)
-
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: rmToolId,
-                  type: "tool_result",
-                  content: "Memory cleared",
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          interEventDelay
-        )
+        await emitToolResult(rmToolId, "Memory cleared", interEventDelay)
 
         // Use the memory content as our response
         finalResponse = memoryContent
@@ -342,20 +251,7 @@ async function runEliza(prompt: string): Promise<void> {
   }
 
   // Emit text response
-  const msgId = `msg_${generateId()}`
-  await emit(
-    {
-      type: "assistant",
-      message: {
-        id: msgId,
-        type: "message",
-        role: "assistant",
-        content: [{ type: "text", text: finalResponse }],
-      },
-      session_id: sessionId,
-    },
-    interEventDelay
-  )
+  await emitText(finalResponse, interEventDelay)
 
   // Execute file action if any
   if (fileAction) {
@@ -366,29 +262,7 @@ async function runEliza(prompt: string): Promise<void> {
 
     if (fileAction.type === "write") {
       // Emit tool_use for Write
-      await emit(
-        {
-          type: "assistant",
-          message: {
-            id: `msg_${generateId()}`,
-            type: "message",
-            role: "assistant",
-            content: [
-              {
-                type: "tool_use",
-                id: toolId,
-                name: "Write",
-                input: {
-                  file_path: filePath,
-                  content: fileAction.content || "",
-                },
-              },
-            ],
-          },
-          session_id: sessionId,
-        },
-        interEventDelay
-      )
+      await emitToolUse(toolId, "Write", { file_path: filePath, content: fileAction.content || "" }, interEventDelay)
 
       // Actually write the file
       await sleep(200) // Simulate I/O delay
@@ -404,232 +278,46 @@ async function runEliza(prompt: string): Promise<void> {
           fs.writeFileSync(filePath, fileAction.content || "")
         }
 
-        // Emit tool result success
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: toolId,
-                  type: "tool_result",
-                  content: `File written successfully: ${filePath}`,
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          interEventDelay
-        )
+        await emitToolResult(toolId, `File written successfully: ${filePath}`, interEventDelay)
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err)
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: toolId,
-                  type: "tool_result",
-                  content: `Error: ${errorMessage}`,
-                  is_error: true,
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          100
-        )
+        await emitToolResult(toolId, `Error: ${errorMessage}`, 100, true)
       }
     } else if (fileAction.type === "read") {
       // Emit tool_use for Read
-      await emit(
-        {
-          type: "assistant",
-          message: {
-            id: `msg_${generateId()}`,
-            type: "message",
-            role: "assistant",
-            content: [
-              {
-                type: "tool_use",
-                id: toolId,
-                name: "Read",
-                input: {
-                  file_path: filePath,
-                },
-              },
-            ],
-          },
-          session_id: sessionId,
-        },
-        interEventDelay
-      )
+      await emitToolUse(toolId, "Read", { file_path: filePath }, interEventDelay)
 
       // Actually read the file
       await sleep(150) // Simulate I/O delay
       try {
         const content = fs.readFileSync(filePath, "utf-8")
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: toolId,
-                  type: "tool_result",
-                  content: content,
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          interEventDelay
-        )
+        await emitToolResult(toolId, content, interEventDelay)
 
         // Follow up with a comment about the file
-        await emit(
-          {
-            type: "assistant",
-            message: {
-              id: `msg_${generateId()}`,
-              type: "message",
-              role: "assistant",
-              content: [
-                {
-                  type: "text",
-                  text: "I've read the file. How do you feel about its contents?",
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          interEventDelay
-        )
+        await emitText("I've read the file. How do you feel about its contents?", interEventDelay)
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err)
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: toolId,
-                  type: "tool_result",
-                  content: `Error reading file: ${errorMessage}`,
-                  is_error: true,
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          100
-        )
+        await emitToolResult(toolId, `Error reading file: ${errorMessage}`, 100, true)
       }
     } else if (fileAction.type === "delete") {
       // Emit tool_use for Bash (rm command)
-      await emit(
-        {
-          type: "assistant",
-          message: {
-            id: `msg_${generateId()}`,
-            type: "message",
-            role: "assistant",
-            content: [
-              {
-                type: "tool_use",
-                id: toolId,
-                name: "Bash",
-                input: {
-                  command: `rm -f "${filePath}"`,
-                  description: "Delete file as therapeutic exercise",
-                },
-              },
-            ],
-          },
-          session_id: sessionId,
-        },
-        interEventDelay
-      )
+      await emitToolUse(toolId, "Bash", { command: `rm -f "${filePath}"`, description: "Delete file as therapeutic exercise" }, interEventDelay)
 
       // Actually delete the file
       await sleep(150) // Simulate I/O delay
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath)
-          await emit(
-            {
-              type: "user",
-              message: {
-                content: [
-                  {
-                    tool_use_id: toolId,
-                    type: "tool_result",
-                    content: `File deleted: ${filePath}`,
-                  },
-                ],
-              },
-              session_id: sessionId,
-            },
-            interEventDelay
-          )
+          await emitToolResult(toolId, `File deleted: ${filePath}`, interEventDelay)
 
           // Therapeutic follow-up
-          await emit(
-            {
-              type: "assistant",
-              message: {
-                id: `msg_${generateId()}`,
-                type: "message",
-                role: "assistant",
-                content: [
-                  {
-                    type: "text",
-                    text: "The file has been deleted. How does letting go of it make you feel?",
-                  },
-                ],
-              },
-              session_id: sessionId,
-            },
-            interEventDelay
-          )
+          await emitText("The file has been deleted. How does letting go of it make you feel?", interEventDelay)
         } else {
-          await emit(
-            {
-              type: "user",
-              message: {
-                content: [
-                  {
-                    tool_use_id: toolId,
-                    type: "tool_result",
-                    content: `File not found: ${filePath}`,
-                  },
-                ],
-              },
-              session_id: sessionId,
-            },
-            interEventDelay
-          )
+          await emitToolResult(toolId, `File not found: ${filePath}`, interEventDelay)
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err)
-        await emit(
-          {
-            type: "user",
-            message: {
-              content: [
-                {
-                  tool_use_id: toolId,
-                  type: "tool_result",
-                  content: `Error deleting file: ${errorMessage}`,
-                  is_error: true,
-                },
-              ],
-            },
-            session_id: sessionId,
-          },
-          100
-        )
+        await emitToolResult(toolId, `Error deleting file: ${errorMessage}`, 100, true)
       }
     }
   }

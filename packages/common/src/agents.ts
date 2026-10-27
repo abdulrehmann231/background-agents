@@ -320,6 +320,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode/gemini-3.5-flash", label: "Gemini 3.5 Flash", requiresKey: "opencode" },
     { value: "opencode/gemini-3.8-flash", label: "Gemini 3.8 Flash", requiresKey: "opencode" },
     { value: "opencode/gemini-3.1-pro", label: "Gemini 3.1 Pro", requiresKey: "opencode" },
+    { value: "opencode/gemini-4-argon", label: "Gemini 4 Argon", requiresKey: "opencode" },
     // Anthropic direct models — route to Anthropic on the user's own Anthropic key
     { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "anthropic" },
     { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6", requiresKey: "anthropic" },
@@ -378,6 +379,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", requiresKey: "commandcode" },
     { value: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "commandcode" },
     { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "commandcode" },
+    { value: "moonshotai/Kimi-K3.1-Pro", label: "Kimi K3.1 Pro", requiresKey: "commandcode" },
     { value: "moonshotai/Kimi-K3", label: "Kimi K3", requiresKey: "commandcode" },
     { value: "moonshotai/Kimi-K2.7-Code", label: "Kimi K2.7 Code", requiresKey: "commandcode" },
     { value: "MiniMaxAI/MiniMax-M3", label: "MiniMax M3", requiresKey: "commandcode" },
