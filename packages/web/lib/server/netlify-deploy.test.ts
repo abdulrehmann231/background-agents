@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { createRepoSite, saveSiteEnv, toSiteName, DeployError, type NetlifySite } from "./netlify-deploy"
+import { createRepoSite, saveSiteEnv, toSiteName, unlinkRepo, DeployError, type NetlifySite } from "./netlify-deploy"
 
 type Call = { method: string; url: string; body?: unknown }
 let calls: Call[] = []
@@ -102,6 +102,27 @@ describe("saveSiteEnv", () => {
 
     expect(changed).toBe(false)
     expect(calls.every((c) => c.method === "GET")).toBe(true)
+  })
+})
+
+describe("unlinkRepo", () => {
+  beforeEach(() => {
+    routes["GET https://api.github.com/repos/owner/my-app/keys"] = () =>
+      json([{ id: 1, title: "Netlify (my-app)" }, { id: 2, title: "Netlify (other-site)" }, { id: 3, title: "laptop" }])
+    routes["GET https://api.github.com/repos/owner/my-app/hooks"] = () =>
+      json([{ id: 10, config: { url: "https://api.netlify.com/hooks/github" } }, { id: 11, config: { url: "https://ci.example.com" } }])
+    routes["DELETE https://api.github.com/repos/owner/my-app/"] = () => new Response(null, { status: 204 })
+  })
+  const deleted = () => calls.filter((c) => c.method === "DELETE").map((c) => c.url.replace("https://api.github.com/repos/owner/my-app/", ""))
+
+  it("removes the site's deploy key and Netlify's webhook", async () => {
+    await unlinkRepo("gh", "owner/my-app", "my-app", false)
+    expect(deleted()).toEqual(["keys/1", "hooks/10"])
+  })
+
+  it("keeps the webhook while another site deploys from the repo", async () => {
+    await unlinkRepo("gh", "owner/my-app", "my-app", true)
+    expect(deleted()).toEqual(["keys/1"])
   })
 })
 

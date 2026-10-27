@@ -70,6 +70,10 @@ export async function latestDeploy(token: string, siteId: string): Promise<Netli
   return deploy ?? null
 }
 
+export async function getSite(token: string, siteId: string): Promise<NetlifySite> {
+  return netlify<NetlifySite>(token, `/sites/${siteId}`)
+}
+
 export async function deleteSite(token: string, siteId: string): Promise<void> {
   await netlify(token, `/sites/${siteId}`, { method: "DELETE" })
 }
@@ -167,6 +171,31 @@ async function addWebhook(githubToken: string, repo: string, url: string): Promi
   }
 }
 
+/** githubFetch parses a JSON body, and GitHub answers a DELETE with 204 and none. */
+async function githubDelete(githubToken: string, path: string): Promise<void> {
+  const res = await fetch(`https://api.github.com${path}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${githubToken}`, Accept: "application/vnd.github.v3+json" },
+  })
+  if (!res.ok && res.status !== 404) throw new Error(`GitHub API error: ${res.status}`)
+}
+
+/**
+ * Remove what createRepoSite added to the repo: the site's deploy key, and
+ * Netlify's webhook unless another site still deploys from the repo.
+ */
+export async function unlinkRepo(githubToken: string, repo: string, siteName: string, keepWebhook: boolean): Promise<void> {
+  const keys = await githubFetch<{ id: number; title: string }[]>(`/repos/${repo}/keys`, githubToken)
+  for (const key of keys.filter((k) => k.title === `Netlify (${siteName})`)) {
+    await githubDelete(githubToken, `/repos/${repo}/keys/${key.id}`)
+  }
+  if (keepWebhook) return
+  const hooks = await githubFetch<{ id: number; config: { url?: string } }[]>(`/repos/${repo}/hooks`, githubToken)
+  for (const hook of hooks.filter((h) => h.config.url?.startsWith("https://api.netlify.com/hooks/github"))) {
+    await githubDelete(githubToken, `/repos/${repo}/hooks/${hook.id}`)
+  }
+}
+
 /**
  * Create a site linked to the repo's branch. Netlify starts the first build
  * by itself once the repo is linked.
@@ -188,7 +217,7 @@ export async function createRepoSite(opts: {
 
   const site = await netlify<NetlifySite>(token, "/sites", { method: "POST", body: JSON.stringify({ name }) })
   try {
-    const key =await netlify<{ id: string; public_key: string }>(token, "/deploy_keys", { method: "POST" })
+    const key = await netlify<{ id: string; public_key: string }>(token, "/deploy_keys", { method: "POST" })
     await githubFetch(`/repos/${repo}/keys`, githubToken, {
       method: "POST",
       body: JSON.stringify({ title: `Netlify (${site.name})`, key: key.public_key, read_only: true }),

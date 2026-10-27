@@ -99,7 +99,7 @@ export function DeploymentsSection({ isMobile }: { isMobile: boolean }) {
         onClose={() => setConfirming(null)}
         onConfirm={() => confirming && remove(confirming)}
         title={`Delete ${confirming?.name ?? "site"}?`}
-        description="This deletes the site and its deploys from Netlify."
+        description="This deletes the site from Netlify, and its deploy key and webhook from the repository."
         confirmLabel="Delete"
         variant="destructive"
         isMobile={isMobile}
