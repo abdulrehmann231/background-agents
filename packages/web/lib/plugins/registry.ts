@@ -3,6 +3,7 @@ import { FileViewerPlugin } from "./panels/file-viewer"
 import { FileBrowserPlugin } from "./panels/file-browser"
 import { TerminalPlugin } from "./panels/terminal"
 import { ServerPreviewPlugin } from "./panels/server-preview"
+import { ChangesPlugin } from "./panels/changes"
 
 /**
  * All registered panel plugins.
@@ -13,6 +14,7 @@ const panelPlugins: PanelPlugin[] = [
   FileBrowserPlugin,
   TerminalPlugin,
   ServerPreviewPlugin,
+  ChangesPlugin,
 ]
 
 /**

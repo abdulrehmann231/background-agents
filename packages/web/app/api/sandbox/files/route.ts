@@ -7,6 +7,8 @@ import { IMAGE_MIME_TYPES } from "@/lib/file-preview/types"
 import { LIST_SERVERS_COMMAND, parseListeningSockets, recordDevServers } from "@/lib/dev-servers"
 import { readDevServers, saveDevServers } from "@/lib/db/dev-servers-store"
 import { internalError, badRequest, notFound, requireSandboxOwner } from "@/lib/db/api-helpers"
+import { prisma } from "@/lib/db/prisma"
+import { inspectChanges } from "@/lib/git/changes"
 
 // maxDuration configures the timeout for this Vercel function.
 export const maxDuration = 30
@@ -72,16 +74,17 @@ export async function POST(req: Request) {
     //   - `list-servers` is a 5s background poll; a stopped sandbox has no
     //     listening servers, so we answer `{ ports: [] }` without starting it
     //     (and without keeping an idle sandbox alive).
-    //   - `read-file`/`read-file-binary`/`list-dir` from the file-viewer and
-    //     file-browser panels are passive; they omit `autoStart` and get a 409
-    //     SANDBOX_STOPPED (via `passiveReadGate`) so the UI can offer a Resume
-    //     action instead of silently spinning the sandbox up.
+    //   - `read-file`/`read-file-binary`/`list-dir`/`list-changes` from the
+    //     file-viewer, file-browser and changes panels are passive; they omit
+    //     `autoStart` and get a 409 SANDBOX_STOPPED (via `passiveReadGate`) so
+    //     the UI can offer a Resume action instead of silently spinning the
+    //     sandbox up.
     // When the sandbox is already started we fall through to the normal
     // `ensureSandboxStarted` (a no-op start that still runs its usual checks).
     if (sandbox.state !== "started" && action === "list-servers") {
       return Response.json({ ports: [] })
     }
-    if (action === "read-file" || action === "read-file-binary" || action === "list-dir") {
+    if (action === "read-file" || action === "read-file-binary" || action === "list-dir" || action === "list-changes") {
       const halt = passiveReadGate(sandbox, body.autoStart)
       if (halt) return halt
     }
@@ -192,6 +195,20 @@ export async function POST(req: Request) {
           })
 
         return Response.json({ path: resolvedPath, entries })
+      }
+
+      case "list-changes": {
+        // The base branch comes from the chat, not the request.
+        const chat = await prisma.chat.findFirst({
+          where: { sandboxId, userId: owner.userId },
+          select: { baseBranch: true },
+        })
+        if (!chat) return notFound("Chat not found")
+        try {
+          return Response.json(await inspectChanges(sandbox, PATHS.PROJECT_DIR, chat.baseBranch))
+        } catch (error) {
+          return badRequest(error instanceof Error ? error.message : "Couldn't read the changes")
+        }
       }
 
       case "list-servers": {

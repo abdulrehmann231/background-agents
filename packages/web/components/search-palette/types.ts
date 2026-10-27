@@ -43,6 +43,8 @@ export interface PaletteCommandCallbacks {
   onOpenTerminal?: () => void
   /** Open a simple file browser rooted at the sandbox's home directory. */
   onOpenFileBrowser?: () => void
+  /** Open the diff of everything this chat's branch changed. */
+  onOpenChanges?: () => void
   servers?: Array<{ port: number; url: string }>
   onOpenServer?: (port: number, url: string) => void
   onClosePreview?: () => void

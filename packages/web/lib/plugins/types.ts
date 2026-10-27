@@ -9,6 +9,7 @@ export type PreviewItem =
   | { type: "terminal"; id: string }
   | { type: "server"; port: number; url: string }
   | { type: "directory"; dirPath: string }
+  | { type: "changes" }
 
 /**
  * Props passed to every panel plugin component.
