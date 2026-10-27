@@ -155,7 +155,7 @@ export function ChatMessageList({
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>
-                You have {chat.uncommittedFilesCount} new uncommitted{" "}
+                You have {chat.uncommittedFilesCount} uncommitted{" "}
                 {chat.uncommittedFilesCount === 1 ? "file" : "files"}.{" "}
                 <button
                   type="button"

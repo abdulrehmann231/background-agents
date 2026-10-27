@@ -58,9 +58,16 @@ describe("inspectUncommittedFiles", () => {
     expect(await inspectUncommittedFiles(f.sandbox, f.root)).toBe(2)
   })
 
-  it("does not confuse a tracked modification with a newly added file", async () => {
+  it("counts edited and deleted files that were committed before", async () => {
     const f = repoFixture()
-    f.write(".gitignore", "ignored/\nother/\n")
+    f.write("src/toast.tsx", "old\n")
+    f.write("src/old.ts")
+    f.git("add", ".")
+    f.git("commit", "-m", "baseline files")
+    f.write("src/toast.tsx", "new\n")
+    f.git("rm", "-q", "src/old.ts")
+    expect(await inspectUncommittedFiles(f.sandbox, f.root)).toBe(2)
+    f.git("commit", "-am", "edit and delete")
     expect(await inspectUncommittedFiles(f.sandbox, f.root)).toBe(0)
   })
 
