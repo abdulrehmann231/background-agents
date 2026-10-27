@@ -24,11 +24,29 @@ const CLAUDE_CODE_CREDENTIALS_ENV = "CLAUDE_CODE_CREDENTIALS"
  *
  * CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 disables all background task
  * functionality in the Claude Code CLI. We hardcode it on by default so
- * background sessions never spawn detached background tasks. Callers can
- * still override it by passing their own value via RunOptions.env.
+ * background sessions never spawn detached background tasks.
+ *
+ * ENABLE_CLAUDEAI_MCP_SERVERS=false stops the CLI from auto-loading the
+ * connectors (Gmail, Drive, ...) on the claude.ai account behind
+ * subscription OAuth credentials. Otherwise those tools reach the agent
+ * unscoped, outside whatever MCP servers the caller configured.
+ *
+ * MCP_CONNECTION_NONBLOCKING=false makes each run wait (up to MCP_TIMEOUT)
+ * for the configured MCP servers to connect before the first model call.
+ * Otherwise a slow remote server is still "pending" when the agent looks for
+ * its tools, and the agent concludes they don't exist.
+ *
+ * MCP_DISCOVERY_CACHE=false always fetches a fresh tools/list. A server's
+ * listing can change between runs (e.g. Gmail tools follow the connection's
+ * tool policy), so a cached listing would hide newly allowed tools.
+ *
+ * Callers can override any of these via RunOptions.env.
  */
 const CLAUDE_DEFAULT_ENV: Record<string, string> = {
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+  ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+  MCP_CONNECTION_NONBLOCKING: "false",
+  MCP_DISCOVERY_CACHE: "false",
 }
 
 /**

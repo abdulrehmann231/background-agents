@@ -131,6 +131,15 @@ GITHUB_APP_SLUG="..."
 GITHUB_APP_PRIVATE_KEY="..."
 ```
 
+To enable the Gmail MCP server (our own, with per-connection tool scoping), set:
+
+```bash
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+GMAIL_MCP_JWT_SECRET="..."
+GMAIL_MCP_BASE_URL=""   # optional, defaults to NEXTAUTH_URL
+```
+
 See [`mcp`](../mcp/README.md) for setup.
 
 To let users connect Netlify (Settings → API keys), create an OAuth application at [app.netlify.com/applications](https://app.netlify.com/applications) with the redirect URI `<NEXTAUTH_URL>/api/netlify/callback`, then set:

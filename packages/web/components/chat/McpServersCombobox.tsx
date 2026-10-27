@@ -5,8 +5,9 @@
  *
  * Replaces the old full-screen McpServersModal. Behaves like RepoCombobox:
  * a single button in the chat input opens a search dropdown over Smithery's
- * registry plus our GitHub-App-backed featured entry. Clicking a row toggles
- * connect/disconnect; a checkmark marks rows currently attached to this chat.
+ * registry plus our first-party featured entries (GitHub App, Gmail). Clicking
+ * a row toggles connect/disconnect; a checkmark marks rows currently attached
+ * to this chat.
  */
 
 import {
@@ -20,7 +21,13 @@ import {
   Settings,
   Trash2,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type ComponentType, type ReactNode, type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  GMAIL_MCP_QUALIFIED_NAME,
+  type GmailToolPolicy,
+  parseGmailToolPolicy,
+} from "@background-agents/mcp/gmail/policy"
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import {
   Command,
   CommandEmpty,
@@ -28,7 +35,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { GmailIcon } from "@/components/icons/gmail-icon"
 import { ComboboxTriggerButton } from "./ComboboxTriggerButton"
+import { GmailSettingsDialog } from "./GmailSettingsDialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +49,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { useToastStore } from "@/lib/stores/toast-store"
 import { cn } from "@/lib/utils"
 
 interface ConnectedServer {
@@ -49,6 +59,7 @@ interface ConnectedServer {
   iconUrl: string | null
   status: "pending" | "connected" | "error"
   lastError: string | null
+  toolPolicy: unknown
 }
 
 interface RegistryServer {
@@ -62,6 +73,89 @@ interface RegistryServer {
 }
 
 const GITHUB_QUALIFIED_NAME = "github/github"
+
+/**
+ * Servers we host or authenticate ourselves. Each links a user-level account
+ * via a popup (`connectApi` GET → { connected, installUrl | authUrl }), then
+ * attaches a sentinel row via POST `${apiBase}/<id>/mcp-servers/<attachPath>`.
+ */
+interface FirstPartyServer extends RegistryServer {
+  icon: ComponentType<{ className?: string }>
+  connectApi: string
+  attachPath: string
+  /** Popup window name, also the postMessage `source` the callback sends. */
+  popupName: string
+}
+
+interface AccountStatus {
+  connected: boolean
+  installUrl?: string
+  authUrl?: string
+  installationId?: string
+}
+
+const FIRST_PARTY_SERVERS: FirstPartyServer[] = [
+  {
+    slug: GITHUB_QUALIFIED_NAME,
+    name: "GitHub",
+    description: "Issues, PRs, code search via our GitHub App",
+    iconUrl: null,
+    url: null,
+    verified: true,
+    useCount: 0,
+    icon: Github,
+    connectApi: "/api/mcp/connect/github",
+    attachPath: "github",
+    popupName: "github-app-install",
+  },
+  {
+    slug: GMAIL_MCP_QUALIFIED_NAME,
+    name: "Gmail",
+    description: "Search, read and draft email, scoped per chat",
+    iconUrl: null,
+    url: null,
+    verified: true,
+    useCount: 0,
+    icon: GmailIcon,
+    connectApi: "/api/mcp/connect/gmail",
+    attachPath: "gmail",
+    popupName: "gmail-oauth",
+  },
+]
+
+const FIRST_PARTY_BY_SLUG = new Map(FIRST_PARTY_SERVERS.map((s) => [s.slug, s]))
+
+/** Smithery's Gmail servers are superseded by our own; hide them unless attached. */
+function isSupersededRegistryServer(s: RegistryServer): boolean {
+  return /gmail/i.test(s.slug) || /gmail/i.test(s.name)
+}
+
+/** Pending account unlink, confirmed through ConfirmDialog. */
+interface UnlinkRequest {
+  server: FirstPartyServer
+  title: string
+  description: string
+  confirmLabel: string
+}
+
+/** Wait until the popup reports back via postMessage or is closed. */
+function waitForPopup(popup: Window, source: string): Promise<void> {
+  return new Promise((resolve) => {
+    function done() {
+      clearInterval(t)
+      window.removeEventListener("message", onMessage)
+      resolve()
+    }
+    function onMessage(e: MessageEvent) {
+      const data = e.data as { source?: string } | null
+      if (data?.source === source) done()
+    }
+    window.addEventListener("message", onMessage)
+    const t = setInterval(() => {
+      if (popup.closed) done()
+    }, 500)
+  })
+}
 
 interface McpServersComboboxProps {
   /** Stable id of the owning entity (chat id or scheduled job id). */
@@ -143,11 +237,15 @@ export function McpServersCombobox({
   const [hasLoadedRegistry, setHasLoadedRegistry] = useState(false)
   const [search, setSearch] = useState("")
   const [busySlug, setBusySlug] = useState<string | null>(null)
-  const [githubBusy, setGithubBusy] = useState(false)
-  // Tracked separately from `connected` because the GitHub App can be
-  // installed at the user level even when no chat has it attached — we
-  // need the installation id to build the "Manage repositories" link.
-  const [githubInstallationId, setGithubInstallationId] = useState<string | null>(null)
+  // User-level account links per first-party slug, tracked separately from
+  // `connected` because an account (GitHub App install, Google grant) can be
+  // linked even when no chat has the server attached.
+  const [accountStatus, setAccountStatus] = useState<Record<string, AccountStatus>>({})
+  const githubInstallationId = accountStatus[GITHUB_QUALIFIED_NAME]?.installationId ?? null
+
+  const [gmailSettingsOpen, setGmailSettingsOpen] = useState(false)
+  const [unlinkRequest, setUnlinkRequest] = useState<UnlinkRequest | null>(null)
+  const addToast = useToastStore((s) => s.addToast)
 
   const popupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -156,6 +254,15 @@ export function McpServersCombobox({
     connected.forEach((s) => m.set(s.qualifiedName, s))
     return m
   }, [connected])
+
+  const gmailServer = connectedByName.get(GMAIL_MCP_QUALIFIED_NAME) ?? null
+  // Keyed on the policy's content so a refetch of the same rows doesn't reset
+  // unsaved edits in the open settings dialog.
+  const gmailPolicyJson = gmailServer ? JSON.stringify(gmailServer.toolPolicy ?? null) : null
+  const gmailPolicy = useMemo(
+    () => (gmailPolicyJson === null ? null : parseGmailToolPolicy(JSON.parse(gmailPolicyJson))),
+    [gmailPolicyJson]
+  )
 
   const loadConnectedFor = useCallback(async (id: string) => {
     try {
@@ -177,18 +284,21 @@ export function McpServersCombobox({
     await loadConnectedFor(effectiveId)
   }, [isDraft, effectiveId, loadConnectedFor])
 
-  const loadGithubStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/mcp/connect/github")
-      if (res.ok) {
-        const data = await res.json()
-        setGithubInstallationId(data.installationId ?? null)
-      } else {
-        setGithubInstallationId(null)
-      }
-    } catch {
-      setGithubInstallationId(null)
-    }
+  const loadAccountStatus = useCallback(async (): Promise<Record<string, AccountStatus>> => {
+    const entries = await Promise.all(
+      FIRST_PARTY_SERVERS.map(async (s): Promise<[string, AccountStatus]> => {
+        try {
+          const res = await fetch(s.connectApi)
+          return [s.slug, res.ok ? await res.json() : { connected: false }]
+        } catch (err) {
+          console.error(`[McpServersCombobox] ${s.name} status failed:`, err)
+          return [s.slug, { connected: false }]
+        }
+      })
+    )
+    const next = Object.fromEntries(entries)
+    setAccountStatus(next)
+    return next
   }, [])
 
   const loadRegistry = useCallback(async (q: string) => {
@@ -214,13 +324,13 @@ export function McpServersCombobox({
     loadConnected()
   }, [loadConnected])
 
-  // Load GitHub app status whenever the popover opens.
+  // Load account link status whenever the popover opens.
   useEffect(() => {
     if (open) {
       loadConnected() // Refresh when opening
-      loadGithubStatus()
+      loadAccountStatus()
     }
-  }, [open, loadConnected, loadGithubStatus])
+  }, [open, loadConnected, loadAccountStatus])
 
   // Debounced registry search while the popover is open.
   useEffect(() => {
@@ -257,97 +367,94 @@ export function McpServersCombobox({
     }
   }
 
-  async function addGithubToEntity() {
-    const id = await resolveEntityId()
-    if (!id) return
-    const res = await fetch(`${apiBase}/${id}/mcp-servers/github`, {
-      method: "POST",
-    })
-    if (res.ok) await loadConnectedFor(id)
-  }
-
-  async function handleToggleGithub() {
-    const existing = connectedByName.get(GITHUB_QUALIFIED_NAME)
+  async function handleToggleFirstParty(server: FirstPartyServer) {
+    const existing = connectedByName.get(server.slug)
     if (existing) {
-      setGithubBusy(true)
+      setBusySlug(server.slug)
       try {
         await handleDisconnect(existing.id)
       } finally {
-        setGithubBusy(false)
+        setBusySlug(null)
       }
       return
     }
-    if (githubBusy) return
-    setGithubBusy(true)
+    if (busySlug) return
+    setBusySlug(server.slug)
     try {
-      const statusRes = await fetch("/api/mcp/connect/github")
-      if (!statusRes.ok) throw new Error("Failed to check GitHub status")
-      const status = await statusRes.json()
-
-      if (status.connected) {
-        await addGithubToEntity()
-        return
+      let status = (await loadAccountStatus())[server.slug]
+      if (!status?.connected) {
+        const popupUrl = status?.installUrl ?? status?.authUrl
+        if (!popupUrl) throw new Error(`${server.name} is not configured on the server`)
+        const popup = window.open(
+          popupUrl,
+          server.popupName,
+          "width=600,height=700,scrollbars=yes"
+        )
+        if (!popup || popup.closed) return
+        await waitForPopup(popup, server.popupName)
+        status = (await loadAccountStatus())[server.slug]
+        if (!status?.connected) return
       }
 
-      const popup = window.open(
-        status.installUrl,
-        "github-app-install",
-        "width=600,height=700,scrollbars=yes"
-      )
-      if (!popup || popup.closed) return
-
-      await new Promise<void>((resolve) => {
-        function onMessage(e: MessageEvent) {
-          const data = e.data as { source?: string; ok?: boolean } | null
-          if (data?.source === "github-app-install") {
-            window.removeEventListener("message", onMessage)
-            resolve()
-          }
-        }
-        window.addEventListener("message", onMessage)
-        const t = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(t)
-            window.removeEventListener("message", onMessage)
-            resolve()
-          }
-        }, 500)
+      const id = await resolveEntityId()
+      if (!id) return
+      const res = await fetch(`${apiBase}/${id}/mcp-servers/${server.attachPath}`, {
+        method: "POST",
       })
-
-      const after = await fetch("/api/mcp/connect/github")
-      const afterData = after.ok ? await after.json() : { connected: false }
-      setGithubInstallationId(afterData.installationId ?? null)
-      if (afterData.connected) await addGithubToEntity()
+      if (res.ok) await loadConnectedFor(id)
     } catch (err) {
-      console.error("[McpServersCombobox] handleToggleGithub failed:", err)
+      console.error(`[McpServersCombobox] ${server.name} connect failed:`, err)
     } finally {
-      setGithubBusy(false)
+      setBusySlug(null)
     }
   }
 
   /**
-   * Hard uninstall: clears installationId on the user and drops every GitHub
-   * MCP row across this user's chats. The App itself stays installed on
-   * github.com until the user removes it there — we just lose access.
+   * Hard unlink of the user-level account (GitHub App install or Google
+   * grant). The server drops this server's rows across every chat and job.
    */
-  async function handleUninstallGithubApp() {
-    if (
-      !confirm(
-        "Uninstall the GitHub App for your account? This removes GitHub MCP from every chat and scheduled job."
-      )
-    ) {
-      return
-    }
-    setGithubBusy(true)
+  async function handleUnlinkAccount(server: FirstPartyServer) {
+    setBusySlug(server.slug)
     try {
-      const res = await fetch("/api/mcp/connect/github", { method: "DELETE" })
-      if (res.ok) {
-        setGithubInstallationId(null)
-        await loadConnected()
-      }
+      const res = await fetch(server.connectApi, { method: "DELETE" })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await Promise.all([loadAccountStatus(), loadConnected()])
+    } catch (err) {
+      console.error(`[McpServersCombobox] ${server.name} unlink failed:`, err)
+      addToast({ title: `Couldn't disconnect ${server.name}`, body: "Please try again." })
     } finally {
-      setGithubBusy(false)
+      setBusySlug(null)
     }
+  }
+
+  /** Throws a user-facing message so the settings dialog can show it. */
+  async function handleUpdateToolPolicy(serverId: string, toolPolicy: GmailToolPolicy) {
+    let res: Response
+    try {
+      res = await fetch(`${apiBase}/${effectiveId}/mcp-servers/${serverId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolPolicy }),
+      })
+    } catch (err) {
+      console.error("[McpServersCombobox] tool policy update failed:", err)
+      throw new Error("Network error. Check your connection and try again.")
+    }
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null
+      console.error("[McpServersCombobox] tool policy update failed:", res.status, data?.error)
+      throw new Error(data?.error || "Couldn't save Gmail settings")
+    }
+    setConnected((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, toolPolicy } : s))
+    )
+  }
+
+  function openGmailSettings() {
+    // Close the picker first: it would dismiss itself anyway once focus moves
+    // into the dialog.
+    setOpen(false)
+    setGmailSettingsOpen(true)
   }
 
   async function handleToggleServer(server: RegistryServer) {
@@ -444,40 +551,23 @@ export function McpServersCombobox({
   const connectedCount = connected.length
   const triggerLabel = `MCP servers${connectedCount > 0 ? `, ${connectedCount} connected` : ""}`
 
-  // Create a virtual "GitHub" server entry to unify with registry servers
-  const githubServer: RegistryServer = {
-    slug: GITHUB_QUALIFIED_NAME,
-    name: "GitHub",
-    description: "Issues, PRs, code search via our GitHub App",
-    iconUrl: null,
-    url: null,
-    verified: true,
-    useCount: 0,
-  }
-
-  // Combine GitHub + registry, filter by search, sort connected to top
+  // Combine first-party + registry, filter by search, sort connected to top
   const allServers = useMemo(() => {
     const searchLower = search.toLowerCase().trim()
+    const matches = (s: RegistryServer) =>
+      !searchLower ||
+      s.name.toLowerCase().includes(searchLower) ||
+      s.description.toLowerCase().includes(searchLower) ||
+      s.slug.toLowerCase().includes(searchLower)
 
-    // Filter GitHub server
-    const githubMatches = !searchLower ||
-      githubServer.name.toLowerCase().includes(searchLower) ||
-      githubServer.description.toLowerCase().includes(searchLower)
-
-    // Filter registry servers
-    const filteredRegistry = searchLower
-      ? registry.filter(
-          (s) =>
-            s.name.toLowerCase().includes(searchLower) ||
-            s.description.toLowerCase().includes(searchLower) ||
-            s.slug.toLowerCase().includes(searchLower)
-        )
-      : registry
-
-    // Combine: GitHub first (if matches), then registry
-    const combined = githubMatches
-      ? [githubServer, ...filteredRegistry]
-      : filteredRegistry
+    const combined = [
+      ...FIRST_PARTY_SERVERS.filter(matches),
+      ...registry.filter(
+        (s) =>
+          matches(s) &&
+          (connectedByName.has(s.slug) || !isSupersededRegistryServer(s))
+      ),
+    ]
 
     // Sort: connected servers first
     return combined.sort((a, b) => {
@@ -490,6 +580,7 @@ export function McpServersCombobox({
   }, [search, registry, connectedByName])
 
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <ComboboxTriggerButton
@@ -544,14 +635,14 @@ export function McpServersCombobox({
               </CommandEmpty>
             ) : (
               allServers.map((s) => {
-                const isGitHub = s.slug === GITHUB_QUALIFIED_NAME
+                const firstParty = FIRST_PARTY_BY_SLUG.get(s.slug)
                 const connectedServer = connectedByName.get(s.slug)
                 const isConn = !!connectedServer
                 const hasError = connectedServer?.status === "error"
                 const isPending = connectedServer?.status === "pending"
-                const isBusy = isGitHub ? githubBusy : busySlug === s.slug
-                const handleSelect = isGitHub
-                  ? handleToggleGithub
+                const isBusy = busySlug === s.slug
+                const handleSelect = firstParty
+                  ? () => handleToggleFirstParty(firstParty)
                   : () => handleToggleServer(s)
 
                 // Build status label for screen readers
@@ -570,12 +661,12 @@ export function McpServersCombobox({
                     className="flex items-center gap-2 cursor-pointer"
                     aria-label={`${s.name}${statusLabel ? `, ${statusLabel}` : ""}`}
                   >
-                    {isGitHub ? (
+                    {firstParty ? (
                       <div
                         className="h-6 w-6 rounded bg-muted shrink-0 flex items-center justify-center"
                         aria-hidden="true"
                       >
-                        <Github className="h-3.5 w-3.5 text-muted-foreground" />
+                        <firstParty.icon className="h-3.5 w-3.5 text-muted-foreground" />
                       </div>
                     ) : s.iconUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -614,46 +705,41 @@ export function McpServersCombobox({
                         )}
                       </div>
                     </div>
-                    {/* GitHub settings dropdown */}
-                    {isGitHub && githubInstallationId && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          {/* Stop pointer events from bubbling so cmdk doesn't
-                              treat this as a row select. */}
-                          <button
-                            type="button"
-                            disabled={githubBusy}
-                            onClick={(e) => e.stopPropagation()}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onPointerUp={(e) => e.stopPropagation()}
-                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
-                            aria-label="GitHub settings"
+                    {firstParty?.slug === GITHUB_QUALIFIED_NAME && githubInstallationId && (
+                      <RowSettingsMenu label="GitHub settings" disabled={isBusy}>
+                        <DropdownMenuItem asChild>
+                          <a
+                            href={`https://github.com/settings/installations/${githubInstallationId}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent"
                           >
-                            <Settings className="h-3.5 w-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <a
-                              href={`https://github.com/settings/installations/${githubInstallationId}`}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                              Manage repositories
-                            </a>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={handleUninstallGithubApp}
-                            className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm text-destructive focus:bg-destructive/10 focus:text-destructive"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            Uninstall app entirely
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                            Manage repositories
+                          </a>
+                        </DropdownMenuItem>
+                        <UnlinkMenuItem
+                          label="Uninstall app entirely"
+                          onSelect={() =>
+                            setUnlinkRequest({
+                              server: firstParty,
+                              title: "Uninstall GitHub App?",
+                              description:
+                                "This uninstalls the GitHub App from your account and removes GitHub MCP from every chat and scheduled job.",
+                              confirmLabel: "Uninstall",
+                            })
+                          }
+                        />
+                      </RowSettingsMenu>
                     )}
+                    {firstParty?.slug === GMAIL_MCP_QUALIFIED_NAME &&
+                      (connectedServer || accountStatus[s.slug]?.connected) && (
+                        <RowSettingsButton
+                          label="Gmail settings"
+                          disabled={isBusy}
+                          onClick={openGmailSettings}
+                        />
+                      )}
                     {/* Status indicator */}
                     {isBusy ? (
                       <Loader2
@@ -679,5 +765,136 @@ export function McpServersCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+    <GmailSettingsDialog
+      open={gmailSettingsOpen}
+      onClose={() => setGmailSettingsOpen(false)}
+      policy={gmailPolicy}
+      onSave={(policy) =>
+        gmailServer
+          ? handleUpdateToolPolicy(gmailServer.id, policy)
+          : Promise.reject(new Error("Gmail is no longer attached"))
+      }
+      onDisconnectAccount={
+        accountStatus[GMAIL_MCP_QUALIFIED_NAME]?.connected
+          ? () =>
+              setUnlinkRequest({
+                server: FIRST_PARTY_BY_SLUG.get(GMAIL_MCP_QUALIFIED_NAME)!,
+                title: "Disconnect Google account?",
+                description:
+                  "Gmail MCP will be removed from every chat and scheduled job. You can reconnect it at any time.",
+                confirmLabel: "Disconnect",
+              })
+          : undefined
+      }
+      entityLabel={apiBase === "/api/scheduled-jobs" ? "scheduled job" : "chat"}
+      isMobile={isMobile}
+    />
+    <ConfirmDialog
+      open={!!unlinkRequest}
+      onClose={() => setUnlinkRequest(null)}
+      onConfirm={() => {
+        if (!unlinkRequest) return
+        setGmailSettingsOpen(false)
+        void handleUnlinkAccount(unlinkRequest.server)
+      }}
+      title={unlinkRequest?.title ?? ""}
+      description={unlinkRequest?.description}
+      confirmLabel={unlinkRequest?.confirmLabel}
+      variant="destructive"
+      isMobile={isMobile}
+    />
+    </>
+  )
+}
+
+const ROW_SETTINGS_BUTTON =
+  "p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer disabled:opacity-50"
+
+/**
+ * Keeps events inside a row control from reaching the enclosing CommandItem.
+ * React bubbles events through portals along the component tree, so without
+ * this a click (or Enter) inside a portaled menu also fires cmdk's row
+ * select, which toggles the server off.
+ */
+function RowControl({ children }: { children: ReactNode }) {
+  const stop = (e: SyntheticEvent) => e.stopPropagation()
+  return (
+    <div
+      className="contents"
+      onClick={stop}
+      onPointerDown={stop}
+      onPointerUp={stop}
+      onKeyDown={stop}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** Gear button that opens a settings dialog for a first-party row. */
+function RowSettingsButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <RowControl>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className={ROW_SETTINGS_BUTTON}
+        aria-label={label}
+        title={label}
+      >
+        <Settings className="h-3.5 w-3.5" />
+      </button>
+    </RowControl>
+  )
+}
+
+/** Gear button + dropdown on a first-party row. */
+function RowSettingsMenu({
+  label,
+  disabled,
+  children,
+}: {
+  label: string
+  disabled: boolean
+  children: ReactNode
+}) {
+  return (
+    <RowControl>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            className={ROW_SETTINGS_BUTTON}
+            aria-label={label}
+            title={label}
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+      </DropdownMenu>
+    </RowControl>
+  )
+}
+
+function UnlinkMenuItem({ label, onSelect }: { label: string; onSelect: () => void }) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded-sm text-destructive focus:bg-destructive/10 focus:text-destructive"
+    >
+      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+      {label}
+    </DropdownMenuItem>
   )
 }

@@ -109,6 +109,17 @@ describe("claudeAgent.buildCommand", () => {
     expect(env?.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS).toBe("1")
   })
 
+  it("disables claude.ai connectors by default", () => {
+    const { env } = claudeAgent.buildCommand({ prompt: "hello" })
+    expect(env?.ENABLE_CLAUDEAI_MCP_SERVERS).toBe("false")
+  })
+
+  it("waits for MCP servers and skips the tool-listing cache by default", () => {
+    const { env } = claudeAgent.buildCommand({ prompt: "hello" })
+    expect(env?.MCP_CONNECTION_NONBLOCKING).toBe("false")
+    expect(env?.MCP_DISCOVERY_CACHE).toBe("false")
+  })
+
   it("merges caller-provided env with the background-task default", () => {
     const { env } = claudeAgent.buildCommand({ prompt: "hello", env: { FOO: "bar" } })
     expect(env?.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS).toBe("1")

@@ -15,30 +15,10 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { requireAuth, isAuthError } from "@/lib/db/api-helpers"
-import { escapeHtml } from "@/lib/html"
+import { popupClosingPage } from "@/lib/mcp/popup-page"
 
 function closingPage(opts: { ok: boolean; message: string }): Response {
-  const safe = escapeHtml(opts.message)
-  const body = `<!doctype html>
-<html><head><meta charset="utf-8"><title>GitHub setup ${opts.ok ? "complete" : "failed"}</title>
-<style>
-  body { font: 14px system-ui, sans-serif; padding: 24px; color: #333; }
-  .ok { color: #1a7f37; }
-  .err { color: #cf222e; }
-</style>
-</head>
-<body>
-  <p class="${opts.ok ? "ok" : "err"}">${safe}</p>
-  <p>You can close this window.</p>
-  <script>
-    try { window.opener && window.opener.postMessage({ source: "github-app-install", ok: ${opts.ok} }, "*"); } catch (e) {}
-    setTimeout(function () { try { window.close(); } catch (e) {} }, 800);
-  </script>
-</body></html>`
-  return new Response(body, {
-    status: opts.ok ? 200 : 400,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-  })
+  return popupClosingPage({ source: "github-app-install", provider: "GitHub", ...opts })
 }
 
 export async function GET(req: NextRequest): Promise<Response> {

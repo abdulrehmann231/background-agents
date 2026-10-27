@@ -1,6 +1,6 @@
 # @background-agents/mcp
 
-TypeScript library for connecting to MCP servers via GitHub and Smithery.
+TypeScript library for connecting to MCP servers via GitHub, Smithery, and our own Gmail MCP server.
 
 ## GitHub
 
@@ -66,6 +66,73 @@ Open the Advanced tab and click **Make public**:
    ```
 
    Paste the output into `GITHUB_APP_PRIVATE_KEY="..."`.
+
+## Gmail
+
+Our own Gmail MCP server, served by the web app at `/api/mcp/gmail`. The agent gets a short-lived connection token, never a Google credential, so the per-connection tool policy can't be bypassed.
+
+```typescript
+import {
+  createGmailMcpProvider,
+  serveGmailMcp,
+  parseGmailToolPolicy,
+} from "@background-agents/mcp"
+
+const gmail = createGmailMcpProvider({
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  jwtSecret: process.env.GMAIL_MCP_JWT_SECRET!,
+})
+
+// Linking a Google account (popup flow)
+const state = await gmail.signOAuthState(userId)
+const authUrl = gmail.getAuthUrl(redirectUri, state)
+// ...in the callback:
+if ((await gmail.verifyOAuthState(state)) === userId) {
+  const refreshToken = await gmail.exchangeCode(code, redirectUri)
+}
+await gmail.revokeToken(refreshToken) // on disconnect
+
+// Per agent turn: the bearer token for the agent's MCP config
+const token = await gmail.signConnectionToken(connectionId)
+
+// In the MCP route: verify, then serve with that connection's policy
+const id = await gmail.verifyConnectionToken(bearer) // null if invalid/expired
+return serveGmailMcp(req, {
+  policy: parseGmailToolPolicy(row.toolPolicy),
+  getAccessToken: () => gmail.getAccessToken(userId, refreshToken),
+})
+```
+
+### Tool policy
+
+| Field | Effect |
+|--|--|
+| `allowedTools` | Only these tools are registered; others don't exist for the agent |
+| `allowedRecipients` | Every To/Cc/Bcc on drafts and sends must match an address or `@domain` |
+| `restrictToLabel` | Search, read, reply and relabel only threads with this label |
+| `maxResults` | Caps search page size |
+
+Presets: `GMAIL_POLICY_PRESETS.readOnly` (the default for a missing or invalid policy), `readDraft`, and `full`. Client code can import the policy without the server via `@background-agents/mcp/gmail/policy`.
+
+### Google OAuth Setup
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create a project and enable the **Gmail API**.
+2. Configure the OAuth consent screen (External; add yourself as a test user while in Testing) and add the `https://www.googleapis.com/auth/gmail.modify` scope. That one scope covers every tool; the tool policy narrows it per connection.
+3. Create an OAuth client of type **Web application** with the redirect URI `<NEXTAUTH_URL>/api/mcp/connect/gmail/callback`.
+4. Set the credentials, plus a random secret for signing connection tokens:
+
+```bash
+GOOGLE_CLIENT_ID="....apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="GOCSPX-..."
+# Any random 32+ byte secret, e.g. from `openssl rand -base64 32`
+GMAIL_MCP_JWT_SECRET="..."
+# Optional: public base URL agents use to reach /api/mcp/gmail. Defaults to
+# NEXTAUTH_URL; local dev needs a tunnel since sandboxes can't reach localhost.
+GMAIL_MCP_BASE_URL="https://<tunnel>.trycloudflare.com"
+```
+
+In Testing mode Google expires refresh tokens after 7 days; publishing the app with Gmail scopes requires Google's verification.
 
 ## Smithery
 
@@ -146,6 +213,7 @@ Pre-defined URLs and identifiers for known MCP servers. Use these instead of har
 import {
   GITHUB_MCP_URL,           // "https://api.githubcopilot.com/mcp/"
   GITHUB_MCP_QUALIFIED_NAME, // "github/github"
+  GMAIL_MCP_QUALIFIED_NAME, // "google/gmail"
   SMITHERY_API_BASE,        // "https://api.smithery.ai"
 } from "@background-agents/mcp"
 ```
