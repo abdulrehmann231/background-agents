@@ -46,6 +46,8 @@ const TOOL_INFO: Record<GmailToolName, { label: string; description: string }> =
   get_thread: { label: "Read threads", description: "Open a thread's messages, headers and labels" },
   list_labels: { label: "List labels", description: "See the mailbox's label names" },
   create_draft: { label: "Create drafts", description: "Write drafts; nothing is sent" },
+  update_draft: { label: "Edit drafts", description: "Replace a draft's contents; nothing is sent" },
+  delete_draft: { label: "Delete drafts", description: "Permanently delete drafts" },
   send_message: { label: "Send email", description: "Send mail without your review" },
   modify_thread_labels: { label: "Change labels", description: "Add or remove labels on threads" },
 }
