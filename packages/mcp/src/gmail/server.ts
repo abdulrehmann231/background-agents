@@ -115,11 +115,20 @@ function createGmailMcpServer({ policy, getAccessToken }: ServeGmailMcpOptions):
     return thread
   }
 
-  async function prepareOutgoing(message: OutgoingMessage) {
-    const recipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])]
-    const denied = recipients.filter((r) => !isRecipientAllowed(policy, r))
-    if (denied.length > 0) {
-      throw new Error(`Recipients not allowed by policy: ${denied.join(", ")}`)
+  /**
+   * The recipient allowlist only gates actually sending mail. Drafts stay
+   * local to the mailbox until a human sends them, so they're exempt.
+   */
+  async function prepareOutgoing(
+    message: OutgoingMessage,
+    { enforceRecipientAllowlist }: { enforceRecipientAllowlist: boolean }
+  ) {
+    if (enforceRecipientAllowlist) {
+      const recipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])]
+      const denied = recipients.filter((r) => !isRecipientAllowed(policy, r))
+      if (denied.length > 0) {
+        throw new Error(`Recipients not allowed by policy: ${denied.join(", ")}`)
+      }
     }
     if (message.threadId) await getScopedThread(message.threadId, "minimal")
     return { raw: buildRawMessage(message), threadId: message.threadId }
@@ -195,7 +204,9 @@ function createGmailMcpServer({ policy, getAccessToken }: ServeGmailMcpOptions):
     async (message) => {
       const draft = await gmail<{ id: string }>("/drafts", {
         method: "POST",
-        body: JSON.stringify({ message: await prepareOutgoing(message) }),
+        body: JSON.stringify({
+          message: await prepareOutgoing(message, { enforceRecipientAllowlist: false }),
+        }),
       })
       return { draftId: draft.id }
     }
@@ -204,7 +215,9 @@ function createGmailMcpServer({ policy, getAccessToken }: ServeGmailMcpOptions):
   register("send_message", "Send an email.", messageShape, async (message) => {
     const sent = await gmail<{ id: string; threadId: string }>("/messages/send", {
       method: "POST",
-      body: JSON.stringify(await prepareOutgoing(message)),
+      body: JSON.stringify(
+        await prepareOutgoing(message, { enforceRecipientAllowlist: true })
+      ),
     })
     return { messageId: sent.id, threadId: sent.threadId }
   })

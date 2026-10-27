@@ -118,7 +118,7 @@ export function GmailSettingsDialog({
       (policy.restrictToLabel ?? "") !== (draft.restrictToLabel ?? ""))
 
   const activePreset = PRESET_OPTIONS.find((p) => sameTools(tools, p.tools))
-  const canSend = tools.includes("create_draft") || tools.includes("send_message")
+  const canSend = tools.includes("send_message")
 
   function toggleTool(tool: GmailToolName) {
     setTools((prev) => (prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool]))
@@ -240,7 +240,7 @@ export function GmailSettingsDialog({
                     hint={
                       canSend
                         ? "Addresses or @domain, comma-separated. Leave empty to allow anyone."
-                        : "Applies to drafts and sent mail, which are currently off."
+                        : "Applies to sent mail, which is currently off."
                     }
                   >
                     <Input
