@@ -109,7 +109,7 @@ return serveGmailMcp(req, {
 | Field | Effect |
 |--|--|
 | `allowedTools` | Only these tools are registered; others don't exist for the agent |
-| `allowedRecipients` | Every To/Cc/Bcc on drafts and sends must match an address or `@domain` |
+| `allowedRecipients` | Every To/Cc/Bcc on a send must match an address or `@domain` (drafts are exempt — they aren't sent) |
 | `restrictToLabel` | Search, read, reply and relabel only threads with this label |
 | `maxResults` | Caps search page size |
 

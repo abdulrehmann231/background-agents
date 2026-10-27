@@ -28,8 +28,9 @@ export const gmailToolPolicySchema = z.object({
   /** Tools the agent may see and call. Anything else isn't registered. */
   allowedTools: z.array(z.enum(GMAIL_TOOL_NAMES)),
   /**
-   * When set, every To/Cc/Bcc address on drafts and sent mail must match an
-   * entry: either a full address ("alice@x.com") or a domain ("@x.com").
+   * When set, every To/Cc/Bcc address on sent mail must match an entry:
+   * either a full address ("alice@x.com") or a domain ("@x.com"). Drafts are
+   * not sent, so they're exempt from this check.
    */
   allowedRecipients: z.array(z.string().min(1)).optional(),
   /**
