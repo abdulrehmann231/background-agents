@@ -221,7 +221,8 @@ const SHARED_OPENCODE_ALLOWED = new Set<string>([
   "opencode-go/qwen3.7-max",
   "opencode-go/qwen3.7-plus",
   "opencode-go/deepseek-v4-pro",
-  "opencode-go/deepseek-v4-flash",
+  "opencode-go/deepseek-v4.1-flash",
+  "opencode-go/kimi-k3.1-pro",
 ])
 
 /**
@@ -273,6 +274,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // priceUsdPerM is the input $/M-token rate from OpenCode's published Go rate card.
     { value: "opencode-go/glm-5.2", label: "GLM-5.2", requiresKey: "opencode", priceUsdPerM: 1.4 },
     { value: "opencode-go/glm-5.3", label: "GLM-5.3", requiresKey: "opencode", priceUsdPerM: 1.4 },
+    { value: "opencode-go/kimi-k3.1-pro", label: "Kimi K3.1 Pro", requiresKey: "opencode", priceUsdPerM: 3 },
     { value: "opencode-go/kimi-k3", label: "Kimi K3", requiresKey: "opencode", priceUsdPerM: 3 },
     { value: "opencode-go/kimi-k2.6", label: "Kimi K2.6", requiresKey: "opencode", priceUsdPerM: 0.95 },
     { value: "opencode-go/kimi-k2.7-code", label: "Kimi K2.7 Code", requiresKey: "opencode", priceUsdPerM: 0.95 },
@@ -285,7 +287,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "opencode-go/qwen3.7-max", label: "Qwen3.7 Max", requiresKey: "opencode", priceUsdPerM: 2.5 },
     { value: "opencode-go/qwen3.7-plus", label: "Qwen3.7 Plus", requiresKey: "opencode", priceUsdPerM: 0.4 },
     { value: "opencode-go/deepseek-v4-pro", label: "DeepSeek V4 Pro", requiresKey: "opencode", priceUsdPerM: 0.66 },
-    { value: "opencode-go/deepseek-v4-flash", label: "DeepSeek V4 Flash", requiresKey: "opencode", priceUsdPerM: 0.22 },
+    { value: "opencode-go/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", requiresKey: "opencode", priceUsdPerM: 0.22 },
 
     // Remaining paid models — route through OpenCode Zen (pay-as-you-go credits).
     // Preserve original order, excluding duplicates.
@@ -380,6 +382,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "moonshotai/Kimi-K3", label: "Kimi K3", requiresKey: "commandcode" },
     { value: "moonshotai/Kimi-K2.7-Code", label: "Kimi K2.7 Code", requiresKey: "commandcode" },
     { value: "MiniMaxAI/MiniMax-M3", label: "MiniMax M3", requiresKey: "commandcode" },
+    { value: "Qwen/Qwen3.8-Max", label: "Qwen 3.8 Max", requiresKey: "commandcode" },
     { value: "Qwen/Qwen3.8-Flash", label: "Qwen 3.8 Flash", requiresKey: "commandcode" },
     { value: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", requiresKey: "commandcode" },
     { value: "poolside/laguna-s-2.1-free", label: "Laguna S 2.1", requiresKey: "commandcode" },
@@ -423,6 +426,7 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "claude-haiku-5.5", label: "Claude Haiku 5.5", requiresKey: "github" },
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", requiresKey: "github" },
     { value: "gpt-6.1-sol", label: "GPT-6.1 Sol", requiresKey: "github" },
+    { value: "gpt-6.1-terra", label: "GPT-6.1 Terra", requiresKey: "github" },
     { value: "gpt-6-astra", label: "GPT-6 Astra", requiresKey: "github" },
     { value: "gpt-6-sol", label: "GPT-6 Sol", requiresKey: "github" },
     { value: "gpt-6-luna", label: "GPT-6 Luna", requiresKey: "github" },
@@ -550,9 +554,11 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     // ── Factory-hosted (FACTORY_API_KEY; droid's built-in catalog). There is NO
     // free/no-key tier — verified: every built-in model 401s without a Factory key.
     { value: "factory/claude-opus-5-5", label: "Claude Opus 5.5 (Factory)", requiresKey: "factory" },
+    { value: "factory/claude-fable-5-1", label: "Claude Fable 5.1 (Factory)", requiresKey: "factory" },
     { value: "factory/claude-fable-5", label: "Claude Fable 5 (Factory)", requiresKey: "factory" },
     { value: "factory/claude-opus-4-8", label: "Claude Opus 4.8 (Factory)", requiresKey: "factory" },
     { value: "factory/claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Factory)", requiresKey: "factory" },
+    { value: "factory/gpt-6-astra", label: "GPT-6 Astra (Factory)", requiresKey: "factory" },
     { value: "factory/gpt-6.1-sol", label: "GPT-6.1 Sol (Factory)", requiresKey: "factory" },
     { value: "factory/gpt-5.6-sol", label: "GPT-5.6 Sol (Factory)", requiresKey: "factory" },
     { value: "factory/gemini-3.8-flash", label: "Gemini 3.8 Flash (Factory)", requiresKey: "factory" },
