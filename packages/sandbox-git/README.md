@@ -78,3 +78,10 @@ new repo's `.git/config` — a credential leak. Placing `-c` before `clone` make
 top-level `git` flag, which is process-scoped and never written to the new repo. This
 caveat is unique to `clone` (and `submodule`); other subcommands don't accept a
 persisting `-c` form.
+
+## Tests
+
+```bash
+npm run typecheck
+npm run test -w @background-agents/sandbox-git
+```
