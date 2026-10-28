@@ -179,6 +179,14 @@ Messages are JSON-encoded:
 - React >= 18
 - `@daytonaio/sdk` >= 0.170.0 (for sandbox setup functions)
 
+## Tests
+
+```bash
+npm run typecheck
+npm run test -w @background-agents/sandbox-terminal   # pure unit tests, instant
+DAYTONA_API_KEY=... npm run test:e2e -w @background-agents/sandbox-terminal  # + integration (creates a sandbox)
+```
+
 ## License
 
 Apache-2.0
