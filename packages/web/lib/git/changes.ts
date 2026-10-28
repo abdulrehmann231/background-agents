@@ -1,4 +1,4 @@
-import { esc, type SandboxLike } from "@background-agents/sandbox-git"
+import { createSandboxGit, esc, type SandboxLike } from "@background-agents/sandbox-git"
 import { UNCOMMITTED_STATUS_COMMAND, parseUncommittedPaths } from "./uncommitted-files"
 
 export interface ChangedFile {
@@ -25,6 +25,8 @@ export interface ChangesResult {
 const MAX_DIFF_BYTES = 1_000_000
 // Separates the diff from the status output in one command's result.
 const SEPARATOR = "\x1e"
+// A stalled fetch shouldn't hold the panel up.
+const FETCH_TIMEOUT_MS = 10_000
 
 /**
  * Everything this branch changed since it left `baseBranch`: commits plus
@@ -34,8 +36,18 @@ const SEPARATOR = "\x1e"
 export async function inspectChanges(
   sandbox: SandboxLike,
   repoPath: string,
-  baseBranch: string
+  baseBranch: string,
+  token?: string
 ): Promise<ChangesResult> {
+  // Merges happen on GitHub, so refresh the sandbox's copy of the base first.
+  // If that fails or stalls, compare with the copy it already has.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    createSandboxGit(sandbox).fetchBranch(repoPath, baseBranch, token).catch(() => {}),
+    new Promise((resolve) => { timer = setTimeout(resolve, FETCH_TIMEOUT_MS) }),
+  ])
+  clearTimeout(timer)
+
   const diff = "git -c core.quotePath=false diff --no-color --no-ext-diff"
   const command = [
     `cd ${esc(repoPath)} || exit 1`,
