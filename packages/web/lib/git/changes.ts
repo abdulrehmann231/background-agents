@@ -1,4 +1,4 @@
-import { esc, type SandboxLike } from "@background-agents/sandbox-git"
+import { createSandboxGit, esc, type SandboxLike } from "@background-agents/sandbox-git"
 import { UNCOMMITTED_STATUS_COMMAND, parseUncommittedPaths } from "./uncommitted-files"
 
 export interface ChangedFile {
@@ -23,19 +23,33 @@ export interface ChangesResult {
 // Keeps the response well under Vercel's 4.5 MB limit; a lockfile rewrite
 // alone can be several MB.
 const MAX_DIFF_BYTES = 1_000_000
-// Separates the diff from the status output in one command's result.
+// Separates the sections of one command's result.
 const SEPARATOR = "\x1e"
+// A stalled fetch shouldn't hold the panel up.
+const FETCH_TIMEOUT_MS = 10_000
 
 /**
  * Everything this branch changed since it left `baseBranch`: commits plus
  * uncommitted edits and new files. Comparing with the merge base leaves out
- * commits that landed on the base branch later.
+ * commits that landed on the base branch later. Committed files that already
+ * match the base are left out too, since a squash or rebase merge on GitHub
+ * copies the changes into new commits and the merge base doesn't move.
  */
 export async function inspectChanges(
   sandbox: SandboxLike,
   repoPath: string,
-  baseBranch: string
+  baseBranch: string,
+  token?: string
 ): Promise<ChangesResult> {
+  // Merges happen on GitHub, so refresh the sandbox's copy of the base first.
+  // If that fails or stalls, compare with the copy it already has.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    createSandboxGit(sandbox).fetchBranch(repoPath, baseBranch, token).catch(() => {}),
+    new Promise((resolve) => { timer = setTimeout(resolve, FETCH_TIMEOUT_MS) }),
+  ])
+  clearTimeout(timer)
+
   const diff = "git -c core.quotePath=false diff --no-color --no-ext-diff"
   const command = [
     `cd ${esc(repoPath)} || exit 1`,
@@ -44,16 +58,20 @@ export async function inspectChanges(
     `{ ${diff} "$base"; git ls-files --others --exclude-standard -z | xargs -0 -r -n1 ${diff} --no-index -- /dev/null; } | head -c ${MAX_DIFF_BYTES + 1}`,
     `printf '${SEPARATOR}'`,
     UNCOMMITTED_STATUS_COMMAND,
+    `printf '${SEPARATOR}'`,
+    `git diff --name-only --no-renames -z ${esc(`origin/${baseBranch}`)}`,
   ].join("\n")
   const { result, exitCode } = await sandbox.process.executeCommand(command)
   if (exitCode === 2) throw new Error(`Couldn't find where this branch started from ${baseBranch}.`)
   if (exitCode !== 0) throw new Error(`Couldn't read the changes: ${result.slice(0, 200)}`)
 
-  const split = result.lastIndexOf(SEPARATOR)
-  const patch = result.slice(0, split)
-  const uncommitted = new Set(parseUncommittedPaths(result.slice(split + 1)))
+  const sections = result.split(SEPARATOR)
+  const differFromBase = new Set(sections.pop()!.split("\0"))
+  const uncommitted = new Set(parseUncommittedPaths(sections.pop()!))
+  const patch = sections.join(SEPARATOR)
   const files = parsePatch(patch.slice(0, MAX_DIFF_BYTES))
     .map((file) => ({ ...file, uncommitted: uncommitted.has(file.path) }))
+    .filter((file) => file.uncommitted || differFromBase.has(file.path))
     .sort((a, b) => a.path.localeCompare(b.path))
   return { baseBranch, files, truncated: patch.length > MAX_DIFF_BYTES }
 }

@@ -6,7 +6,7 @@ import { PATHS } from "@background-agents/common"
 import { IMAGE_MIME_TYPES } from "@/lib/file-preview/types"
 import { LIST_SERVERS_COMMAND, parseListeningSockets, recordDevServers } from "@/lib/dev-servers"
 import { readDevServers, saveDevServers } from "@/lib/db/dev-servers-store"
-import { internalError, badRequest, notFound, requireSandboxOwner } from "@/lib/db/api-helpers"
+import { internalError, badRequest, notFound, requireSandboxOwner, getGitHubToken } from "@/lib/db/api-helpers"
 import { prisma } from "@/lib/db/prisma"
 import { inspectChanges } from "@/lib/git/changes"
 
@@ -204,8 +204,9 @@ export async function POST(req: Request) {
           select: { baseBranch: true },
         })
         if (!chat) return notFound("Chat not found")
+        const token = await getGitHubToken(owner.userId)
         try {
-          return Response.json(await inspectChanges(sandbox, PATHS.PROJECT_DIR, chat.baseBranch))
+          return Response.json(await inspectChanges(sandbox, PATHS.PROJECT_DIR, chat.baseBranch, token ?? undefined))
         } catch (error) {
           return badRequest(error instanceof Error ? error.message : "Couldn't read the changes")
         }

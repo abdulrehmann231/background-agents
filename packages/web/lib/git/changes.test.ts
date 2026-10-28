@@ -62,7 +62,6 @@ describe("inspectChanges", () => {
     execFileSync("git", ["add", "."], { cwd: f.seed, env })
     execFileSync("git", ["commit", "-m", "later"], { cwd: f.seed, env })
     execFileSync("git", ["push", "-q", join(f.root, "remote.git"), "main"], { cwd: f.seed, env })
-    f.git("fetch", "-q", "origin", "main")
 
     const { files, truncated } = await inspectChanges(f.sandbox, f.repo, "main")
     const summary = files.map(({ path, status, additions, deletions, binary, uncommitted }) =>
@@ -81,6 +80,37 @@ describe("inspectChanges", () => {
       "-line 2",
       "+line 2 changed",
     ])
+  })
+
+  it.each([
+    ["merged", ["--no-ff", "--no-commit"]],
+    ["squash-merged", ["--squash"]],
+  ])("is empty once the branch is %s into its base", async (_, mergeArgs) => {
+    const f = sandboxFixture()
+    f.write("src/toast.tsx", "line 1\nline 2 changed\n")
+    f.git("commit", "-qam", "agent commit")
+    f.git("push", "-q", "origin", "agent/abc")
+    expect((await inspectChanges(f.sandbox, f.repo, "main")).files).toHaveLength(1)
+
+    // Merges happen on GitHub, outside the sandbox.
+    const remote = join(f.root, "remote.git")
+    execFileSync("git", ["fetch", "-q", remote, "agent/abc"], { cwd: f.seed, env })
+    execFileSync("git", ["merge", "-q", ...mergeArgs, "FETCH_HEAD"], { cwd: f.seed, env })
+    execFileSync("git", ["commit", "-qm", "Merge agent/abc into main"], { cwd: f.seed, env })
+    execFileSync("git", ["push", "-q", remote, "main"], { cwd: f.seed, env })
+    expect((await inspectChanges(f.sandbox, f.repo, "main")).files).toEqual([])
+
+    // Editing the file again brings it back.
+    f.write("src/toast.tsx", "line 1\nline 2 changed again\n")
+    expect((await inspectChanges(f.sandbox, f.repo, "main")).files.map((file) => file.path)).toEqual(["src/toast.tsx"])
+  })
+
+  it("compares with the last copy of the base when the fetch fails", async () => {
+    const f = sandboxFixture()
+    f.write("src/toast.tsx", "line 1\nline 2 changed\n")
+    f.git("remote", "set-url", "origin", join(f.root, "missing.git"))
+    const { files } = await inspectChanges(f.sandbox, f.repo, "main")
+    expect(files.map((file) => file.path)).toEqual(["src/toast.tsx"])
   })
 
   it("explains when the base branch can't be found", async () => {

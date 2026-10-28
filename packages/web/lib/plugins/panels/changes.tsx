@@ -11,11 +11,14 @@ import { cn } from "@/lib/utils"
 // Files with longer diffs start collapsed, so a lockfile doesn't bury the rest.
 const COLLAPSE_LINES = 300
 
+// Tagged with its sandbox, since the panel is reused when switching chats.
+type LoadedChanges = ChangesResult & { sandboxId: string }
+
 async function loadChanges(args: {
   sandboxId: string
   autoStart: boolean
   signal: AbortSignal
-}): Promise<ChangesResult> {
+}): Promise<LoadedChanges> {
   const { sandboxId, autoStart, signal } = args
   const res = await fetch("/api/sandbox/files", {
     method: "POST",
@@ -24,7 +27,7 @@ async function loadChanges(args: {
     signal,
   })
   await assertSandboxOk(res)
-  return res.json()
+  return { ...(await res.json()), sandboxId }
 }
 
 function DiffLines({ file }: { file: ChangedFile }) {
@@ -58,10 +61,12 @@ function DiffLines({ file }: { file: ChangedFile }) {
 
 function ChangesComponent({ sandboxId, messages, explicitStart, onRefresh }: PanelProps) {
   // Re-fetch whenever one of the agent's tool calls finishes (output attached),
-  // since any of them may have changed files.
-  const toolSignal = useMemo(() => {
+  // since any of them may have changed files, and after a merge or other git
+  // action, which posts a message to the chat.
+  const reloadSignal = useMemo(() => {
     let count = 0
     for (const message of messages ?? []) {
+      if (message.messageType === "git-operation") count++
       for (const block of message.contentBlocks ?? []) {
         if (block.type === "tool_calls") count += block.toolCalls.filter((tc) => tc.output).length
       }
@@ -69,23 +74,24 @@ function ChangesComponent({ sandboxId, messages, explicitStart, onRefresh }: Pan
     return count
   }, [messages])
 
-  const { status, data, error } = useSandboxResource<ChangesResult>({
+  const { status, data, error } = useSandboxResource<LoadedChanges>({
     sandboxId,
     explicitStart,
-    deps: [toolSignal],
+    deps: [reloadSignal],
     load: ({ autoStart, signal }) => loadChanges({ sandboxId: sandboxId!, autoStart, signal }),
   })
   // Files the user opened or closed, flipping their default.
   const [toggled, setToggled] = useState<Set<string>>(new Set())
 
-  if (status === "loading") return <PanelState status="loading" />
   if (status === "stopped") return <PanelState status="stopped" onRefresh={onRefresh} />
   if (status === "expired") return <PanelState status="expired" onRefresh={onRefresh} />
-  if (status === "error" || !data) {
-    return <PanelState status="error" message={error ?? undefined} onRefresh={onRefresh} />
-  }
+  if (status === "error") return <PanelState status="error" message={error ?? undefined} onRefresh={onRefresh} />
+  // Keep the last diff on screen while it reloads, so the scroll position and
+  // open files stay put. Never show another chat's diff, though.
+  const changes = data?.sandboxId === sandboxId ? data : null
+  if (!changes) return <PanelState status="loading" />
 
-  const { files, baseBranch, truncated } = data
+  const { files, baseBranch, truncated } = changes
   if (files.length === 0) {
     return <div className="p-4 text-center text-sm text-muted-foreground">No changes from {baseBranch} yet.</div>
   }
